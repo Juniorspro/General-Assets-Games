@@ -48,6 +48,11 @@ const J_INV    = 0.72;      // invencibilidad al recibir
    varianza. Medido en cincuenta corridas con cinco: el bot honesto muere en el
    piso 3 o 4 SIEMPRE, y ni el bot ni el generador mueven ese numero. */
 const J_VIDAS  = 7;         // corazones de arranque
+/* QUE CUENTA COMO PESADO, y sale de `danoJug` y no del gusto: ahi el corazon es
+   `round(d/9)`, o sea que a partir de 13,5 de dano un toque cuesta DOS. Escrito
+   como un numero suelto, el dia que cambie el /9 la generacion sigue creyendo
+   que el bruto es liviano y nada falla: sale una sala imposible. */
+const PESA_D   = 13.5;
 /* RECUPERARSE DENTRO DEL PISO. Medido: el piso 4 cobra 5,6 corazones de una
    barra de 7 —el 80%— y la unica cura del juego aparecia al BAJAR, o sea
    despues. Una corrida buena se moria por una mala sala y no habia con que
@@ -125,8 +130,15 @@ const ENEM = {
    distancia, o sea que el juego cambia de genero sin transicion.
    Ahora la distancia entra en el 3 acompanada de la baba, que es el cuerpo a
    cuerpo LENTO.
-   Y hay dos pisos —el 7 y el 9— SIN NADA a distancia: son los que se juegan
-   distinto, que es lo que la tabla tenia que dar.
+   Y NINGUNA OLA LLEVA MAS DE UNA CLASE PESADA. De las seis clases que no son
+   jefe solo dos cobran dos corazones de un toque —el bruto y la bomba— y el 7
+   y el 9 llevaban LAS DOS: con la clase sorteada uniforme entre tres, dos
+   tercios de cada sala cobraban doble. Medido sobre 400 pisos, la sala mediana
+   del 7 salia con CUATRO pesados y 361 de 2000 con seis o siete, contra una
+   barra de ocho —o sea salas que se pierden de cuatro toques—. Y se ve en quien
+   mata: de 200 corridas, el bruto mete 79 golpes fatales y la bomba 36, mas que
+   los dos jefes juntos, y el bot ENTRA al piso que lo mata con la barra llena
+   (mediana 8, p10 7). No se muere de a poco: se muere adentro de una sala.
    SE PROBO LO CONTRARIO Y MIDIO PEOR. La hipotesis era que un bicho a distancia
    SE PARA A TIRAR y uno de cuerpo a cuerpo no deja de perseguir nunca, asi que
    una sala de seis cuerpo a cuerpo seria una caceria sin aire; con esa idea se
@@ -156,10 +168,10 @@ const OLAS = [
   ['baba','tirador'],                   // aparece la DISTANCIA, con el lento al lado
   ['corredor','tirador','bomba'],       // aparece el que revienta
   ['baba','corredor','tirador'],        // piso 5 lleva jefe1: NADA nuevo, el jefe es lo nuevo
-  ['baba','bruto','corredor'],          // aparece el bruto, solo
-  ['baba','bomba','bruto'],             // CUERPO A CUERPO PURO: no hay balas
+  ['baba','bruto','corredor'],          // el bruto, con el lento y el rapido
+  ['baba','corredor','bomba'],          // el que revienta, ahora con velocidad
   ['corredor','tirador','torreta'],     // aparece el fuego fijo: distancia pura
-  ['bruto','bomba','baba'],             // pesado, y tampoco hay balas
+  ['bruto','torreta','corredor'],       // el bruto bajo fuego fijo
   ['corredor','bruto','tirador'],       // piso 10 lleva jefe2: todo junto
 ];
 

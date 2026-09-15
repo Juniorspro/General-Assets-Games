@@ -301,7 +301,7 @@ function danoJug(d, de){
      ni se podia esquivar; `esqT` > 0 que se esquivo y la invencibilidad se
      habia vencido ANTES de que la bala llegara. Son dos defectos distintos
      y se arreglan con numeros opuestos. */
-  DANO_LOG.push({p:JU.piso, de:de||'?', c, v:P.vida, dist:BALA_D,
+  DANO_LOG.push({p:JU.piso, de:de||'?', c, v:P.vida, dist:BALA_D, t:JU.t,
                  cd:+P.esqCd.toFixed(2), esqT:+P.esqT.toFixed(2)});
   hudPinta();
   if (P.vida <= 0) pierde();

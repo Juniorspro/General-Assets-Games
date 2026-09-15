@@ -258,23 +258,43 @@ function generaPiso(n, sem){
          el tirador solo se llevaba el 67% de todo el dano de una corrida. Lo que
          sobra se degrada a la primera clase de cuerpo a cuerpo de la propia ola,
          asi que la mezcla del piso sigue siendo la que dice OLAS. */
-      const lejos = clases.filter(c => ENEM[c].f > 0);
       const cerca = clases.filter(c => ENEM[c].f === 0);
+      /* Y NO MAS DE UN TERCIO PESADO, por la misma razon y con la misma cuenta.
+         El tope de distancia estaba desde el principio y el de dano NO, asi que
+         una sala del piso 7 podia salir con siete bichos que cobran DOS corazones
+         cada uno contra una barra de ocho: medido sobre 400 pisos, la mediana era
+         cuatro pesados por sala y 361 de 2000 salas llevaban seis o siete. Y se
+         ve en quien mata: de 200 corridas, el bruto mete 79 golpes fatales y la
+         bomba 36, mas que los dos jefes juntos, con el bot entrando al piso que
+         lo mata con la barra llena. No se muere de a poco: se muere adentro de
+         una sala. Lo que sobra se degrada a una clase liviana de la propia ola.
+         (El reparto de OLAS ya garantiza que toda ola tenga una clase liviana
+         de cuerpo a cuerpo, asi que `llano` nunca esta vacia.) */
+      const flojo = clases.filter(c => ENEM[c].d <  PESA_D);
+      const llano = clases.filter(c => ENEM[c].d <  PESA_D && ENEM[c].f === 0);
       /* FLOOR y no CEIL: con ceil, una sala de cuatro bichos ya salia con dos
      tiradores, o sea que el primer piso con distancia te mostraba dos a la vez.
      Con floor da uno hasta los cinco bichos y dos desde los seis. */
   const topeL = Math.max(1, Math.floor(cant / 3));
-      let nL = 0;
+      const topeP = Math.max(1, Math.floor(cant / 3));
+      let nL = 0, nP = 0;
       const usadas = {};
       for (let i = 0; i < cant; i++){
         let p, g2 = 0;
         do { p = elige(r, libres); g2++; } while (usadas[p.x+','+p.y] && g2 < 30);
         usadas[p.x+','+p.y] = 1;
         let cl = elige(r, clases);
-        if (ENEM[cl].f > 0){
-          if (nL >= topeL && cerca.length) cl = elige(r, cerca);
-          else nL++;
-        }
+        if (ENEM[cl].f > 0    && nL >= topeL && cerca.length) cl = elige(r, cerca);
+        if (ENEM[cl].d >= PESA_D && nP >= topeP && flojo.length) cl = elige(r, flojo);
+        /* la segunda degradacion puede violar el primer tope —el reemplazo
+           liviano puede ser de distancia— asi que el ultimo recurso es una clase
+           que cumple los dos. */
+        if (((ENEM[cl].f > 0 && nL >= topeL) || (ENEM[cl].d >= PESA_D && nP >= topeP)) && llano.length)
+          cl = elige(r, llano);
+        /* se cuenta la clase FINAL y no la sorteada: contar antes de degradar
+           gasta cupo en un bicho que no salio. */
+        if (ENEM[cl].f > 0)      nL++;
+        if (ENEM[cl].d >= PESA_D) nP++;
         s.enem.push({cl, cx:p.x, cy:p.y});
       }
     } else if (s.tipo === 'jefe'){

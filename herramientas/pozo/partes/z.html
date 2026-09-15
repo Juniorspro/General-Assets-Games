@@ -154,6 +154,7 @@ window.__pozo = {
     /* Y EN QUE ESTADO ESTABA LA ESQUIVA: no se puede arreglar sin saber si
        el problema es que no se podia esquivar o que esquivar no alcanzo. */
     const esq = {cd:0, tarde:0, libre:0};
+    const mata = {}, rafaga = [], entraFatal = [];
     for (let i = 0; i < n; i++){
       DANO_LOG.length = 0; VIDA_LOG.length = 0; CURA_LOG.length = 0; COF_LOG.length = 0;
       BALA_N.sale = 0; BALA_N.pega = 0;
@@ -199,6 +200,28 @@ window.__pozo = {
         c.hay += g.hay; c.abrio += g.abrio; c.n++;
       }
       tSale += BALA_N.sale; tPega += BALA_N.pega;
+      /* EL GOLPE FATAL, que es lo unico que dice DE QUE se muere uno. Todo lo
+         de arriba mide lo que cuesta cada clase REPARTIDO en la corrida, y eso
+         no distingue morir de a un rozon a lo largo de diez minutos de morir de
+         un abrazo con la barra casi llena. Y la ventana de los ultimos cinco
+         segundos separa las dos: si la mitad de la barra se fue en cinco
+         segundos, lo que mata es una RAFAGA y se arregla con la sala; si se fue
+         de a poco, lo que mata es la economia y se arregla con la cura. */
+      if (DANO_LOG.length){
+        const u = DANO_LOG[DANO_LOG.length-1];
+        if (u.v <= 0){
+          mata[u.de] = (mata[u.de]||0) + 1;
+          let raf = 0; for (const g of DANO_LOG) if (u.t - g.t <= 5) raf += g.c;
+          rafaga.push(raf);
+          /* Y CON CUANTA VIDA SE ENTRO AL PISO QUE MATO. `vidaAlEntrar` no lo
+             puede decir: solo mide las corridas que SOBREVIVIERON ese piso, asi
+             que informa la barra de los que zafaron. Esto mide la de los que no.
+             Si se entra sano, el problema es la sala; si se entra herido, el
+             problema esta antes y esa sala solo es donde termina de cobrar. */
+          const pri = DANO_LOG.find(g => g.p === u.p);
+          if (pri) entraFatal.push(pri.v + pri.c);
+        }
+      }
     }
     const pp = {}; for (const k in porPiso) pp[k] = +(porPiso[k]/n).toFixed(2);
     const pc = {}; for (const k in porCl)  pc[k]  = +(porCl[k] /n).toFixed(2);
@@ -236,6 +259,16 @@ window.__pozo = {
                       cd:d.cd, tarde:d.tarde, libre:d.libre}; }
               return o; })(),
             balaEsq:esq,
+            mata,
+            rafaga:(()=>{ if(!rafaga.length) return null;
+              const d=rafaga.slice().sort((a,b)=>a-b);
+              return {n:d.length, med:+(d.reduce((a,b)=>a+b,0)/d.length).toFixed(2),
+                      p50:d[Math.floor(d.length*.5)], p90:d[Math.floor(d.length*.9)]}; })(),
+            entraFatal:(()=>{ if(!entraFatal.length) return null;
+              const d=entraFatal.slice().sort((a,b)=>a-b);
+              return {n:d.length, med:+(d.reduce((a,b)=>a+b,0)/d.length).toFixed(2),
+                      p10:d[Math.floor(d.length*.1)], p50:d[Math.floor(d.length*.5)],
+                      p90:d[Math.floor(d.length*.9)]}; })(),
             fin};
   },
 

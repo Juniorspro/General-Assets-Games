@@ -232,6 +232,11 @@ const J_INV    = 0.72;      // invencibilidad al recibir
    varianza. Medido en cincuenta corridas con cinco: el bot honesto muere en el
    piso 3 o 4 SIEMPRE, y ni el bot ni el generador mueven ese numero. */
 const J_VIDAS  = 7;         // corazones de arranque
+/* QUE CUENTA COMO PESADO, y sale de `danoJug` y no del gusto: ahi el corazon es
+   `round(d/9)`, o sea que a partir de 13,5 de dano un toque cuesta DOS. Escrito
+   como un numero suelto, el dia que cambie el /9 la generacion sigue creyendo
+   que el bruto es liviano y nada falla: sale una sala imposible. */
+const PESA_D   = 13.5;
 /* RECUPERARSE DENTRO DEL PISO. Medido: el piso 4 cobra 5,6 corazones de una
    barra de 7 —el 80%— y la unica cura del juego aparecia al BAJAR, o sea
    despues. Una corrida buena se moria por una mala sala y no habia con que
@@ -309,8 +314,15 @@ const ENEM = {
    distancia, o sea que el juego cambia de genero sin transicion.
    Ahora la distancia entra en el 3 acompanada de la baba, que es el cuerpo a
    cuerpo LENTO.
-   Y hay dos pisos —el 7 y el 9— SIN NADA a distancia: son los que se juegan
-   distinto, que es lo que la tabla tenia que dar.
+   Y NINGUNA OLA LLEVA MAS DE UNA CLASE PESADA. De las seis clases que no son
+   jefe solo dos cobran dos corazones de un toque —el bruto y la bomba— y el 7
+   y el 9 llevaban LAS DOS: con la clase sorteada uniforme entre tres, dos
+   tercios de cada sala cobraban doble. Medido sobre 400 pisos, la sala mediana
+   del 7 salia con CUATRO pesados y 361 de 2000 con seis o siete, contra una
+   barra de ocho —o sea salas que se pierden de cuatro toques—. Y se ve en quien
+   mata: de 200 corridas, el bruto mete 79 golpes fatales y la bomba 36, mas que
+   los dos jefes juntos, y el bot ENTRA al piso que lo mata con la barra llena
+   (mediana 8, p10 7). No se muere de a poco: se muere adentro de una sala.
    SE PROBO LO CONTRARIO Y MIDIO PEOR. La hipotesis era que un bicho a distancia
    SE PARA A TIRAR y uno de cuerpo a cuerpo no deja de perseguir nunca, asi que
    una sala de seis cuerpo a cuerpo seria una caceria sin aire; con esa idea se
@@ -340,10 +352,10 @@ const OLAS = [
   ['baba','tirador'],                   // aparece la DISTANCIA, con el lento al lado
   ['corredor','tirador','bomba'],       // aparece el que revienta
   ['baba','corredor','tirador'],        // piso 5 lleva jefe1: NADA nuevo, el jefe es lo nuevo
-  ['baba','bruto','corredor'],          // aparece el bruto, solo
-  ['baba','bomba','bruto'],             // CUERPO A CUERPO PURO: no hay balas
+  ['baba','bruto','corredor'],          // el bruto, con el lento y el rapido
+  ['baba','corredor','bomba'],          // el que revienta, ahora con velocidad
   ['corredor','tirador','torreta'],     // aparece el fuego fijo: distancia pura
-  ['bruto','bomba','baba'],             // pesado, y tampoco hay balas
+  ['bruto','torreta','corredor'],       // el bruto bajo fuego fijo
   ['corredor','bruto','tirador'],       // piso 10 lleva jefe2: todo junto
 ];
 
@@ -769,23 +781,43 @@ function generaPiso(n, sem){
          el tirador solo se llevaba el 67% de todo el dano de una corrida. Lo que
          sobra se degrada a la primera clase de cuerpo a cuerpo de la propia ola,
          asi que la mezcla del piso sigue siendo la que dice OLAS. */
-      const lejos = clases.filter(c => ENEM[c].f > 0);
       const cerca = clases.filter(c => ENEM[c].f === 0);
+      /* Y NO MAS DE UN TERCIO PESADO, por la misma razon y con la misma cuenta.
+         El tope de distancia estaba desde el principio y el de dano NO, asi que
+         una sala del piso 7 podia salir con siete bichos que cobran DOS corazones
+         cada uno contra una barra de ocho: medido sobre 400 pisos, la mediana era
+         cuatro pesados por sala y 361 de 2000 salas llevaban seis o siete. Y se
+         ve en quien mata: de 200 corridas, el bruto mete 79 golpes fatales y la
+         bomba 36, mas que los dos jefes juntos, con el bot entrando al piso que
+         lo mata con la barra llena. No se muere de a poco: se muere adentro de
+         una sala. Lo que sobra se degrada a una clase liviana de la propia ola.
+         (El reparto de OLAS ya garantiza que toda ola tenga una clase liviana
+         de cuerpo a cuerpo, asi que `llano` nunca esta vacia.) */
+      const flojo = clases.filter(c => ENEM[c].d <  PESA_D);
+      const llano = clases.filter(c => ENEM[c].d <  PESA_D && ENEM[c].f === 0);
       /* FLOOR y no CEIL: con ceil, una sala de cuatro bichos ya salia con dos
      tiradores, o sea que el primer piso con distancia te mostraba dos a la vez.
      Con floor da uno hasta los cinco bichos y dos desde los seis. */
   const topeL = Math.max(1, Math.floor(cant / 3));
-      let nL = 0;
+      const topeP = Math.max(1, Math.floor(cant / 3));
+      let nL = 0, nP = 0;
       const usadas = {};
       for (let i = 0; i < cant; i++){
         let p, g2 = 0;
         do { p = elige(r, libres); g2++; } while (usadas[p.x+','+p.y] && g2 < 30);
         usadas[p.x+','+p.y] = 1;
         let cl = elige(r, clases);
-        if (ENEM[cl].f > 0){
-          if (nL >= topeL && cerca.length) cl = elige(r, cerca);
-          else nL++;
-        }
+        if (ENEM[cl].f > 0    && nL >= topeL && cerca.length) cl = elige(r, cerca);
+        if (ENEM[cl].d >= PESA_D && nP >= topeP && flojo.length) cl = elige(r, flojo);
+        /* la segunda degradacion puede violar el primer tope —el reemplazo
+           liviano puede ser de distancia— asi que el ultimo recurso es una clase
+           que cumple los dos. */
+        if (((ENEM[cl].f > 0 && nL >= topeL) || (ENEM[cl].d >= PESA_D && nP >= topeP)) && llano.length)
+          cl = elige(r, llano);
+        /* se cuenta la clase FINAL y no la sorteada: contar antes de degradar
+           gasta cupo en un bicho que no salio. */
+        if (ENEM[cl].f > 0)      nL++;
+        if (ENEM[cl].d >= PESA_D) nP++;
         s.enem.push({cl, cx:p.x, cy:p.y});
       }
     } else if (s.tipo === 'jefe'){
@@ -1702,7 +1734,7 @@ function danoJug(d, de){
      ni se podia esquivar; `esqT` > 0 que se esquivo y la invencibilidad se
      habia vencido ANTES de que la bala llegara. Son dos defectos distintos
      y se arreglan con numeros opuestos. */
-  DANO_LOG.push({p:JU.piso, de:de||'?', c, v:P.vida, dist:BALA_D,
+  DANO_LOG.push({p:JU.piso, de:de||'?', c, v:P.vida, dist:BALA_D, t:JU.t,
                  cd:+P.esqCd.toFixed(2), esqT:+P.esqT.toFixed(2)});
   hudPinta();
   if (P.vida <= 0) pierde();
@@ -2920,6 +2952,7 @@ window.__pozo = {
     /* Y EN QUE ESTADO ESTABA LA ESQUIVA: no se puede arreglar sin saber si
        el problema es que no se podia esquivar o que esquivar no alcanzo. */
     const esq = {cd:0, tarde:0, libre:0};
+    const mata = {}, rafaga = [], entraFatal = [];
     for (let i = 0; i < n; i++){
       DANO_LOG.length = 0; VIDA_LOG.length = 0; CURA_LOG.length = 0; COF_LOG.length = 0;
       BALA_N.sale = 0; BALA_N.pega = 0;
@@ -2965,6 +2998,28 @@ window.__pozo = {
         c.hay += g.hay; c.abrio += g.abrio; c.n++;
       }
       tSale += BALA_N.sale; tPega += BALA_N.pega;
+      /* EL GOLPE FATAL, que es lo unico que dice DE QUE se muere uno. Todo lo
+         de arriba mide lo que cuesta cada clase REPARTIDO en la corrida, y eso
+         no distingue morir de a un rozon a lo largo de diez minutos de morir de
+         un abrazo con la barra casi llena. Y la ventana de los ultimos cinco
+         segundos separa las dos: si la mitad de la barra se fue en cinco
+         segundos, lo que mata es una RAFAGA y se arregla con la sala; si se fue
+         de a poco, lo que mata es la economia y se arregla con la cura. */
+      if (DANO_LOG.length){
+        const u = DANO_LOG[DANO_LOG.length-1];
+        if (u.v <= 0){
+          mata[u.de] = (mata[u.de]||0) + 1;
+          let raf = 0; for (const g of DANO_LOG) if (u.t - g.t <= 5) raf += g.c;
+          rafaga.push(raf);
+          /* Y CON CUANTA VIDA SE ENTRO AL PISO QUE MATO. `vidaAlEntrar` no lo
+             puede decir: solo mide las corridas que SOBREVIVIERON ese piso, asi
+             que informa la barra de los que zafaron. Esto mide la de los que no.
+             Si se entra sano, el problema es la sala; si se entra herido, el
+             problema esta antes y esa sala solo es donde termina de cobrar. */
+          const pri = DANO_LOG.find(g => g.p === u.p);
+          if (pri) entraFatal.push(pri.v + pri.c);
+        }
+      }
     }
     const pp = {}; for (const k in porPiso) pp[k] = +(porPiso[k]/n).toFixed(2);
     const pc = {}; for (const k in porCl)  pc[k]  = +(porCl[k] /n).toFixed(2);
@@ -3002,6 +3057,16 @@ window.__pozo = {
                       cd:d.cd, tarde:d.tarde, libre:d.libre}; }
               return o; })(),
             balaEsq:esq,
+            mata,
+            rafaga:(()=>{ if(!rafaga.length) return null;
+              const d=rafaga.slice().sort((a,b)=>a-b);
+              return {n:d.length, med:+(d.reduce((a,b)=>a+b,0)/d.length).toFixed(2),
+                      p50:d[Math.floor(d.length*.5)], p90:d[Math.floor(d.length*.9)]}; })(),
+            entraFatal:(()=>{ if(!entraFatal.length) return null;
+              const d=entraFatal.slice().sort((a,b)=>a-b);
+              return {n:d.length, med:+(d.reduce((a,b)=>a+b,0)/d.length).toFixed(2),
+                      p10:d[Math.floor(d.length*.1)], p50:d[Math.floor(d.length*.5)],
+                      p90:d[Math.floor(d.length*.9)]}; })(),
             fin};
   },
 
