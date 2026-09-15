@@ -68,15 +68,22 @@ export const onRequestPost = async ({ request, env }) => {
     const jefe = await env.DB.prepare("SELECT jefe FROM usuarios WHERE id = ?")
       .bind(yo.u).first();
     if (!jefe || !jefe.jefe) return json({ error: "Eso lo hace el dueño del sitio." }, 403);
-    const quien = parseInt(c.usuario, 10);
+    /* se acepta el número de cuenta o el nombre de usuario: el jefe tiene el
+       @ de la persona que le transfirió, no su número interno */
+    const quien = await buscarCuenta(env, c.usuario);
     const meses = Math.min(12, Math.max(1, parseInt(c.meses, 10) || 1));
-    if (!quien) return json({ error: "cuál cuenta" }, 400);
+    if (!quien) return json({ error: "No encontré esa cuenta." }, 404);
     /* La referencia es el número del comprobante de la transferencia, y conviene
        ponerla: con el mismo comprobante, cargar dos veces no suma dos meses.
        Sin ella se genera una distinta cada vez, así que dos clicks sí serían
        dos meses —que a veces es lo que se quiere, pero conviene saberlo—. */
     const ref = limpio(c.ref, 80) || ("mano-" + quien + "-" + Date.now());
-    return json(await sumarDias(env, quien, DIAS * meses, "mano", ref, 0, "ARS"));
+    const r = await sumarDias(env, quien, DIAS * meses, "mano", ref, 0, "ARS");
+    const q = await env.DB.prepare("SELECT usuario FROM usuarios WHERE id = ?")
+      .bind(quien).first();
+    /* se devuelve a QUIÉN se le dio: sin esto, escribir mal un nombre de usuario
+       le da el mes a otra persona y nadie se entera hasta que uno reclama */
+    return json({ ...r, aQuien: q ? q.usuario : String(quien) });
   }
 
   /* ------------------------------------------------------------ PayPal */
@@ -119,6 +126,19 @@ export const onRequestPost = async ({ request, env }) => {
 
   return json(await sumarDias(env, yo.u, DIAS, "paypal", c.orden, monto, "USD"));
 };
+
+async function buscarCuenta(env, texto) {
+  const t = String(texto == null ? "" : texto).trim().replace(/^@/, "");
+  if (!t) return 0;
+  if (/^\d+$/.test(t)) {
+    const u = await env.DB.prepare("SELECT id FROM usuarios WHERE id = ?")
+      .bind(parseInt(t, 10)).first();
+    return u ? u.id : 0;
+  }
+  const u = await env.DB.prepare("SELECT id FROM usuarios WHERE usuario = ?")
+    .bind(t.toLowerCase()).first();
+  return u ? u.id : 0;
+}
 
 /* Suma los días UNA sola vez por referencia. Ver el comentario de arriba: sin
    esto, recargar la página después de pagar regala un mes por cada recarga. */

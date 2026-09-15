@@ -2145,7 +2145,10 @@ function panelEditor(p){
       if (j.error){ q.textContent = j.error; return; }
 
       if (j.porSerJefe){
-        q.textContent = "Sos el dueño del sitio: publicás apps que cobran sin cuota.";
+        q.textContent = "Sos el dueño del sitio: publicás apps que cobran sin cuota. " +
+          "Acá le das la cuota a quien te pagó por afuera —una transferencia en pesos, " +
+          "por ejemplo—, que es plata que ninguna pasarela te va a avisar.";
+        formDarCuota(c);
         return;
       }
 
@@ -2178,6 +2181,69 @@ function panelEditor(p){
       botonesDeCuota(caja2, aviso, j);
     })
     .catch(function(){ q.textContent = "No se pudo leer tu estado de editor."; });
+}
+
+/* Dar la cuota a mano. Existe porque una transferencia en pesos no le avisa a
+   nadie: la plata entra y el sitio no se entera nunca. Sin este formulario, la
+   unica forma de cobrar en pesos era que alguien llamara la API a mano, o sea
+   que en la practica no existia.
+
+   EL COMPROBANTE NO ES UN CAMPO DE ADORNO: con el mismo numero cargado dos
+   veces no se suman dos meses. Es la red que evita regalar un mes por haber
+   tocado el boton dos veces sin estar seguro de que anduvo la primera. */
+function formDarCuota(c){
+  var caja2 = document.createElement("div");
+  caja2.style.cssText = "margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.18)";
+  var h = document.createElement("div");
+  h.style.cssText = "font-size:13px;font-weight:600;margin-bottom:8px";
+  h.textContent = "Darle la cuota a alguien";
+  caja2.appendChild(h);
+
+  var fila = document.createElement("div");
+  fila.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end";
+  function campo(ancho, marca, valor){
+    var e = document.createElement("input");
+    e.type = "text"; e.placeholder = marca; if (valor) e.value = valor;
+    e.style.cssText = "flex:" + ancho + ";min-width:0;padding:7px 9px;border-radius:4px;" +
+      "border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);" +
+      "color:#eaf6ff;font:inherit;font-size:13px";
+    fila.appendChild(e); return e;
+  }
+  var quien = campo("2 1 140px", "@usuario o número de cuenta");
+  var meses = campo("0 1 70px", "meses", "1");
+  var ref   = campo("2 1 150px", "n° de comprobante");
+
+  var b = document.createElement("button");
+  b.type = "button"; b.className = "am-bt"; b.style.padding = "8px 14px";
+  b.textContent = "Dar cuota";
+  fila.appendChild(b);
+  caja2.appendChild(fila);
+
+  var av = document.createElement("p");
+  av.className = "pie"; av.style.cssText = "margin:8px 0 0";
+  av.textContent = "Poné el comprobante: con el mismo número, cargarlo dos veces no suma dos meses.";
+  caja2.appendChild(av);
+
+  b.addEventListener("click", function(){
+    if (!quien.value.trim()){ quien.focus(); return; }
+    b.disabled = true; av.textContent = "Dando…";
+    fetch("api/editor", { method:"POST",
+        headers: Object.assign({"content-type":"application/json"}, cabeceraSesion()),
+        body: JSON.stringify({ hacer:"dar", usuario:quien.value, meses:meses.value, ref:ref.value }) })
+      .then(function(r){ return r.json().then(function(x){ return {ok:r.ok, x:x}; }); })
+      .then(function(res){
+        b.disabled = false;
+        if (!res.ok){ av.textContent = res.x.error || "No se pudo."; return; }
+        av.textContent = res.x.yaEstaba
+          ? "Ese comprobante ya estaba cargado: no se sumó de nuevo. @" + res.x.aQuien +
+            " tiene cuota hasta el " + fechaCorta(res.x.hasta) + "."
+          : "Listo: @" + res.x.aQuien + " puede publicar apps que cobran hasta el " +
+            fechaCorta(res.x.hasta) + ".";
+      })
+      .catch(function(){ b.disabled = false; av.textContent = "No se pudo."; });
+  });
+
+  c.appendChild(caja2);
 }
 
 function fechaCorta(ms){
