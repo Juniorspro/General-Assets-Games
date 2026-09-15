@@ -272,10 +272,24 @@ function generaPiso(n, sem){
          de cuerpo a cuerpo, asi que `llano` nunca esta vacia.) */
       const flojo = clases.filter(c => ENEM[c].d <  PESA_D);
       const llano = clases.filter(c => ENEM[c].d <  PESA_D && ENEM[c].f === 0);
-      /* FLOOR y no CEIL: con ceil, una sala de cuatro bichos ya salia con dos
-     tiradores, o sea que el primer piso con distancia te mostraba dos a la vez.
-     Con floor da uno hasta los cinco bichos y dos desde los seis. */
-  const topeL = Math.max(1, Math.floor(cant / 3));
+      /* EL TOPE DE DISTANCIA SE MIDE EN BALAS Y NO EN BICHOS, y eso no es un
+         refinamiento: el numero SIEMPRE fue de balas, contar bichos era una
+         aproximacion que valia mientras todos tiraran una. La torreta tira TRES
+         por rafaga y gastaba el mismo cupo que un tirador, asi que los pisos 8 y
+         9 salian con seis balas por rafaga contra las una o dos de los pisos que
+         estaban medidos como sanos —2085 de 2400 salas del 9, o sea el caso
+         normal y no la cola—. Y lo que eso agota es la esquiva: medido, 727 de
+         los 847 golpes de torreta llegan con la esquiva en enfriamiento y CERO
+         llegan tarde. El bot no esquiva mal; la esquiva no vuelve.
+         FLOOR y no CEIL: con ceil, una sala de cuatro bichos ya salia con dos
+         tiradores, o sea que el primer piso con distancia te mostraba dos a la
+         vez. Con floor da uno hasta los cinco bichos y dos desde los seis.
+         Y EL PISO DEL TOPE ES LO QUE CUESTA UN SOLO BICHO DE LA OLA: con un
+         tercio pelado, el piso 8 —cant 6 a 7, tope 2— no podia mostrar NUNCA la
+         torreta que ese piso existe para presentar. Es la regla de «un piso trae
+         una clase nueva» escrita como restriccion del cupo. */
+      const balMax = Math.max(...clases.map(c => ENEM[c].f));
+      const topeL = Math.max(balMax, Math.floor(cant / 3));
       const topeP = Math.max(1, Math.floor(cant / 3));
       let nL = 0, nP = 0;
       const usadas = {};
@@ -284,16 +298,16 @@ function generaPiso(n, sem){
         do { p = elige(r, libres); g2++; } while (usadas[p.x+','+p.y] && g2 < 30);
         usadas[p.x+','+p.y] = 1;
         let cl = elige(r, clases);
-        if (ENEM[cl].f > 0    && nL >= topeL && cerca.length) cl = elige(r, cerca);
+        if (nL + ENEM[cl].f > topeL  && cerca.length) cl = elige(r, cerca);
         if (ENEM[cl].d >= PESA_D && nP >= topeP && flojo.length) cl = elige(r, flojo);
         /* la segunda degradacion puede violar el primer tope —el reemplazo
            liviano puede ser de distancia— asi que el ultimo recurso es una clase
            que cumple los dos. */
-        if (((ENEM[cl].f > 0 && nL >= topeL) || (ENEM[cl].d >= PESA_D && nP >= topeP)) && llano.length)
+        if ((nL + ENEM[cl].f > topeL || (ENEM[cl].d >= PESA_D && nP >= topeP)) && llano.length)
           cl = elige(r, llano);
         /* se cuenta la clase FINAL y no la sorteada: contar antes de degradar
            gasta cupo en un bicho que no salio. */
-        if (ENEM[cl].f > 0)      nL++;
+        nL += ENEM[cl].f;
         if (ENEM[cl].d >= PESA_D) nP++;
         s.enem.push({cl, cx:p.x, cy:p.y});
       }

@@ -293,11 +293,16 @@ const ENEM = {
      numero lindo. Medido: de los 60 golpes que el jefe1 metio en 24 corridas,
      CINCUENTA Y CUATRO llegaron con la esquiva en enfriamiento y CERO llegaron
      tarde — o sea que el bot esquiva y aun asi come, porque la salva siguiente
-     ya esta en el aire antes de que pueda volver a esquivar. La esquiva se
-     tarda ESQ_T + ESQ_CD = 0,95 s en estar lista otra vez, y la bala del jefe
+     ya esta en el aire antes de que pueda volver a esquivar. La esquiva tardaba
+     entonces ESQ_T + ESQ_CD = 0,95 s en estar lista otra vez, y la bala del jefe
      tarda 165/240 = 0,69 s en cruzar la distancia de pelea: hay que
      comprometerse ANTES de que salga la salva, asi que una cadencia por debajo
-     de ~1,3 s le pide al jugador una esquiva que todavia no tiene.
+     de ~1,3 s le pedia al jugador una esquiva que todavia no tenia.
+     DESPUES BAJO ESQ_CD Y LA CUENTA QUEDO CON MAS AIRE: hoy la esquiva vuelve en
+     0,17 + 0,56 = 0,73 s, asi que entre salva y salva sobran 0,62. El 1,35 se
+     queda igual porque el margen no es lo unico que decide —el jefe1 da 37 a 47
+     golpes fatales de 200 corridas, que es lo que corresponde a un jefe— y
+     apretarlo seria volver a la sala de la que se salio.
      Y NO ALARGA LA PELEA: los 420 de vida los baja el arma, no el reloj — lo
      unico que cambia es cuantas veces ataca en el mismo rato. */
   jefe1:    {v:420, s: 88, r:34, d:18, a: 46, c:1.35,t:.50, f:8, vb:240, col:'#ff5c7a', jefe:1, hitos:[.55]},
@@ -795,10 +800,24 @@ function generaPiso(n, sem){
          de cuerpo a cuerpo, asi que `llano` nunca esta vacia.) */
       const flojo = clases.filter(c => ENEM[c].d <  PESA_D);
       const llano = clases.filter(c => ENEM[c].d <  PESA_D && ENEM[c].f === 0);
-      /* FLOOR y no CEIL: con ceil, una sala de cuatro bichos ya salia con dos
-     tiradores, o sea que el primer piso con distancia te mostraba dos a la vez.
-     Con floor da uno hasta los cinco bichos y dos desde los seis. */
-  const topeL = Math.max(1, Math.floor(cant / 3));
+      /* EL TOPE DE DISTANCIA SE MIDE EN BALAS Y NO EN BICHOS, y eso no es un
+         refinamiento: el numero SIEMPRE fue de balas, contar bichos era una
+         aproximacion que valia mientras todos tiraran una. La torreta tira TRES
+         por rafaga y gastaba el mismo cupo que un tirador, asi que los pisos 8 y
+         9 salian con seis balas por rafaga contra las una o dos de los pisos que
+         estaban medidos como sanos —2085 de 2400 salas del 9, o sea el caso
+         normal y no la cola—. Y lo que eso agota es la esquiva: medido, 727 de
+         los 847 golpes de torreta llegan con la esquiva en enfriamiento y CERO
+         llegan tarde. El bot no esquiva mal; la esquiva no vuelve.
+         FLOOR y no CEIL: con ceil, una sala de cuatro bichos ya salia con dos
+         tiradores, o sea que el primer piso con distancia te mostraba dos a la
+         vez. Con floor da uno hasta los cinco bichos y dos desde los seis.
+         Y EL PISO DEL TOPE ES LO QUE CUESTA UN SOLO BICHO DE LA OLA: con un
+         tercio pelado, el piso 8 —cant 6 a 7, tope 2— no podia mostrar NUNCA la
+         torreta que ese piso existe para presentar. Es la regla de «un piso trae
+         una clase nueva» escrita como restriccion del cupo. */
+      const balMax = Math.max(...clases.map(c => ENEM[c].f));
+      const topeL = Math.max(balMax, Math.floor(cant / 3));
       const topeP = Math.max(1, Math.floor(cant / 3));
       let nL = 0, nP = 0;
       const usadas = {};
@@ -807,16 +826,16 @@ function generaPiso(n, sem){
         do { p = elige(r, libres); g2++; } while (usadas[p.x+','+p.y] && g2 < 30);
         usadas[p.x+','+p.y] = 1;
         let cl = elige(r, clases);
-        if (ENEM[cl].f > 0    && nL >= topeL && cerca.length) cl = elige(r, cerca);
+        if (nL + ENEM[cl].f > topeL  && cerca.length) cl = elige(r, cerca);
         if (ENEM[cl].d >= PESA_D && nP >= topeP && flojo.length) cl = elige(r, flojo);
         /* la segunda degradacion puede violar el primer tope —el reemplazo
            liviano puede ser de distancia— asi que el ultimo recurso es una clase
            que cumple los dos. */
-        if (((ENEM[cl].f > 0 && nL >= topeL) || (ENEM[cl].d >= PESA_D && nP >= topeP)) && llano.length)
+        if ((nL + ENEM[cl].f > topeL || (ENEM[cl].d >= PESA_D && nP >= topeP)) && llano.length)
           cl = elige(r, llano);
         /* se cuenta la clase FINAL y no la sorteada: contar antes de degradar
            gasta cupo en un bicho que no salio. */
-        if (ENEM[cl].f > 0)      nL++;
+        nL += ENEM[cl].f;
         if (ENEM[cl].d >= PESA_D) nP++;
         s.enem.push({cl, cx:p.x, cy:p.y});
       }

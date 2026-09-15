@@ -109,11 +109,16 @@ const ENEM = {
      numero lindo. Medido: de los 60 golpes que el jefe1 metio en 24 corridas,
      CINCUENTA Y CUATRO llegaron con la esquiva en enfriamiento y CERO llegaron
      tarde — o sea que el bot esquiva y aun asi come, porque la salva siguiente
-     ya esta en el aire antes de que pueda volver a esquivar. La esquiva se
-     tarda ESQ_T + ESQ_CD = 0,95 s en estar lista otra vez, y la bala del jefe
+     ya esta en el aire antes de que pueda volver a esquivar. La esquiva tardaba
+     entonces ESQ_T + ESQ_CD = 0,95 s en estar lista otra vez, y la bala del jefe
      tarda 165/240 = 0,69 s en cruzar la distancia de pelea: hay que
      comprometerse ANTES de que salga la salva, asi que una cadencia por debajo
-     de ~1,3 s le pide al jugador una esquiva que todavia no tiene.
+     de ~1,3 s le pedia al jugador una esquiva que todavia no tenia.
+     DESPUES BAJO ESQ_CD Y LA CUENTA QUEDO CON MAS AIRE: hoy la esquiva vuelve en
+     0,17 + 0,56 = 0,73 s, asi que entre salva y salva sobran 0,62. El 1,35 se
+     queda igual porque el margen no es lo unico que decide —el jefe1 da 37 a 47
+     golpes fatales de 200 corridas, que es lo que corresponde a un jefe— y
+     apretarlo seria volver a la sala de la que se salio.
      Y NO ALARGA LA PELEA: los 420 de vida los baja el arma, no el reloj — lo
      unico que cambia es cuantas veces ataca en el mismo rato. */
   jefe1:    {v:420, s: 88, r:34, d:18, a: 46, c:1.35,t:.50, f:8, vb:240, col:'#ff5c7a', jefe:1, hitos:[.55]},
