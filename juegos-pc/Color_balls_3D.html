@@ -1,0 +1,2536 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bola Montaña Frutiger</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    width:100%; height:100%; overflow:hidden;
+    background:#7ec8ff;
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  }
+  canvas { display:block; }
+  
+  /* === JOYSTICK MINIMALISTA === */
+  #joystick {
+    position:fixed; left:24px; bottom:24px;
+    width:110px; height:110px;
+    background: rgba(255,255,255,0.08);
+    border: 1.5px solid rgba(255,255,255,0.35);
+    border-radius: 50%;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index:10; touch-action:none;
+  }
+  #stick {
+    position:absolute; left:50%; top:50%;
+    width:44px; height:44px;
+    margin-left:-22px; margin-top:-22px;
+    background: rgba(255,255,255,0.88);
+    border-radius: 50%;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    pointer-events:none;
+    transition: transform 0.05s linear;
+  }
+  
+  /* === BOTÓN SALTO MINIMALISTA === */
+  #jumpBtn {
+    position: fixed;
+    right: 24px; bottom: 24px;
+    width: 78px; height: 78px;
+    background: rgba(255,255,255,0.12);
+    border: 1.5px solid rgba(255,255,255,0.4);
+    border-radius: 50%;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff; font-weight: 600;
+    font-size: 13px; letter-spacing: 0.5px;
+    cursor: pointer; z-index: 10;
+    touch-action: none;
+    transition: transform 0.06s, background 0.06s;
+  }
+  #jumpBtn:active, #jumpBtn.pressed {
+    transform: scale(0.92);
+    background: rgba(255,255,255,0.28);
+  }
+  
+  /* === TIMER MINIMALISTA (centro arriba) === */
+  #timerBox {
+    position: fixed; top: 18px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 11;
+    background: rgba(0,0,0,0.32);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 14px;
+    padding: 8px 16px 6px;
+    display: flex; flex-direction: column;
+    align-items: center;
+    min-width: 100px;
+  }
+  #phase {
+    color: rgba(255,255,255,0.7);
+    font-size: 9px; letter-spacing: 2px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  #timer {
+    color: #fff;
+    font-size: 22px; line-height: 1;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  }
+  
+  /* === COLOR TARGET MINIMALISTA (debajo del timer, centro) === */
+  #colorTargetWrap {
+    position: fixed; top: 78px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 11;
+    display: flex; align-items: center; gap: 10px;
+    pointer-events: none;
+  }
+  #colorTarget {
+    width: 44px; height: 44px;
+    background: #444;
+    border-radius: 10px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 0 0 2px rgba(255,255,255,0.35);
+    transition: opacity 0.25s;
+  }
+  #goToText {
+    color: #fff;
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 0.3px;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    white-space: nowrap;
+  }
+  
+  /* === RONDA MINIMALISTA ABAJO (fade out) === */
+  #roundIndicator {
+    position: fixed; bottom: 140px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 9;
+    color: rgba(255,255,255,0.92);
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.45);
+    opacity: 0;
+    transition: opacity 0.5s;
+    pointer-events: none;
+    text-align: center;
+  }
+  #roundIndicator.show { opacity: 1; }
+  #roundIndicator .num {
+    display: block;
+    font-size: 32px;
+    letter-spacing: 0;
+    color: #fff;
+    margin-top: 2px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  
+  /* === BOTONES SUPERIORES (pause / mute) === */
+  .topBtn {
+    position: fixed; top: 18px;
+    z-index: 12;
+    width: 38px; height: 38px;
+    background: rgba(0,0,0,0.32);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .topBtn:active { transform: scale(0.92); background: rgba(0,0,0,0.5); }
+  #pauseBtn { right: 18px; }
+  #muteBtn { right: 64px; }
+  
+  /* === MENÚ PAUSA === */
+  #pauseMenu {
+    position: fixed; inset: 0; z-index: 200;
+    display: none;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  #pauseMenu.show { display: flex; }
+  #pauseMenu .pTitle {
+    color: #fff;
+    font-size: 28px; font-weight: 700;
+    letter-spacing: 6px;
+    margin-bottom: 12px;
+  }
+  .pauseBtn {
+    color:#fff; font-weight: 600;
+    font-size: 14px; letter-spacing: 2px;
+    background: rgba(255,255,255,0.1);
+    border: 1.5px solid rgba(255,255,255,0.35);
+    padding: 14px 38px;
+    cursor: pointer;
+    border-radius: 12px;
+    min-width: 220px;
+    text-transform: uppercase;
+  }
+  .pauseBtn:active { transform: scale(0.96); background: rgba(255,255,255,0.22); }
+  .pauseBtn.primary { background: #ff3b5c; border-color: #ff3b5c; }
+  
+  /* Ocultar HUD y controles cuando estamos en el menú */
+  body.in-menu #timerBox,
+  body.in-menu #colorTargetWrap,
+  body.in-menu #joystick,
+  body.in-menu #jumpBtn,
+  body.in-menu #pauseBtn,
+  body.in-menu #muteBtn,
+  body.in-menu #roundIndicator,
+  body.in-menu #camzone {
+    display: none !important;
+  }
+  
+  /* === CAMZONE === */
+  #camzone {
+    position:fixed; right:0; top:0;
+    width:50%; height:100%;
+    z-index:5; touch-action:none;
+  }
+  
+  /* === MENÚ PRINCIPAL (pixel art título) === */
+  #menu {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 28px;
+    background: rgba(0,0,0,0.18);
+  }
+  #menu.hidden { display: none; }
+  #titleCanvas {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    width: 90%; max-width: 540px; height: auto;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.3));
+  }
+  .menuBtn {
+    color:#fff; font-weight: 600;
+    font-size: 16px; letter-spacing: 4px;
+    background: rgba(0,0,0,0.42);
+    border: 1.5px solid rgba(255,255,255,0.5);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 14px 48px;
+    cursor: pointer;
+    border-radius: 14px;
+    text-transform: uppercase;
+  }
+  .menuBtn:active {
+    transform: scale(0.96);
+    background: rgba(0,0,0,0.58);
+  }
+  .langRow { display: flex; gap: 10px; }
+  .langBtn {
+    color:#fff; font-weight: 600;
+    font-size: 12px; letter-spacing: 1px;
+    background: rgba(0,0,0,0.3);
+    border: 1.5px solid rgba(255,255,255,0.35);
+    padding: 8px 16px;
+    cursor: pointer;
+    border-radius: 10px;
+  }
+  .langBtn.active {
+    background: #fff;
+    color: #1a1a2e;
+    border-color: #fff;
+  }
+  
+  /* === TUTORIAL UI MINIMALISTA === */
+  #tutorialUI {
+    display: none;
+    position: fixed; top: 130px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    padding: 14px 22px;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    color: #fff;
+    border-radius: 16px;
+    text-align: center;
+    min-width: 260px;
+    max-width: 90%;
+  }
+  #tutStepLabel {
+    font-size: 9px; color: rgba(255,255,255,0.55);
+    letter-spacing: 4px; font-weight: 700;
+    margin-bottom: 6px; text-transform: uppercase;
+  }
+  #tutInstruction {
+    font-size: 16px; font-weight: 700;
+    letter-spacing: 1px;
+  }
+  #tutHint {
+    font-size: 12px; opacity: 0.75; margin-top: 6px;
+    font-weight: 400;
+  }
+  .tutBtn {
+    margin-top: 12px;
+    padding: 8px 22px;
+    background: rgba(255,255,255,0.16);
+    border: 1.5px solid rgba(255,255,255,0.5);
+    color: #fff; font-size: 11px;
+    letter-spacing: 2px; cursor: pointer;
+    border-radius: 10px; font-weight: 600;
+    text-transform: uppercase;
+  }
+  .tutBtn.primary { background: #4ad96b; border-color: #4ad96b; }
+  .tutBtn:active { transform: scale(0.96); }
+
+  /* === DETECCIÓN DE PLATAFORMA: ocultar UI táctil en PC === */
+  body.platform-pc #joystick,
+  body.platform-pc #jumpBtn,
+  body.platform-pc #camzone { display: none !important; }
+  /* Pistas de PC: solo visibles en modo PC */
+  .pc-only { display: none; }
+  body.platform-pc .pc-only { display: block; }
+  body.platform-mobile .pc-only { display: none !important; }
+
+  /* Pista de controles en el menú */
+  #ctrlHint {
+    color: rgba(255,255,255,0.9);
+    font-size: 12px; font-weight: 500;
+    letter-spacing: 0.4px; line-height: 1.6;
+    text-align: center; max-width: 90%;
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    padding: 10px 16px; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.18);
+  }
+  #ctrlHint kbd {
+    display: inline-block; background: rgba(255,255,255,0.9); color: #1a1a2e;
+    border-radius: 5px; padding: 1px 6px; margin: 0 1px;
+    font-family: inherit; font-size: 11px; font-weight: 700;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+  }
+
+  /* Leyenda de teclas compacta en juego (PC), se desvanece */
+  #kbdLegend {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    z-index: 9;
+    display: none;
+    gap: 14px; align-items: center;
+    color: rgba(255,255,255,0.92);
+    font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    padding: 9px 18px; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.18);
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    opacity: 0; transition: opacity 0.6s;
+    pointer-events: none; white-space: nowrap;
+  }
+  body.platform-pc #kbdLegend.show { display: flex; opacity: 1; }
+  #kbdLegend kbd {
+    display: inline-block; background: rgba(255,255,255,0.9); color: #1a1a2e;
+    border-radius: 5px; padding: 1px 7px; margin: 0 2px;
+    font-family: inherit; font-size: 11px; font-weight: 800;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.35);
+  }
+  body.in-menu #kbdLegend { display: none !important; }
+
+</style>
+</head>
+<body>
+<div id="errBox" style="display:none; position:fixed; top:0; left:0; right:0; padding:14px; background:#c00; color:#fff; font:12px monospace; z-index:9999; white-space:pre-wrap; max-height:50vh; overflow:auto;"></div>
+<script>
+window.addEventListener('error', e => {
+  const eb = document.getElementById('errBox');
+  eb.style.display = 'block';
+  eb.textContent += '[' + (e.filename||'').split('/').pop() + ':' + e.lineno + '] ' + e.message + '\n';
+});
+window.addEventListener('unhandledrejection', e => {
+  const eb = document.getElementById('errBox');
+  eb.style.display = 'block';
+  eb.textContent += 'PROMISE: ' + (e.reason && e.reason.message || e.reason) + '\n';
+});
+</script>
+<div id="menu">
+  <canvas id="titleCanvas" width="880" height="160"></canvas>
+  <button class="menuBtn" id="playBtn" data-i18n="play">▶ JUGAR</button>
+  <div class="langRow">
+    <button class="langBtn active" data-lang="es">🇪🇸 Español</button>
+    <button class="langBtn" data-lang="en">🇬🇧 English</button>
+  </div>
+  <div id="ctrlHint"></div>
+</div>
+
+<!-- Leyenda de teclas en juego (solo PC, se desvanece) -->
+<div id="kbdLegend"></div>
+
+<!-- TIMER central arriba -->
+<div id="timerBox">
+  <div id="phase">CARGANDO</div>
+  <div id="timer">3.0</div>
+</div>
+
+<!-- CUBO DE COLOR + texto "ve al X" -->
+<div id="colorTargetWrap">
+  <div id="colorTarget"></div>
+  <div id="goToText"></div>
+</div>
+
+<!-- Botones superior derecha -->
+<button class="topBtn" id="muteBtn" aria-label="Mute">🔊</button>
+<button class="topBtn" id="pauseBtn" aria-label="Pause">⏸</button>
+
+<!-- Indicador de ronda (abajo, con fade) -->
+<div id="roundIndicator">
+  <span data-i18n="roundLabel">RONDA</span>
+  <span class="num" id="roundNum">0</span>
+</div>
+
+<!-- Hidden: para compatibilidad con código que usa #round y #bestRound -->
+<div style="display:none">
+  <span id="round">0</span>
+  <span id="bestRound">0</span>
+</div>
+
+<div id="joystick"><div id="stick"></div></div>
+<button id="jumpBtn" data-i18n="jump">↑ SALTO</button>
+<div id="camzone"></div>
+
+<!-- Menú de pausa -->
+<div id="pauseMenu">
+  <div class="pTitle" data-i18n="paused">PAUSA</div>
+  <button class="pauseBtn primary" id="resumeBtn" data-i18n="resume">CONTINUAR</button>
+  <button class="pauseBtn" id="restartBtn" data-i18n="restart">REINICIAR</button>
+  <button class="pauseBtn" id="exitBtn" data-i18n="exit">SALIR</button>
+</div>
+
+<!-- TUTORIAL UI -->
+<div id="tutorialUI">
+  <div id="tutStepLabel">PASO 1/4</div>
+  <div id="tutInstruction">MUEVE EL JOYSTICK</div>
+  <div id="tutHint">Usa el joystick</div>
+  <div style="display:flex; gap:10px; justify-content:center;">
+    <button class="tutBtn" id="tutSkipBtn">SKIP</button>
+    <button class="tutBtn primary" id="tutStartBtn" style="display:none;">▶ JUGAR</button>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
+
+// ===== ESCENA =====
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0xb8e0ff, 200, 800);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 2000);
+const renderer = new THREE.WebGLRenderer({ antialias:false });
+// PIXELACIÓN: render a baja resolución y escalar con nearest
+const PIXEL_SCALE = 0.45; // 45% de la resolución real → píxeles gordos
+renderer.setPixelRatio(PIXEL_SCALE);
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.BasicShadowMap; // sombras pixeladas (no suaves)
+document.body.appendChild(renderer.domElement);
+// El canvas se escala con nearest neighbor → píxeles cuadrados visibles
+renderer.domElement.style.imageRendering = 'pixelated';
+renderer.domElement.style.imageRendering = '-moz-crisp-edges';
+
+// ===== LUCES =====
+const ambient = new THREE.HemisphereLight(0xbfe6ff, 0x88aa66, 0.7);
+scene.add(ambient);
+
+const sun = new THREE.DirectionalLight(0xfff4d6, 1.4);
+sun.position.set(60, 100, 40);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+// Frustum acotado que seguirá a la bola: mejor resolución de sombras
+sun.shadow.camera.left = -50;
+sun.shadow.camera.right = 50;
+sun.shadow.camera.top = 50;
+sun.shadow.camera.bottom = -50;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 250;
+sun.shadow.bias = -0.0005;
+sun.shadow.radius = 2;
+// target separado para poder moverlo
+sun.target = new THREE.Object3D();
+scene.add(sun);
+scene.add(sun.target);
+
+
+// ===== NUBES LOW POLY =====
+const cloudGroup = new THREE.Group();
+const cloudMat = new THREE.MeshStandardMaterial({
+  color: 0xffffff, roughness: 1, metalness: 0,
+  flatShading: true, emissive: 0xeaf4ff, emissiveIntensity: 0.15
+});
+function makeCloud(){
+  const c = new THREE.Group();
+  const blobs = 4 + Math.floor(Math.random()*4);
+  for (let i=0; i<blobs; i++){
+    const r = 6 + Math.random()*9;
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), cloudMat);
+    m.position.set((Math.random()-0.5)*18, (Math.random()-0.5)*4, (Math.random()-0.5)*14);
+    m.scale.y = 0.7;
+    c.add(m);
+  }
+  return c;
+}
+for (let i=0; i<40; i++){
+  const cl = makeCloud();
+  const ang = Math.random()*Math.PI*2;
+  const dist = 80 + Math.random()*500;
+  cl.position.set(Math.cos(ang)*dist, 40 + Math.random()*120, Math.sin(ang)*dist);
+  cl.userData.speed = 0.05 + Math.random()*0.1;
+  cloudGroup.add(cl);
+}
+scene.add(cloudGroup);
+
+// ===== FÍSICA CANNON-ES =====
+const world = new CANNON.World({
+  gravity: new CANNON.Vec3(0, -35, 0)
+});
+world.broadphase = new CANNON.NaiveBroadphase();
+world.solver.iterations = 15;
+world.allowSleep = false;
+const groundMat = new CANNON.Material('ground');
+const ballMatPhys = new CANNON.Material('ball');
+const barrierMat = new CANNON.Material('barrier');
+world.addContactMaterial(new CANNON.ContactMaterial(groundMat, ballMatPhys, {
+  friction: 0.3,
+  restitution: 0.15,
+  contactEquationStiffness: 1e8,
+  contactEquationRelaxation: 3
+}));
+// Barreras laterales: NO impulsan, no rebotan, solo bloquean
+world.addContactMaterial(new CANNON.ContactMaterial(barrierMat, ballMatPhys, {
+  friction: 0,
+  restitution: 0,
+  contactEquationStiffness: 1e6,
+  contactEquationRelaxation: 8
+}));
+
+
+
+// ===== GRID DE COLORES 17x17 =====
+const GRID_N = 17;
+const TILE_SIZE = 6;
+const TILE_HEIGHT = 1;
+const GRID_HALF = (GRID_N * TILE_SIZE) / 2;
+const TILE_Y = 50; // altura sobre el vacío (cae abajo si pierde)
+
+// 7 colores distintos: vibrantes pero distinguibles
+const COLORS = [
+  { name: 'rojo',     hex: 0xff3b5c },
+  { name: 'naranja',  hex: 0xff9a3b },
+  { name: 'amarillo', hex: 0xffd93b },
+  { name: 'verde',    hex: 0x4ad96b },
+  { name: 'cyan',     hex: 0x3bd9d9 },
+  { name: 'azul',     hex: 0x3b6dff },
+  { name: 'violeta',  hex: 0xa83bff }
+];
+const COLOR_NAMES_EN = ['red','orange','yellow','green','cyan','blue','violet'];
+
+// Materiales
+const tileMaterials = COLORS.map(c => new THREE.MeshStandardMaterial({
+  color: c.hex, roughness: 0.6, flatShading: false,
+  emissive: c.hex, emissiveIntensity: 0.15
+}));
+
+// Tiles: array de objetos { mesh, body, colorIdx, alive, gridX, gridZ }
+const tiles = [];
+for (let gx=0; gx<GRID_N; gx++){
+  for (let gz=0; gz<GRID_N; gz++){
+    const colorIdx = Math.floor(Math.random() * COLORS.length);
+    const wx = (gx - (GRID_N-1)/2) * TILE_SIZE;
+    const wz = (gz - (GRID_N-1)/2) * TILE_SIZE;
+    
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(TILE_SIZE - 0.2, TILE_HEIGHT, TILE_SIZE - 0.2),
+      tileMaterials[colorIdx]
+    );
+    mesh.position.set(wx, TILE_Y, wz);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    
+    // Body físico (estático)
+    const shape = new CANNON.Box(new CANNON.Vec3((TILE_SIZE-0.2)/2, TILE_HEIGHT/2, (TILE_SIZE-0.2)/2));
+    const body = new CANNON.Body({ mass: 0, material: groundMat });
+    body.addShape(shape);
+    body.position.set(wx, TILE_Y, wz);
+    world.addBody(body);
+    
+    tiles.push({ mesh, body, colorIdx, alive: true, gridX: gx, gridZ: gz, wx, wz });
+  }
+}
+
+// ===== ESTADIO: gradas rodeando la plataforma (no la tocan) =====
+// Plataforma: cuadrado de lado GRID_N * TILE_SIZE = 102 unidades, a y = 50
+// Gradas: anillo rectangular ALREDEDOR con un gap (cuadrado vacío en el centro)
+// El cuadrado vacío del centro es la plataforma → no toca nada
+const STADIUM_GAP = GRID_HALF + 8; // distancia del centro al borde interior de las gradas
+const STADIUM_OUTER = GRID_HALF + 65; // hasta donde llegan las gradas
+const STADIUM_STEP_W = 5; // ancho de cada nivel de grada
+const STADIUM_STEP_H = 2.5; // altura de cada nivel
+const STADIUM_LEVELS = 8;
+const stadiumSpectators = []; // bolitas saltando
+
+// Materiales gradas
+const stadiumMatA = new THREE.MeshLambertMaterial({ color: 0x4a3a2a });
+const stadiumMatB = new THREE.MeshLambertMaterial({ color: 0x5a4a3a });
+const railMat = new THREE.MeshLambertMaterial({ color: 0xff5577 });
+
+for (let level = 0; level < STADIUM_LEVELS; level++){
+  const innerR = STADIUM_GAP + level * STADIUM_STEP_W;
+  const outerR = innerR + STADIUM_STEP_W;
+  const levelY = TILE_Y - 4 + level * STADIUM_STEP_H;
+  const mat = level % 2 === 0 ? stadiumMatA : stadiumMatB;
+  
+  // 4 lados del anillo: norte, sur, este, oeste
+  // Norte (z = -innerR a -outerR), todo el ancho
+  const northGeom = new THREE.BoxGeometry(outerR * 2, STADIUM_STEP_H, outerR - innerR);
+  const north = new THREE.Mesh(northGeom, mat);
+  north.position.set(0, levelY, -(innerR + (outerR - innerR) / 2));
+  north.castShadow = true; north.receiveShadow = true;
+  scene.add(north);
+  
+  // Sur
+  const south = new THREE.Mesh(northGeom, mat);
+  south.position.set(0, levelY, (innerR + (outerR - innerR) / 2));
+  south.castShadow = true; south.receiveShadow = true;
+  scene.add(south);
+  
+  // Este/Oeste (sin contar las esquinas ya cubiertas por N/S)
+  const sideGeom = new THREE.BoxGeometry(outerR - innerR, STADIUM_STEP_H, innerR * 2);
+  const east = new THREE.Mesh(sideGeom, mat);
+  east.position.set(innerR + (outerR - innerR) / 2, levelY, 0);
+  east.castShadow = true; east.receiveShadow = true;
+  scene.add(east);
+  
+  const west = new THREE.Mesh(sideGeom, mat);
+  west.position.set(-(innerR + (outerR - innerR) / 2), levelY, 0);
+  west.castShadow = true; west.receiveShadow = true;
+  scene.add(west);
+  
+  // === ESPECTADORES BOLITAS por cada nivel (en cada lado) ===
+  const spectatorsPerSide = 14;
+  const spectatorColors = [0xff5577, 0xffcc00, 0x44ddff, 0x88ff66, 0xff8844, 0xcc66ff, 0x66ffcc, 0xff4488];
+  
+  for (let side = 0; side < 4; side++){
+    for (let i = 0; i < spectatorsPerSide; i++){
+      const colorIdx = (level * 17 + side * 7 + i) % spectatorColors.length;
+      const spectGeom = new THREE.IcosahedronGeometry(0.7, 0);
+      const spectMat = new THREE.MeshStandardMaterial({
+        color: spectatorColors[colorIdx],
+        roughness: 0.4,
+        emissive: spectatorColors[colorIdx],
+        emissiveIntensity: 0.2
+      });
+      const spect = new THREE.Mesh(spectGeom, spectMat);
+      
+      const tt = (i + 0.5) / spectatorsPerSide; // 0 a 1 a lo largo del lado
+      const midR = (innerR + outerR) / 2;
+      let sx, sz;
+      const len = outerR * 1.9;
+      if (side === 0){      // norte
+        sx = (tt - 0.5) * len;
+        sz = -midR;
+      } else if (side === 1){ // sur
+        sx = (tt - 0.5) * len;
+        sz = midR;
+      } else if (side === 2){ // este
+        sx = midR;
+        sz = (tt - 0.5) * innerR * 2;
+      } else {                // oeste
+        sx = -midR;
+        sz = (tt - 0.5) * innerR * 2;
+      }
+      
+      const baseY = levelY + STADIUM_STEP_H / 2 + 0.7;
+      spect.position.set(sx, baseY, sz);
+      spect.castShadow = true;
+      scene.add(spect);
+      
+      stadiumSpectators.push({
+        mesh: spect,
+        baseY,
+        jumpPhase: Math.random() * Math.PI * 2,
+        jumpSpeed: 1.5 + Math.random() * 2.5,
+        jumpHeight: 0.8 + Math.random() * 0.6
+      });
+    }
+  }
+}
+
+// Animar espectadores saltando (lo llamamos en el loop)
+function updateStadiumSpectators(t){
+  for (const s of stadiumSpectators){
+    const jump = Math.abs(Math.sin(t * s.jumpSpeed + s.jumpPhase));
+    s.mesh.position.y = s.baseY + jump * s.jumpHeight;
+    // Rotación leve random
+    s.mesh.rotation.x = Math.sin(t * s.jumpSpeed + s.jumpPhase) * 0.2;
+    s.mesh.rotation.z = Math.cos(t * s.jumpSpeed * 0.7 + s.jumpPhase) * 0.2;
+  }
+}
+
+// Posición spawn de la bola: centro de la grid, encima
+const platformY = TILE_Y + TILE_HEIGHT/2;
+function findGroundY(x, z){ return platformY; }
+
+// ===== BOLA JUGADOR =====
+const ballRadius = 1.5;
+const ballGeo = new THREE.IcosahedronGeometry(ballRadius, 2);
+const ballMat = new THREE.MeshPhysicalMaterial({
+  color: 0xff5577,
+  roughness: 0.15, metalness: 0.1,
+  clearcoat: 1, clearcoatRoughness: 0.1,
+  emissive: 0x441122, emissiveIntensity: 0.3
+});
+const ball = new THREE.Mesh(ballGeo, ballMat);
+ball.castShadow = true;
+const spawnPos = new THREE.Vector3(0, platformY + ballRadius + 2, 0);
+ball.position.copy(spawnPos);
+scene.add(ball);
+
+// Sombra disco
+const shadowGeo = new THREE.CircleGeometry(ballRadius*1.5, 16);
+const shadowMat = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.25, depthWrite:false });
+const ballShadow = new THREE.Mesh(shadowGeo, shadowMat);
+ballShadow.rotation.x = -Math.PI/2;
+scene.add(ballShadow);
+
+// Body
+const ballBody = new CANNON.Body({
+  mass: 2,
+  shape: new CANNON.Sphere(ballRadius),
+  material: ballMatPhys,
+  linearDamping: 0.1,    // bajo: el control manual ya frena
+  angularDamping: 0.2
+});
+ballBody.ccdSpeedThreshold = 1;
+ballBody.ccdSweptSphereRadius = ballRadius * 0.9;
+ballBody.position.copy(spawnPos);
+world.addBody(ballBody);
+
+// ===== 8 NPCs CON IA BRUTA =====
+const NPC_COUNT = 8;
+const NPC_COLORS = [0x00ffff, 0xff00ff, 0xffff00, 0x00ff88, 0xff8800, 0xaa00ff, 0x88ff00, 0x0088ff];
+const npcs = [];
+const npcRadius = 1.2;
+const npcGeo = new THREE.IcosahedronGeometry(npcRadius, 1);
+
+for (let i = 0; i < NPC_COUNT; i++){
+  const mat = new THREE.MeshStandardMaterial({
+    color: NPC_COLORS[i],
+    roughness: 0.4, metalness: 0.3,
+    emissive: NPC_COLORS[i], emissiveIntensity: 0.3
+  });
+  const mesh = new THREE.Mesh(npcGeo, mat);
+  mesh.castShadow = true;
+  scene.add(mesh);
+  // Spawn random sobre la grid
+  const ang = (i / NPC_COUNT) * Math.PI * 2;
+  const r = 25 + Math.random() * 15;
+  const sx = Math.cos(ang) * r;
+  const sz = Math.sin(ang) * r;
+  const body = new CANNON.Body({
+    mass: 1.5,
+    shape: new CANNON.Sphere(npcRadius),
+    material: ballMatPhys,
+    linearDamping: 0.2,
+    angularDamping: 0.3
+  });
+  body.position.set(sx, platformY + npcRadius + 1, sz);
+  world.addBody(body);
+  // Cada NPC tiene su propio perfil único e invisible (no se muestra)
+  // intel: qué tan listo es eligiendo (0=bruto, 1=perfecto)
+  // Más variación: distribución bimodal para que algunos sean MUY listos y otros MUY brutos
+  const rIntel = Math.random();
+  let intel;
+  if (rIntel < 0.25) intel = 0.25 + Math.random() * 0.2;
+  else if (rIntel < 0.7) intel = 0.5 + Math.random() * 0.25;
+  else intel = 0.8 + Math.random() * 0.2;
+  // Atributos individuales adicionales (no enumerados, todos invisibles)
+  const reactionMult = 0.5 + Math.random();   // unos reaccionan más lento independiente de intel
+  const panicProneness = Math.random();       // unos entran en pánico más fácil
+  const stability = 0.3 + Math.random() * 0.7; // qué bien se quedan en el tile (afecta damping)
+  
+  npcs.push({
+    mesh, body, intel,
+    reactionMult, panicProneness, stability,
+    targetTile: null,
+    repathTimer: Math.random() * 0.5,
+    alive: true,
+    speed: 11 + intel * 8 + Math.random() * 2,
+    lastRound: -1,
+    reactionTimer: 0
+  });
+}
+
+function updateNPCs(dt){
+  if (gameState === 'idle' || gameState === 'gameover') return;
+  
+  for (const npc of npcs){
+    if (!npc.alive) continue;
+    // Si cayó al vacío: muerto
+    if (npc.body.position.y < platformY - 30){
+      npc.alive = false;
+      npc.mesh.visible = false;
+      continue;
+    }
+    
+    // DELAY DE REACCIÓN: tardan en "ver" el color nuevo cada ronda
+    // Cada NPC tiene su propio reactionMult que multiplica al delay base
+    if (npc.lastRound !== currentRound){
+      npc.lastRound = currentRound;
+      npc.reactionTimer = ((1 - npc.intel) * 1.5 + 0.3) * npc.reactionMult;
+      npc.targetTile = null;
+      // Algunos NPCs son más propensos al pánico inicial
+      if (Math.random() < npc.panicProneness * 0.4) npc.reactionTimer += 0.5;
+    }
+    if (npc.reactionTimer > 0){
+      npc.reactionTimer -= dt;
+      continue;
+    }
+    
+    npc.repathTimer -= dt;
+    if (npc.repathTimer <= 0 || (npc.targetTile && !npc.targetTile.alive)){
+      let best = null;
+      let bestScore = Infinity;
+      // Detectar pánico: poco tiempo restante en fase running, modulado por panicProneness
+      const panicThreshold = 0.8 + npc.panicProneness * 0.8;
+      const inPanic = (gameState === 'running' && timeLeft < panicThreshold);
+      
+      for (const t of tiles){
+        if (!t.alive) continue;
+        let valid = false;
+        if (safeTileRef) valid = (t === safeTileRef);
+        else if (secondColorIdx >= 0) valid = (t.colorIdx === targetColorIdx || t.colorIdx === secondColorIdx);
+        else valid = (t.colorIdx === targetColorIdx);
+        
+        // PÁNICO: en últimos 1.2s, los más brutos pueden agarrar el primero que vean aunque sea incorrecto
+        if (!valid && inPanic && Math.random() > (0.4 + npc.intel * 0.5)) valid = true;
+        if (!valid) continue;
+        
+        const dx = t.wx - npc.body.position.x;
+        const dz = t.wz - npc.body.position.z;
+        const d = dx*dx + dz*dz;
+        // Ruido mínimo en la decisión de "más cercano" (no eligen perfecto siempre)
+        const noisyD = d + (1 - npc.intel) * Math.random() * 400;
+        if (noisyD < bestScore){
+          bestScore = noisyD;
+          best = t;
+        }
+      }
+      npc.targetTile = best;
+      // Repathean cada 0.5-1.3s según intel (los listos reaccionan más rápido a cambios)
+      npc.repathTimer = 0.4 + (1 - npc.intel) * 0.9;
+    }
+    
+    // Moverse hacia el target con impulso físico
+    if (npc.targetTile && npc.targetTile.alive){
+      const dx = npc.targetTile.wx - npc.body.position.x;
+      const dz = npc.targetTile.wz - npc.body.position.z;
+      const dist = Math.sqrt(dx*dx + dz*dz);
+      
+      // ¿Ya está SOBRE el tile correcto? (verificar también si es válido el tile actual)
+      let onValidTile = false;
+      if (dist < TILE_SIZE * 0.6){
+        // Está sobre algún tile cercano - revisar si es válido
+        let isValid = false;
+        if (safeTileRef) isValid = (npc.targetTile === safeTileRef);
+        else if (secondColorIdx >= 0) isValid = (npc.targetTile.colorIdx === targetColorIdx || npc.targetTile.colorIdx === secondColorIdx);
+        else isValid = (npc.targetTile.colorIdx === targetColorIdx);
+        if (isValid) onValidTile = true;
+      }
+      
+      if (onValidTile){
+        // ESTABILIZACIÓN: damping variable según stability del NPC
+        // stability alto = frena rápido. Stability bajo = sigue resbalándose
+        const dampPow = 0.05 + (1 - npc.stability) * 0.4; // entre 0.05 (firme) y 0.45 (resbaloso)
+        npc.body.velocity.x *= Math.pow(dampPow, dt);
+        npc.body.velocity.z *= Math.pow(dampPow, dt);
+        // Ajuste hacia el centro del tile (más fuerte si es estable)
+        if (dist > 0.15){
+          const nx = dx / dist;
+          const nz = dz / dist;
+          npc.body.applyForce(new CANNON.Vec3(nx * 3 * npc.stability, 0, nz * 3 * npc.stability), npc.body.position);
+        }
+      } else if (dist > 0.5){
+        const nx = dx / dist;
+        const nz = dz / dist;
+        // Velocidad según fase: show=lento, running=rápido, surviving=quieto
+        let intensity = 0.5;
+        if (gameState === 'running') intensity = 1;
+        else if (gameState === 'surviving') intensity = 0.3;
+        const F = npc.speed * intensity;
+        npc.body.applyForce(new CANNON.Vec3(nx * F, 0, nz * F), npc.body.position);
+        
+        // OVERSHOOT / TROPIEZO: a veces aplican fuerza random como tropezando
+        if (Math.random() < 0.005 * (1 - npc.intel)){
+          const ang = Math.random() * Math.PI * 2;
+          npc.body.applyImpulse(
+            new CANNON.Vec3(Math.cos(ang) * 3, 0, Math.sin(ang) * 3),
+            npc.body.position
+          );
+        }
+        // Salto ocasional si parece atorado
+        if (Math.random() < 0.004 && Math.abs(npc.body.velocity.y) < 0.3){
+          npc.body.velocity.y = 9;
+        }
+      }
+    }
+    
+    // Sync mesh
+    npc.mesh.position.copy(npc.body.position);
+    npc.mesh.quaternion.copy(npc.body.quaternion);
+  }
+}
+
+function resetNPCs(){
+  for (let i = 0; i < npcs.length; i++){
+    const npc = npcs[i];
+    const ang = (i / NPC_COUNT) * Math.PI * 2;
+    const r = 25 + Math.random() * 15;
+    npc.body.position.set(Math.cos(ang) * r, platformY + npcRadius + 1, Math.sin(ang) * r);
+    npc.body.velocity.set(0, 0, 0);
+    npc.body.angularVelocity.set(0, 0, 0);
+    npc.body.type = CANNON.Body.DYNAMIC;
+    npc.body.mass = 1.5;
+    npc.body.updateMassProperties();
+    npc.alive = true;
+    npc.mesh.visible = true;
+    npc.targetTile = null;
+    npc.repathTimer = Math.random() * 0.5;
+  }
+}
+
+// ===== JOYSTICK (pointer events, multi-touch seguro) =====
+const joyEl = document.getElementById('joystick');
+const stickEl = document.getElementById('stick');
+const joyInput = { x:0, y:0 };
+let joyPointerId = null;
+let joyCenter = null;
+
+function updateJoy(clientX, clientY){
+  const dx = clientX - joyCenter.x;
+  const dy = clientY - joyCenter.y;
+  const max = 50;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const d = Math.min(dist, max);
+  const a = dist > 0 ? Math.atan2(dy, dx) : 0;
+  const sx = Math.cos(a)*d;
+  const sy = Math.sin(a)*d;
+  stickEl.style.transform = `translate(${sx}px, ${sy}px)`;
+  joyInput.x = sx / max;
+  joyInput.y = sy / max;
+}
+
+joyEl.addEventListener('pointerdown', (e) => {
+  if (joyPointerId !== null) return;
+  joyPointerId = e.pointerId;
+  const rect = joyEl.getBoundingClientRect();
+  joyCenter = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+  joyEl.setPointerCapture(e.pointerId);
+  updateJoy(e.clientX, e.clientY);
+  e.preventDefault();
+});
+joyEl.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== joyPointerId) return;
+  updateJoy(e.clientX, e.clientY);
+  e.preventDefault();
+});
+function endJoy(e){
+  if (e.pointerId !== joyPointerId) return;
+  joyPointerId = null;
+  joyInput.x = 0; joyInput.y = 0;
+  stickEl.style.transform = 'translate(0,0)';
+}
+joyEl.addEventListener('pointerup', endJoy);
+joyEl.addEventListener('pointercancel', endJoy);
+joyEl.addEventListener('pointerleave', endJoy);
+
+// ===== CÁMARA: swipe en lado derecho =====
+const camzone = document.getElementById('camzone');
+const hintEl = document.getElementById('hint');
+let camYaw = 0;       // rotación horizontal
+let camPitch = 0.8;  // más vertical para ver grid desde arriba
+let camPointerId = null;
+let lastCamX = 0, lastCamY = 0;
+
+const camTarget = new THREE.Vector3(spawnPos.x, spawnPos.y, spawnPos.z);
+
+// Torque acumulativo para impulso suave
+let chargedTorque = 0;
+
+camzone.addEventListener('pointerdown', (e) => {
+  if (camPointerId !== null) return;
+  camPointerId = e.pointerId;
+  lastCamX = e.clientX;
+  lastCamY = e.clientY;
+  camzone.setPointerCapture(e.pointerId);
+  if (hintEl) hintEl.style.opacity = '0';
+  e.preventDefault();
+});
+camzone.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== camPointerId) return;
+  const dx = e.clientX - lastCamX;
+  const dy = e.clientY - lastCamY;
+  lastCamX = e.clientX;
+  lastCamY = e.clientY;
+  // Drag derecha => cámara orbita a la derecha del target (yaw disminuye en mi convención)
+  camYaw   -= dx * 0.006;
+  // Drag abajo => cámara baja, ves más cielo (pitch sube)
+  camPitch += dy * 0.005;
+  camPitch = Math.max(-0.2, Math.min(1.3, camPitch));
+  e.preventDefault();
+});
+function endCam(e){
+  if (e.pointerId !== camPointerId) return;
+  camPointerId = null;
+}
+camzone.addEventListener('pointerup', endCam);
+camzone.addEventListener('pointercancel', endCam);
+
+// Teclado también (WASD/flechas)
+const keys = {};
+addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+addEventListener('keyup',   e => keys[e.key.toLowerCase()] = false);
+
+// =====================================================
+// DETECCIÓN AUTOMÁTICA DE PLATAFORMA (PC / MÓVIL) + HOT-SWAP
+// =====================================================
+function detectPlatform(){
+  const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const touch  = (navigator.maxTouchPoints || 0) > 0;
+  return (touch && coarse) ? 'mobile' : 'pc';
+}
+let platform = detectPlatform();
+function applyPlatformClass(){
+  document.body.classList.toggle('platform-pc', platform === 'pc');
+  document.body.classList.toggle('platform-mobile', platform === 'mobile');
+}
+function setPlatform(p){
+  if (p === platform) return;
+  platform = p;
+  applyPlatformClass();
+  if (typeof refreshPlatformText === 'function') refreshPlatformText();
+}
+applyPlatformClass();
+// Hot-swap por tipo de puntero real (evita mousemove sintéticos tras un toque)
+addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') setPlatform('mobile');
+  else if (e.pointerType === 'mouse' || e.pointerType === 'pen') setPlatform('pc');
+}, { passive: true });
+addEventListener('pointermove', e => {
+  if (e.pointerType === 'mouse') setPlatform('pc');
+}, { passive: true });
+addEventListener('touchstart', () => setPlatform('mobile'), { passive: true });
+addEventListener('keydown', () => setPlatform('pc'));
+
+// ===== CÁMARA CON MOUSE (solo PC, mediante pointer lock) =====
+let pointerLocked = false;
+function tryLockPointer(){
+  if (platform === 'pc' && typeof juegoIniciado !== 'undefined' && juegoIniciado
+      && !isPaused && !pointerLocked){
+    const el = renderer.domElement;
+    if (el.requestPointerLock) el.requestPointerLock();
+  }
+}
+document.addEventListener('pointerlockchange', () => {
+  pointerLocked = (document.pointerLockElement === renderer.domElement);
+});
+renderer.domElement.addEventListener('mousedown', tryLockPointer);
+addEventListener('mousemove', (e) => {
+  if (platform !== 'pc' || !pointerLocked) return;
+  camYaw   -= (e.movementX || 0) * 0.0022;
+  camPitch += (e.movementY || 0) * 0.0022;
+  camPitch = Math.max(-0.2, Math.min(1.3, camPitch));
+});
+
+// ===== LOOP =====
+const clock = new THREE.Clock();
+const colorTargetEl = document.getElementById('colorTarget');
+const timerEl = document.getElementById('timer');
+const roundEl = document.getElementById('round');
+const bestRoundEl = document.getElementById('bestRound');
+const phaseEl = document.getElementById('phase');
+
+let bestRound = parseInt(localStorage.getItem('bestRound') || '0');
+bestRoundEl.textContent = bestRound;
+
+// ===== AUDIO 8-BIT (Web Audio API, chiptune) =====
+let audioCtx = null;
+let masterGain = null;
+function initAudio(){
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = isMuted ? 0 : 1;
+    masterGain.connect(audioCtx.destination);
+  }
+  catch(e){ audioCtx = null; }
+}
+function blip(freq, dur, type, vol){
+  if (!audioCtx) return;
+  type = type || 'square';
+  vol = vol || 0.15;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.connect(gain).connect((masterGain || audioCtx.destination));
+  osc.start();
+  osc.stop(audioCtx.currentTime + dur);
+}
+function blipSlide(f1, f2, dur, type, vol){
+  if (!audioCtx) return;
+  type = type || 'square';
+  vol = vol || 0.15;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(f1, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(f2, audioCtx.currentTime + dur);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.connect(gain).connect((masterGain || audioCtx.destination));
+  osc.start();
+  osc.stop(audioCtx.currentTime + dur);
+}
+function playShowSound(){ blip(660, 0.12, 'square', 0.18); setTimeout(()=>blip(880, 0.15, 'square', 0.18), 100); }
+function playRunSound(){ blipSlide(440, 880, 0.2, 'square', 0.2); }
+function playFallSound(){
+  blipSlide(220, 55, 0.5, 'sawtooth', 0.22);
+  setTimeout(()=>blip(110, 0.3, 'square', 0.18), 100);
+}
+function playSurviveSound(){ blip(523, 0.08, 'square', 0.15); setTimeout(()=>blip(659, 0.08, 'square', 0.15), 80); setTimeout(()=>blip(784, 0.15, 'square', 0.15), 160); }
+function playDeathSound(){
+  blipSlide(440, 55, 0.8, 'sawtooth', 0.25);
+  setTimeout(()=>blipSlide(220, 30, 0.6, 'square', 0.2), 200);
+}
+function playJumpSound(){ blipSlide(440, 880, 0.15, 'square', 0.18); }
+function playSpawnSound(){ blip(1000, 0.05, 'square', 0.08); }
+
+// ===== MÚSICA DE FONDO CHIPTUNE (estilo Spectre/Forge) =====
+// EDM melódico con plucks, supersaw, sidechain, snare rolls
+let musicPlaying = false;
+let musicTimer = null;
+
+let noiseBuffer = null;
+function getNoiseBuffer(){
+  if (noiseBuffer || !audioCtx) return noiseBuffer;
+  const sr = audioCtx.sampleRate;
+  noiseBuffer = audioCtx.createBuffer(1, sr * 0.5, sr);
+  const data = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  return noiseBuffer;
+}
+
+function playKick(when){
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const click = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const clickGain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(180, when);
+  osc.frequency.exponentialRampToValueAtTime(38, when + 0.15);
+  click.type = 'square';
+  click.frequency.value = 1500;
+  clickGain.gain.setValueAtTime(0.08, when);
+  clickGain.gain.exponentialRampToValueAtTime(0.001, when + 0.01);
+  gain.gain.setValueAtTime(0.4, when);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.2);
+  osc.connect(gain).connect((masterGain || audioCtx.destination));
+  click.connect(clickGain).connect((masterGain || audioCtx.destination));
+  osc.start(when); click.start(when);
+  osc.stop(when + 0.22); click.stop(when + 0.02);
+}
+
+function playHat(when, vol, closed){
+  if (!audioCtx) return;
+  vol = vol || 0.05;
+  const src = audioCtx.createBufferSource();
+  src.buffer = getNoiseBuffer();
+  const hp = audioCtx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = closed ? 7000 : 5000;
+  const gain = audioCtx.createGain();
+  const dur = closed ? 0.04 : 0.18;
+  gain.gain.setValueAtTime(vol, when);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + dur);
+  src.connect(hp).connect(gain).connect((masterGain || audioCtx.destination));
+  src.start(when);
+  src.stop(when + dur + 0.02);
+}
+
+function playSnare(when, vol){
+  if (!audioCtx) return;
+  vol = vol || 0.12;
+  // Componente de ruido
+  const src = audioCtx.createBufferSource();
+  src.buffer = getNoiseBuffer();
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1800;
+  bp.Q.value = 0.7;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vol, when);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.13);
+  src.connect(bp).connect(gain).connect((masterGain || audioCtx.destination));
+  src.start(when); src.stop(when + 0.16);
+  // Componente tonal
+  const osc = audioCtx.createOscillator();
+  const g2 = audioCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(220, when);
+  osc.frequency.exponentialRampToValueAtTime(120, when + 0.05);
+  g2.gain.setValueAtTime(vol * 0.4, when);
+  g2.gain.exponentialRampToValueAtTime(0.001, when + 0.05);
+  osc.connect(g2).connect((masterGain || audioCtx.destination));
+  osc.start(when); osc.stop(when + 0.07);
+}
+
+function playSubBass(freq, when, dur, vol, sidechain){
+  if (!audioCtx) return;
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator(); // sub octava abajo
+  const gain = audioCtx.createGain();
+  osc1.type = 'sawtooth';
+  osc1.frequency.value = freq;
+  osc2.type = 'sine';
+  osc2.frequency.value = freq / 2;
+  if (sidechain){
+    // Sidechain fake: vol baja en cada beat
+    gain.gain.setValueAtTime(0.001, when);
+    gain.gain.linearRampToValueAtTime(vol, when + 0.04);
+    // Pumping cada beat (asumimos 4 beats en dur)
+    const beatDur = dur / 4;
+    for (let i = 0; i < 4; i++){
+      const t = when + i * beatDur;
+      gain.gain.setValueAtTime(vol * 0.25, t + 0.001);
+      gain.gain.linearRampToValueAtTime(vol, t + beatDur * 0.7);
+    }
+    gain.gain.exponentialRampToValueAtTime(0.001, when + dur);
+  } else {
+    gain.gain.setValueAtTime(0, when);
+    gain.gain.linearRampToValueAtTime(vol, when + 0.02);
+    gain.gain.setValueAtTime(vol, when + dur - 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + dur);
+  }
+  osc1.connect(gain); osc2.connect(gain);
+  gain.connect((masterGain || audioCtx.destination));
+  osc1.start(when); osc2.start(when);
+  osc1.stop(when + dur + 0.05); osc2.stop(when + dur + 0.05);
+}
+
+// PAD con sidechain pumping (efecto característico EDM)
+function playPad(freq, when, dur, vol, sidechain){
+  if (!audioCtx) return;
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const osc3 = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 2200;
+  osc1.type = 'sawtooth';
+  osc2.type = 'sawtooth';
+  osc3.type = 'sawtooth';
+  osc1.frequency.value = freq;
+  osc2.frequency.value = freq * 1.007;
+  osc3.frequency.value = freq * 0.994;
+  
+  if (sidechain){
+    gain.gain.setValueAtTime(0.001, when);
+    gain.gain.linearRampToValueAtTime(vol, when + 0.1);
+    const beatDur = dur / 4;
+    for (let i = 0; i < 4; i++){
+      const t = when + i * beatDur;
+      gain.gain.setValueAtTime(vol * 0.2, t);
+      gain.gain.linearRampToValueAtTime(vol, t + beatDur * 0.75);
+    }
+    gain.gain.exponentialRampToValueAtTime(0.001, when + dur);
+  } else {
+    gain.gain.setValueAtTime(0, when);
+    gain.gain.linearRampToValueAtTime(vol, when + 0.2);
+    gain.gain.setValueAtTime(vol, when + dur - 0.25);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + dur);
+  }
+  
+  osc1.connect(gain); osc2.connect(gain); osc3.connect(gain);
+  gain.connect(lp).connect((masterGain || audioCtx.destination));
+  osc1.start(when); osc2.start(when); osc3.start(when);
+  osc1.stop(when + dur + 0.1); osc2.stop(when + dur + 0.1); osc3.stop(when + dur + 0.1);
+}
+
+// PLUCK brillante (estilo Spectre/Forge): osc square + decay corto + lowpass que abre
+function playPluck(freq, when, vol){
+  if (!audioCtx) return;
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(8000, when);
+  lp.frequency.exponentialRampToValueAtTime(800, when + 0.25);
+  osc1.type = 'square';
+  osc1.frequency.value = freq;
+  osc2.type = 'sawtooth';
+  osc2.frequency.value = freq * 2.005; // octava + detune
+  gain.gain.setValueAtTime(vol, when);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.3);
+  osc1.connect(gain); osc2.connect(gain);
+  gain.connect(lp).connect((masterGain || audioCtx.destination));
+  osc1.start(when); osc2.start(when);
+  osc1.stop(when + 0.32); osc2.stop(when + 0.32);
+}
+
+// SUPERSAW lead (3 sawtooths detuneados + filtro)
+function playLead(freq, when, dur, vol){
+  if (!audioCtx) return;
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const osc3 = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 3500;
+  osc1.type = 'sawtooth';
+  osc2.type = 'sawtooth';
+  osc3.type = 'square';
+  osc1.frequency.value = freq;
+  osc2.frequency.value = freq * 1.01;
+  osc3.frequency.value = freq * 0.5; // octava abajo, square para grueso
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(vol, when + 0.015);
+  gain.gain.setValueAtTime(vol, when + dur * 0.7);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + dur);
+  osc1.connect(gain); osc2.connect(gain); osc3.connect(gain);
+  gain.connect(lp).connect((masterGain || audioCtx.destination));
+  osc1.start(when); osc2.start(when); osc3.start(when);
+  osc1.stop(when + dur + 0.05); osc2.stop(when + dur + 0.05); osc3.stop(when + dur + 0.05);
+}
+
+// CRASH/RIDE (noise largo) para inicios de drop
+function playCrash(when, vol){
+  if (!audioCtx) return;
+  vol = vol || 0.15;
+  const src = audioCtx.createBufferSource();
+  src.buffer = getNoiseBuffer();
+  src.loop = true;
+  const hp = audioCtx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 4000;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vol, when);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 1.5);
+  src.connect(hp).connect(gain).connect((masterGain || audioCtx.destination));
+  src.start(when);
+  src.stop(when + 1.6);
+}
+
+function startMusic(){
+  if (musicPlaying || !audioCtx) return;
+  musicPlaying = true;
+  getNoiseBuffer();
+  
+  const BPM = 126;
+  const STEP = 60 / BPM / 4;
+  
+  // Progresión i-VI-III-VII en Am (Am - F - C - G): la armonía universal del EDM melódico
+  const chordBass = [55, 44, 33, 49];
+  const chordRoot = [220, 175, 131, 196];
+  const chordPad = [
+    [262, 330, 440],  // Am
+    [262, 349, 440],  // F (1 nota cambia)
+    [262, 330, 392],  // C
+    [294, 392, 494]   // G
+  ];
+  // Notas de pluck por acorde (octava alta característica de Spectre)
+  const pluckNotes = [
+    [880, 1047, 1319], // Am pluck
+    [698, 880, 1047],  // F
+    [1047, 1319, 1568],// C
+    [784, 988, 1175]   // G
+  ];
+  
+  // Frases de lead — variaciones aleatorias dentro de la escala
+  function genLeadPhrase(chordIdx, variation){
+    // Escala A menor: A, B, C, D, E, F, G (220, 247, 262, 294, 330, 349, 392)
+    const scale = [440, 494, 523, 587, 659, 698, 784, 880, 988, 1047];
+    const phrase = new Array(16).fill(0);
+    // Patrones diferentes según variation
+    const patterns = [
+      [0, -1, 2, -1, 4, -1, 2, -1, 5, -1, 4, -1, 2, -1, 0, -1],
+      [0, -1, -1, 2, 4, -1, 3, -1, 5, -1, 4, 2, -1, 3, -1, 0],
+      [4, -1, 2, 0, -1, 2, 4, -1, 5, -1, 4, 2, -1, 0, -1, -1],
+      [0, 2, 4, -1, 5, 4, 2, -1, 4, 2, 0, -1, 2, 0, -1, -1],
+      [0, -1, 4, -1, 0, -1, 4, -1, 5, -1, 4, -1, 2, -1, 0, -1]
+    ];
+    const pattern = patterns[variation % patterns.length];
+    const offset = chordIdx; // shift por acorde
+    for (let i = 0; i < 16; i++){
+      const idx = pattern[i];
+      if (idx >= 0) phrase[i] = scale[(idx + offset) % scale.length];
+    }
+    return phrase;
+  }
+  
+  // Estructura larga: cada bloque agrega/quita elementos para evitar repetición
+  // Cada sección de 16 compases cambia un parámetro
+  const sections = [
+    // INTRO suave
+    { bars: 8,  kick: false, hat: false, snare: false, lead: false, pluck: true,  pluckOct: 0, bassVol: 0.07, padVol: 0.05, leadVol: 0,    pad: true,  sub: false, crash: false, snareRoll: false },
+    // BUILD: kick entra
+    { bars: 8,  kick: true,  hat: true,  snare: false, lead: false, pluck: true,  pluckOct: 0, bassVol: 0.10, padVol: 0.07, leadVol: 0,    pad: true,  sub: true,  crash: false, snareRoll: false },
+    // BUILD UP con snare roll
+    { bars: 4,  kick: true,  hat: true,  snare: false, lead: false, pluck: true,  pluckOct: 1, bassVol: 0.10, padVol: 0.08, leadVol: 0,    pad: true,  sub: true,  crash: false, snareRoll: true  },
+    // DROP 1 (con crash al inicio)
+    { bars: 16, kick: true,  hat: true,  snare: true,  lead: true,  pluck: true,  pluckOct: 0, bassVol: 0.14, padVol: 0.08, leadVol: 0.08, pad: true,  sub: true,  crash: true,  snareRoll: false, leadVar: 0 },
+    // VARIACIÓN del drop (otro patrón de lead, plucks más altos)
+    { bars: 16, kick: true,  hat: true,  snare: true,  lead: true,  pluck: true,  pluckOct: 1, bassVol: 0.14, padVol: 0.08, leadVol: 0.09, pad: true,  sub: true,  crash: false, snareRoll: false, leadVar: 1 },
+    // BREAKDOWN: solo pad + pluck + lead emotivo, sin kick
+    { bars: 8,  kick: false, hat: true,  snare: false, lead: true,  pluck: true,  pluckOct: 1, bassVol: 0.06, padVol: 0.09, leadVol: 0.07, pad: true,  sub: false, crash: false, snareRoll: false, leadVar: 2 },
+    // BUILD UP 2
+    { bars: 4,  kick: true,  hat: true,  snare: false, lead: false, pluck: true,  pluckOct: 1, bassVol: 0.11, padVol: 0.08, leadVol: 0,    pad: true,  sub: true,  crash: false, snareRoll: true  },
+    // DROP 2 con más energía
+    { bars: 16, kick: true,  hat: true,  snare: true,  lead: true,  pluck: true,  pluckOct: 0, bassVol: 0.15, padVol: 0.08, leadVol: 0.10, pad: true,  sub: true,  crash: true,  snareRoll: false, leadVar: 3 },
+    // OUTRO con variación lead nueva
+    { bars: 16, kick: true,  hat: true,  snare: true,  lead: true,  pluck: true,  pluckOct: 1, bassVol: 0.14, padVol: 0.08, leadVol: 0.09, pad: true,  sub: true,  crash: false, snareRoll: false, leadVar: 4 }
+  ];
+  
+  let barIndex = 0;
+  let sectionIdx = 0;
+  let barInSection = 0;
+  let nextBarTime = 0;
+  
+  function scheduleNextBar(){
+    if (!musicPlaying || !audioCtx) return;
+    const now = audioCtx.currentTime;
+    while (nextBarTime < now + 0.6){
+      const sec = sections[sectionIdx];
+      const chordIdx = barIndex % 4;
+      const bassFreq = chordBass[chordIdx];
+      const padFreqs = chordPad[chordIdx];
+      const plucks = pluckNotes[chordIdx].map(f => f * (sec.pluckOct === 1 ? 1.5 : 1));
+      const t0 = nextBarTime;
+      const sidechain = sec.kick;
+      
+      // CRASH al inicio del primer compás de la sección
+      if (sec.crash && barInSection === 0){
+        playCrash(t0, 0.12);
+      }
+      
+      // PAD con sidechain
+      if (sec.pad){
+        for (const pf of padFreqs){
+          playPad(pf, t0, STEP * 16, sec.padVol, sidechain);
+        }
+      }
+      // SUB BASS
+      if (sec.sub){
+        if (sec.kick){
+          for (let beat = 0; beat < 4; beat++){
+            playSubBass(bassFreq, t0 + beat * STEP * 4, STEP * 3.7, sec.bassVol, false);
+          }
+        } else {
+          playSubBass(bassFreq, t0, STEP * 16, sec.bassVol * 0.5, false);
+        }
+      }
+      // KICK four-on-the-floor
+      if (sec.kick){
+        for (let beat = 0; beat < 4; beat++){
+          playKick(t0 + beat * STEP * 4);
+        }
+      }
+      // HAT (off-beats + extra 16avos en secciones intensas)
+      if (sec.hat){
+        for (const s of [2, 6, 10, 14]) playHat(t0 + s * STEP, 0.04, true);
+        if (sectionIdx >= 3){
+          for (const s of [1, 3, 5, 7, 9, 11, 13, 15]) playHat(t0 + s * STEP, 0.015, true);
+        }
+        // Open hat ocasional
+        if (barInSection % 2 === 1) playHat(t0 + 14 * STEP, 0.05, false);
+      }
+      // SNARE backbeat
+      if (sec.snare){
+        playSnare(t0 + 4 * STEP, 0.1);
+        playSnare(t0 + 12 * STEP, 0.1);
+      }
+      // SNARE ROLL (build-up)
+      if (sec.snareRoll){
+        // Acelera: en el último compás, doble densidad
+        const isLast = barInSection === sec.bars - 1;
+        const density = isLast ? 16 : 8;
+        for (let s = 0; s < density; s++){
+          const t = t0 + s * (STEP * 16 / density);
+          playSnare(t, 0.04 + (s / density) * 0.08);
+        }
+      }
+      // PLUCKS arpegiados (muy característico Spectre/Forge)
+      if (sec.pluck){
+        const pluckPattern = [0, 4, 8, 12]; // 4 plucks por compás
+        for (let i = 0; i < pluckPattern.length; i++){
+          const s = pluckPattern[i];
+          const note = plucks[i % plucks.length];
+          playPluck(note, t0 + s * STEP, 0.08);
+        }
+        // En secciones con drop, agregar 16avos extra de pluck
+        if (sectionIdx >= 3 && sec.kick){
+          const extra = [2, 6, 10, 14];
+          for (let i = 0; i < extra.length; i++){
+            playPluck(plucks[(i+1) % plucks.length], t0 + extra[i] * STEP, 0.05);
+          }
+        }
+      }
+      // LEAD supersaw
+      if (sec.lead && sec.leadVol > 0){
+        const variation = sec.leadVar !== undefined ? sec.leadVar : 0;
+        const phrase = genLeadPhrase(chordIdx, variation + barInSection);
+        for (let s = 0; s < 16; s++){
+          if (phrase[s] > 0){
+            // Duración hasta la siguiente nota o 2 steps por defecto
+            let len = 2;
+            for (let n = s + 1; n < 16; n++){
+              if (phrase[n] > 0){ len = n - s; break; }
+              if (n === 15) len = 16 - s;
+            }
+            playLead(phrase[s], t0 + s * STEP, STEP * len * 0.9, sec.leadVol);
+          }
+        }
+      }
+      
+      nextBarTime += STEP * 16;
+      barIndex++;
+      barInSection++;
+      if (barInSection >= sec.bars){
+        barInSection = 0;
+        sectionIdx = (sectionIdx + 1) % sections.length;
+      }
+    }
+  }
+  
+  nextBarTime = audioCtx.currentTime + 0.1;
+  musicTimer = setInterval(scheduleNextBar, 150);
+}
+
+function stopMusic(){
+  musicPlaying = false;
+  if (musicTimer){ clearInterval(musicTimer); musicTimer = null; }
+}
+
+
+let gameState = 'idle';  // 'idle' | 'showing' | 'running' | 'surviving' | 'gameover'
+let currentRound = 0;
+let targetColorIdx = -1;
+let timeLeft = 0;
+const SHOW_TIME = 4.5;   // mostrar color (más tiempo para reaccionar)
+const RUN_TIME = 6;      // ir al color (más tiempo para llegar)
+const SURVIVE_TIME = 5;  // aguantar después que caen (más tiempo apurándose)
+
+function pickTargetColor(){
+  const aliveColors = new Set(tiles.filter(t => t.alive).map(t => t.colorIdx));
+  if (aliveColors.size === 0) return -1;
+  const arr = Array.from(aliveColors);
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// ===== EVENTOS RANDOM =====
+let currentEvent = null; // 'teleport' | 'blackout' | 'safe_tile' | 'double_color'
+let safeTileRef = null;
+let secondColorIdx = -1;
+let blackoutCenter = null;
+const BLACKOUT_RADIUS = 18;
+
+function pickRandomEvent(){
+  // Probabilidad crece con la ronda
+  const p = Math.min(0.7, 0.15 + currentRound * 0.05);
+  if (Math.random() > p) return null;
+  const events = ['teleport', 'blackout', 'safe_tile', 'double_color'];
+  return events[Math.floor(Math.random() * events.length)];
+}
+
+function clearEventEffects(){
+  // Restaurar materiales originales y safe tile
+  if (safeTileRef && safeTileRef.alive){
+    safeTileRef.mesh.material = tileMaterials[safeTileRef.colorIdx];
+  }
+  safeTileRef = null;
+  secondColorIdx = -1;
+  blackoutCenter = null;
+  // Restaurar todos los tiles a su material original
+  for (const t of tiles){
+    if (t.alive) t.mesh.material = tileMaterials[t.colorIdx];
+  }
+}
+
+// Material dorado para safe tile
+const safeTileMaterial = new THREE.MeshStandardMaterial({
+  color: 0xffd700, roughness: 0.3, metalness: 0.5,
+  emissive: 0xffd700, emissiveIntensity: 0.5
+});
+// Material blanco para blackout
+const blackoutMaterial = new THREE.MeshStandardMaterial({
+  color: 0xffffff, roughness: 0.9, flatShading: false,
+  emissive: 0xffffff, emissiveIntensity: 0.1
+});
+
+function applyEvent(evt){
+  if (evt === 'teleport'){
+    // Teletransporta la bola a un tile vivo random
+    const alive = tiles.filter(t => t.alive);
+    if (alive.length > 0){
+      const target = alive[Math.floor(Math.random() * alive.length)];
+      ballBody.position.set(target.wx, platformY + ballRadius + 2, target.wz);
+      ballBody.velocity.set(0, 0, 0);
+      shakeTime = 0.4;
+    }
+    phaseEl.textContent = (currentLang === 'es') ? '¡TP!' : 'TP!';
+    blipSlide(2000, 200, 0.3, 'sine', 0.2);
+  } else if (evt === 'blackout'){
+    // Pintar de blanco los tiles cerca de la bola
+    blackoutCenter = { x: ballBody.position.x, z: ballBody.position.z };
+    for (const t of tiles){
+      if (!t.alive) continue;
+      const dx = t.wx - blackoutCenter.x;
+      const dz = t.wz - blackoutCenter.z;
+      if (dx*dx + dz*dz < BLACKOUT_RADIUS * BLACKOUT_RADIUS){
+        t.mesh.material = blackoutMaterial;
+      }
+    }
+    phaseEl.textContent = (currentLang === 'es') ? '¡NIEBLA!' : 'FOG!';
+  } else if (evt === 'safe_tile'){
+    // Elegir UN tile que será dorado y único válido
+    const alive = tiles.filter(t => t.alive);
+    if (alive.length > 0){
+      safeTileRef = alive[Math.floor(Math.random() * alive.length)];
+      safeTileRef.mesh.material = safeTileMaterial;
+      // El "color objetivo" ya no importa: solo el safe tile vale
+    }
+    phaseEl.textContent = (currentLang === 'es') ? '¡SOLO ORO!' : 'GOLD ONLY!';
+  } else if (evt === 'double_color'){
+    // Elegir un segundo color válido
+    const others = [];
+    for (let i = 0; i < COLORS.length; i++){
+      if (i !== targetColorIdx) others.push(i);
+    }
+    secondColorIdx = others[Math.floor(Math.random() * others.length)];
+    phaseEl.textContent = (currentLang === 'es') ? '¡2 COLORES!' : '2 COLORS!';
+    // Cubo de 2 colores: centro = targetColor, borde = secondColor
+    updateColorTarget(targetColorIdx, secondColorIdx);
+  }
+}
+
+function startShowPhase(){
+  if (gameState === 'gameover') return;
+  clearEventEffects();
+  targetColorIdx = pickTargetColor();
+  if (targetColorIdx < 0){ gameOver(); return; }
+  gameState = 'showing';
+  currentRound++;
+  timeLeft = SHOW_TIME;
+  roundEl.textContent = currentRound;
+  // Cubo color minimalista + texto "ve al X"
+  updateColorTarget(targetColorIdx, -1);
+  // Indicador de ronda con fade
+  showRoundIndicator();
+  phaseEl.textContent = (currentLang === 'es') ? '¡COLOR!' : 'COLOR!';
+  playShowSound();
+  
+  // Decidir evento para esta ronda y aplicarlo a la mitad de SHOW_TIME
+  currentEvent = pickRandomEvent();
+  if (currentEvent){
+    setTimeout(() => {
+      if (gameState === 'showing') applyEvent(currentEvent);
+    }, SHOW_TIME * 1000 * 0.5);
+  }
+}
+
+function startRunPhase(){
+  gameState = 'running';
+  timeLeft = RUN_TIME;
+  phaseEl.textContent = (currentLang === 'es') ? '¡CORRE!' : 'RUN!';
+  playRunSound();
+}
+
+let shakeTime = 0;
+let jumpRequested = false;
+
+const jumpBtn = document.getElementById('jumpBtn');
+jumpBtn.addEventListener('pointerdown', (e) => {
+  jumpRequested = true;
+  jumpBtn.classList.add('pressed');
+  e.preventDefault();
+});
+jumpBtn.addEventListener('pointerup', () => jumpBtn.classList.remove('pressed'));
+jumpBtn.addEventListener('pointerleave', () => jumpBtn.classList.remove('pressed'));
+// Teclado: barra espaciadora (salto) + Esc (pausa)
+addEventListener('keydown', e => {
+  if (e.key === ' ') {
+    jumpRequested = true;
+    if (tutorialState && tutorialState.active) tutorialState.jumped = true;
+  }
+  if (e.key === 'Escape' && typeof juegoIniciado !== 'undefined' && juegoIniciado
+      && !(tutorialState && tutorialState.active)){
+    if (typeof isPaused !== 'undefined'){
+      if (isPaused){ if (typeof hidePause === 'function') hidePause(); }
+      else { if (typeof showPause === 'function') showPause(); }
+    }
+  }
+});
+
+function fallTiles(){
+  gameState = 'surviving';
+  timeLeft = SURVIVE_TIME;
+  shakeTime = 0.8;
+  playFallSound();
+  for (const t of tiles){
+    if (!t.alive) continue;
+    let isSafe = false;
+    if (safeTileRef){
+      // Solo el safe tile sobrevive
+      isSafe = (t === safeTileRef);
+    } else if (secondColorIdx >= 0){
+      isSafe = (t.colorIdx === targetColorIdx || t.colorIdx === secondColorIdx);
+    } else {
+      isSafe = (t.colorIdx === targetColorIdx);
+    }
+    if (!isSafe){
+      t.alive = false;
+      t.body.type = CANNON.Body.DYNAMIC;
+      t.body.mass = 5;
+      t.body.updateMassProperties();
+      t.body.velocity.set(0, -1, 0);
+    }
+  }
+  phaseEl.textContent = (currentLang === 'es') ? '¡AGUANTA!' : 'HOLD!';
+  setTimeout(() => {
+    for (const t of tiles){
+      if (!t.alive && t.mesh.parent){
+        scene.remove(t.mesh);
+        world.removeBody(t.body);
+      }
+    }
+  }, 1000);
+}
+
+function gameOver(){
+  gameState = 'gameover';
+  playDeathSound();
+  shakeTime = 1.2;
+  if (currentRound - 1 > bestRound){
+    bestRound = currentRound - 1;
+    localStorage.setItem('bestRound', bestRound);
+    bestRoundEl.textContent = bestRound;
+  }
+  phaseEl.textContent = (currentLang === 'es') ? '☠️ MUERTO' : '☠️ DEAD';
+  colorTargetEl.style.background = '#444';
+  colorTargetEl.style.boxShadow = 'none';
+  timerEl.textContent = '0.0';
+  // Reinicio automático después de 1.5s
+  setTimeout(() => {
+    resetGame();
+  }, 1500);
+}
+
+function buildGrid(){
+  for (let gx=0; gx<GRID_N; gx++){
+    for (let gz=0; gz<GRID_N; gz++){
+      const colorIdx = Math.floor(Math.random() * COLORS.length);
+      const wx = (gx - (GRID_N-1)/2) * TILE_SIZE;
+      const wz = (gz - (GRID_N-1)/2) * TILE_SIZE;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(TILE_SIZE - 0.2, TILE_HEIGHT, TILE_SIZE - 0.2),
+        tileMaterials[colorIdx]
+      );
+      mesh.position.set(wx, TILE_Y, wz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      // Animación de aparición pixelada: empieza pequeña y crece a saltos
+      mesh.scale.set(0.01, 0.01, 0.01);
+      mesh.userData.spawnT = 0;
+      scene.add(mesh);
+      const shape = new CANNON.Box(new CANNON.Vec3((TILE_SIZE-0.2)/2, TILE_HEIGHT/2, (TILE_SIZE-0.2)/2));
+      const body = new CANNON.Body({ mass: 0, material: groundMat });
+      body.addShape(shape);
+      body.position.set(wx, TILE_Y, wz);
+      world.addBody(body);
+      tiles.push({ mesh, body, colorIdx, alive: true, gridX: gx, gridZ: gz, wx, wz });
+    }
+  }
+}
+
+function clearAllTiles(){
+  for (const t of tiles){
+    if (t.mesh.parent) scene.remove(t.mesh);
+    try { world.removeBody(t.body); } catch(e){}
+  }
+  tiles.length = 0;
+}
+
+function regenerateGrid(){
+  // Mantiene el round y score, solo cambia los colores
+  clearAllTiles();
+  buildGrid();
+  // Si la bola se cayó muy abajo, súbela de vuelta
+  if (ballBody.position.y < platformY){
+    ballBody.position.copy(spawnPos);
+    ballBody.velocity.set(0,0,0);
+    ballBody.angularVelocity.set(0,0,0);
+  }
+}
+
+function resetGame(){
+  clearAllTiles();
+  buildGrid();
+  resetNPCs();
+  currentRound = 0;
+  gameState = 'idle';
+  ballBody.position.copy(spawnPos);
+  ballBody.velocity.set(0,0,0);
+  ballBody.angularVelocity.set(0,0,0);
+  startShowPhase();
+}
+
+function animate(){
+  // PAUSA: solo render, sin step físico ni tiempo
+  if (isPaused){
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+    clock.getDelta(); // consumir dt para que no se acumule
+    return;
+  }
+  
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.getElapsedTime();
+  
+  // Espectadores saltando siempre
+  updateStadiumSpectators(t);
+  
+  // Tutorial: detectar acciones del usuario
+  if (tutorialState && tutorialState.active){
+    updateTutorialProgress(dt);
+  }
+  
+  // Si está en el menú (y no en tutorial), cámara orbital alrededor de la bola
+  if (!juegoIniciado && !(tutorialState && tutorialState.active)){
+    menuTime += dt;
+    const orbitR = 120;
+    const focusY = 50;
+    camera.position.set(
+      Math.cos(menuTime * 0.2) * orbitR,
+      focusY + 20,
+      Math.sin(menuTime * 0.2) * orbitR
+    );
+    camera.lookAt(0, focusY, 0);
+    world.step(1/120, dt, 4);
+    ball.position.copy(ballBody.position);
+    ball.quaternion.copy(ballBody.quaternion);
+    sun.target.position.set(0, focusY, 0);
+    sun.position.set(60, focusY + 100, 40);
+    sun.target.updateMatrixWorld();
+    cloudGroup.children.forEach(c => {
+      c.position.x += c.userData.speed * dt * 5;
+      if (c.position.x > 600) c.position.x = -600;
+    });
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+    return;
+  }
+  
+  // Input combinado: joystick + teclado
+  let inX = joyInput.x;
+  let inZ = joyInput.y;
+  if (keys['a'] || keys['arrowleft'])  inX -= 1;
+  if (keys['d'] || keys['arrowright']) inX += 1;
+  if (keys['w'] || keys['arrowup'])    inZ -= 1;
+  if (keys['s'] || keys['arrowdown'])  inZ += 1;
+  const inMag = Math.sqrt(inX*inX + inZ*inZ);
+  if (inMag > 1){ inX /= inMag; inZ /= inMag; }
+  
+  // JOYSTICK RELATIVO A LA CÁMARA
+  // forward = dirección desde la cámara hacia la bola, proyectado al plano horizontal
+  const fwd = new THREE.Vector3();
+  fwd.subVectors(ballBody.position, camera.position);
+  fwd.y = 0;
+  fwd.normalize();
+  // right = perpendicular a forward, en el plano horizontal
+  const rgt = new THREE.Vector3(-fwd.z, 0, fwd.x);
+  
+  // Joystick arriba (inZ negativo) => bola se aleja de la cámara (hacia donde miras)
+  // Joystick derecha (inX positivo) => bola va a tu derecha en pantalla
+  const fx = fwd.x * (-inZ) + rgt.x * inX;
+  const fz = fwd.z * (-inZ) + rgt.z * inX;
+  
+  // Check suelo: usar contactos reales de cannon (funciona en islas Y puentes)
+  let onGround = false;
+  const contacts = world.contacts || [];
+  for (const contact of contacts){
+    if (contact.bi === ballBody || contact.bj === ballBody){
+      const ny = (contact.bi === ballBody) ? -contact.ni.y : contact.ni.y;
+      if (ny > 0.5){ onGround = true; break; }
+    }
+  }
+  
+  // SALTO: si está pidiendo saltar y está en suelo, impulso vertical
+  if (jumpRequested && onGround){
+    ballBody.velocity.y = 14;
+    playJumpSound();
+  }
+  jumpRequested = false;
+  
+  // === CONTROL DIRECTO: velocidad constante inmediata, sin aceleración acumulativa ===
+  const TARGET_SPEED = 18; // velocidad horizontal objetivo
+  const TURN_LERP = 0.35;  // qué tan rápido la bola alcanza la velocidad objetivo
+  
+  if (onGround && inMag > 0.05){
+    // Velocidad horizontal objetivo según joystick
+    const targetVX = fx * TARGET_SPEED * inMag;
+    const targetVZ = fz * TARGET_SPEED * inMag;
+    // Lerp rápido entre velocidad actual y objetivo (sin acumular)
+    ballBody.velocity.x += (targetVX - ballBody.velocity.x) * TURN_LERP;
+    ballBody.velocity.z += (targetVZ - ballBody.velocity.z) * TURN_LERP;
+    // Torque pequeño solo para que la bola visualmente ruede (no afecta velocidad real)
+    ballBody.applyTorque(new CANNON.Vec3(-fz * 8, 0, fx * 8));
+  } else if (onGround){
+    // Sin input → frenar suave pero rápido
+    ballBody.velocity.x *= 0.82;
+    ballBody.velocity.z *= 0.82;
+  }
+  chargedTorque = 0; // no usamos charge ya
+  
+  // FRENADO POR CHOQUE
+  for (const contact of contacts){
+    if (contact.bi !== ballBody && contact.bj !== ballBody) continue;
+    // Identificar el otro cuerpo (el que NO es la bola)
+    const other = (contact.bi === ballBody) ? contact.bj : contact.bi;
+    if (other.isBarrier) continue; // barreras laterales no frenan
+    const nx = (contact.bi === ballBody) ? -contact.ni.x : contact.ni.x;
+    const ny = (contact.bi === ballBody) ? -contact.ni.y : contact.ni.y;
+    const nz = (contact.bi === ballBody) ? -contact.ni.z : contact.ni.z;
+    if (Math.abs(ny) > 0.5) continue;
+    const vx = ballBody.velocity.x;
+    const vz = ballBody.velocity.z;
+    const vmag = Math.sqrt(vx*vx + vz*vz);
+    if (vmag < 0.5) continue;
+    const dot = (vx*nx + vz*nz) / vmag;
+    if (dot < -0.6){
+      const brake = Math.pow(0.7, dt * 60);
+      ballBody.velocity.x *= brake;
+      ballBody.velocity.z *= brake;
+      chargedTorque = 0;
+    } else if (dot < -0.2){
+      const brake = Math.pow(0.95, dt * 60);
+      ballBody.velocity.x *= brake;
+      ballBody.velocity.z *= brake;
+    }
+  }
+  
+  // Step de cannon
+  world.step(1/120, dt, 8);
+  
+  // Sync three <- cannon
+  ball.position.copy(ballBody.position);
+  ball.quaternion.copy(ballBody.quaternion);
+  
+  // Update NPCs (IA + sync)
+  updateNPCs(dt);
+  
+  const speed = Math.sqrt(ballBody.velocity.x**2 + ballBody.velocity.z**2);
+  const newTerrainY = findGroundY(ballBody.position.x, ballBody.position.z);
+  
+  // Sombra
+  if (newTerrainY > -9000){
+    ballShadow.visible = true;
+    ballShadow.position.set(ballBody.position.x, newTerrainY + 0.05, ballBody.position.z);
+    const shadowScale = THREE.MathUtils.clamp(1 - (ballBody.position.y - newTerrainY)*0.04, 0.2, 1);
+    ballShadow.scale.setScalar(shadowScale);
+    shadowMat.opacity = 0.3 * shadowScale;
+  } else {
+    ballShadow.visible = false;
+  }
+  
+  // ===== SOMBRAS DINÁMICAS: sol sigue a la bola =====
+  sun.target.position.copy(ballBody.position);
+  sun.position.set(
+    ballBody.position.x + 60,
+    ballBody.position.y + 100,
+    ballBody.position.z + 40
+  );
+  sun.target.updateMatrixWorld();
+  
+  // ===== CÁMARA SIGUE A LA BOLA =====
+  // camTarget se interpola suavemente hacia la posición de la bola
+  const followSpeed = 1 - Math.pow(0.0001, dt); // lerp suave
+  camTarget.x += (ballBody.position.x - camTarget.x) * followSpeed;
+  camTarget.y += (ballBody.position.y - camTarget.y) * followSpeed;
+  camTarget.z += (ballBody.position.z - camTarget.z) * followSpeed;
+  
+  const camDist = 35;
+  const cosP = Math.cos(camPitch);
+  const offsetX = Math.sin(camYaw) * camDist * cosP;
+  const offsetZ = Math.cos(camYaw) * camDist * cosP;
+  const offsetY = Math.sin(camPitch) * camDist;
+  camera.position.set(
+    camTarget.x + offsetX,
+    camTarget.y + offsetY + 8,
+    camTarget.z + offsetZ
+  );
+  camera.lookAt(camTarget.x, camTarget.y + 1, camTarget.z);
+  
+  // Nubes flotando
+  cloudGroup.children.forEach(c => {
+    c.position.x += c.userData.speed * dt * 5;
+    if (c.position.x > 600) c.position.x = -600;
+  });
+  
+  // ===== LÓGICA DEL JUEGO DE COLORES (4 fases) =====
+  if (gameState === 'showing' || gameState === 'running' || gameState === 'surviving'){
+    timeLeft -= dt;
+    timerEl.textContent = Math.max(0, timeLeft).toFixed(1);
+    // Color del timer según urgencia (sobre la fase actual)
+    if (timeLeft > 2) timerEl.style.color = '#ffd93b';
+    else if (timeLeft > 1) timerEl.style.color = '#ff9a3b';
+    else timerEl.style.color = '#ff3b5c';
+    
+    if (timeLeft <= 0){
+      if (gameState === 'showing'){
+        startRunPhase();
+      } else if (gameState === 'running'){
+        fallTiles();
+      } else if (gameState === 'surviving'){
+        // Si la bola sigue arriba o no se cayó: regenerar grid y seguir
+        if (ballBody.position.y < platformY - 25){
+          gameOver();
+        } else {
+          playSurviveSound();
+          regenerateGrid();
+          resetNPCs(); // respawn de NPCs cada ronda sobrevivida
+          startShowPhase();
+        }
+      }
+    }
+  }
+  // Check de game over por caída (solo durante running cuando no hay piso)
+  if (gameState === 'running' || gameState === 'surviving'){
+    if (ballBody.position.y < platformY - 25){
+      gameOver();
+    }
+  }
+  
+  // Animación 8-bit de spawn de tiles: escala discreta a saltos
+  for (const t of tiles){
+    if (t.alive && t.mesh.userData.spawnT !== undefined){
+      t.mesh.userData.spawnT += dt;
+      const tt = t.mesh.userData.spawnT;
+      if (tt >= 0.4){
+        t.mesh.scale.set(1, 1, 1);
+        delete t.mesh.userData.spawnT;
+      } else {
+        // Escalonado: 0 → 0.3 → 0.6 → 1
+        const steps = [0.01, 0.3, 0.6, 0.85, 1];
+        const idx = Math.min(steps.length - 1, Math.floor(tt / 0.1));
+        const s = steps[idx];
+        t.mesh.scale.set(s, s, s);
+      }
+    }
+  }
+  
+  // SCREEN SHAKE durante fase 'surviving' (justo cuando caen las tiles)
+  if (shakeTime > 0){
+    shakeTime -= dt;
+    const sx = (Math.floor(Math.random() * 3) - 1) * 0.5 * shakeTime;
+    const sy = (Math.floor(Math.random() * 3) - 1) * 0.5 * shakeTime;
+    camera.position.x += sx;
+    camera.position.y += sy;
+  }
+  
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+// ===== I18N (ES/EN) =====
+const i18nDict = {
+  es: {
+    title: 'COLOR BALLS',
+    subtitle: '¡Sobrevive a la ronda de colores!',
+    play: '▶ JUGAR',
+    roundLabel: 'RONDA',
+    bestLabel: '🏆 Récord',
+    hint: '👆 desliza aquí para mover cámara',
+    jump: '↑ SALTO',
+    paused: 'PAUSA',
+    resume: 'CONTINUAR',
+    restart: 'REINICIAR',
+    exit: 'SALIR',
+    goTo: 'Ve al',
+    goToTwo: 'centro · borde',
+    colors: ['rojo','naranja','amarillo','verde','cyan','azul','violeta']
+  },
+  en: {
+    title: 'COLOR BALLS',
+    subtitle: 'Survive the color round!',
+    play: '▶ PLAY',
+    roundLabel: 'ROUND',
+    bestLabel: '🏆 Best',
+    hint: '👆 swipe here to move camera',
+    jump: '↑ JUMP',
+    paused: 'PAUSED',
+    resume: 'RESUME',
+    restart: 'RESTART',
+    exit: 'EXIT',
+    goTo: 'Go to',
+    goToTwo: 'center · edge',
+    colors: ['red','orange','yellow','green','cyan','blue','violet']
+  }
+};
+let currentLang = 'es';
+function applyLang(){
+  const d = i18nDict[currentLang];
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n;
+    if (d[k]) el.innerHTML = d[k];
+  });
+}
+// Textos dependientes de la plataforma activa (pista de menú + leyenda de teclas)
+const CTRL_HINT = {
+  es: {
+    pc: '⌨️ <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> o flechas para mover · <kbd>Espacio</kbd> saltar · 🖱️ mouse para la cámara · <kbd>Esc</kbd> pausa',
+    mobile: '👆 Joystick para mover · botón ↑ para saltar · desliza a la derecha para mover la cámara'
+  },
+  en: {
+    pc: '⌨️ <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows to move · <kbd>Space</kbd> jump · 🖱️ mouse to look · <kbd>Esc</kbd> pause',
+    mobile: '👆 Joystick to move · ↑ button to jump · swipe on the right to move the camera'
+  }
+};
+const KBD_LEGEND = {
+  es: '<span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> mover</span><span><kbd>Espacio</kbd> saltar</span><span>🖱️ cámara</span><span><kbd>Esc</kbd> pausa</span>',
+  en: '<span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</span><span><kbd>Space</kbd> jump</span><span>🖱️ look</span><span><kbd>Esc</kbd> pause</span>'
+};
+function refreshPlatformText(){
+  const ch = document.getElementById('ctrlHint');
+  if (ch) ch.innerHTML = (CTRL_HINT[currentLang] || CTRL_HINT.es)[platform];
+  const kl = document.getElementById('kbdLegend');
+  if (kl) kl.innerHTML = (KBD_LEGEND[currentLang] || KBD_LEGEND.es);
+  if (tutorialState && tutorialState.active) updateTutorialUI();
+}
+let _legendTimer = null;
+function showKbdLegend(){
+  if (platform !== 'pc') return;
+  const kl = document.getElementById('kbdLegend');
+  if (!kl) return;
+  refreshPlatformText();
+  kl.classList.add('show');
+  if (_legendTimer) clearTimeout(_legendTimer);
+  _legendTimer = setTimeout(() => kl.classList.remove('show'), 5000);
+}
+
+document.querySelectorAll('.langBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.langBtn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentLang = btn.dataset.lang;
+    applyLang();
+    refreshPlatformText();
+    if (typeof drawPixelTitle === 'function') drawPixelTitle();
+    // Refrescar texto del color si hay uno activo
+    if (typeof targetColorIdx !== 'undefined' && targetColorIdx >= 0){
+      updateColorTarget(targetColorIdx, (typeof secondColorIdx !== 'undefined' ? secondColorIdx : -1));
+    }
+  });
+});
+applyLang();
+
+// =====================================================
+// PIXEL ART TITLE "COLOR BALLS" en canvas
+// =====================================================
+function drawPixelTitle(){
+  const canvas = document.getElementById('titleCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  const FONT = {
+    'C':[[0,1,1,1,1],[1,1,0,0,0],[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,0],[1,1,0,0,0],[0,1,1,1,1]],
+    'O':[[0,1,1,1,0],[1,1,0,1,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,1,0,1,1],[0,1,1,1,0]],
+    'L':[[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,0],[1,1,1,1,1]],
+    'R':[[1,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,1,1,1,0],[1,0,1,0,0],[1,0,0,1,0],[1,0,0,0,1]],
+    'B':[[1,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,1,1,1,0]],
+    'A':[[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,1,1,1,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1]],
+    'S':[[0,1,1,1,1],[1,0,0,0,0],[1,0,0,0,0],[0,1,1,1,0],[0,0,0,0,1],[0,0,0,0,1],[1,1,1,1,0]],
+    ' ':[[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]]
+  };
+  const PALETTE = ['#ff3b5c','#ff9a3b','#ffd93b','#4ad96b','#3bd9d9','#3b6dff','#a83bff'];
+  const text = 'COLOR BALLS';
+  const PX = 11;
+  const LETTER_W = 5 * PX;
+  const LETTER_H = 7 * PX;
+  const GAP_X = 2 * PX;
+  const totalW = text.length * LETTER_W + (text.length - 1) * GAP_X;
+  const startX = (canvas.width - totalW) / 2;
+  const startY = (canvas.height - LETTER_H) / 2;
+  let cx = startX;
+  let letterIdx = 0;
+  for (const ch of text){
+    const glyph = FONT[ch];
+    if (!glyph){ cx += LETTER_W + GAP_X; letterIdx++; continue; }
+    const color = PALETTE[letterIdx % PALETTE.length];
+    // 1) Sombra negra grande (3px offset abajo-derecha)
+    for (let r = 0; r < 7; r++){
+      for (let c = 0; c < 5; c++){
+        if (glyph[r][c]){
+          ctx.fillStyle = 'rgba(0,0,0,0.55)';
+          ctx.fillRect(cx + c * PX + PX*0.5, startY + r * PX + PX*0.5, PX, PX);
+        }
+      }
+    }
+    // 2) Outline negro 1 pixel alrededor (8 direcciones)
+    for (let r = 0; r < 7; r++){
+      for (let c = 0; c < 5; c++){
+        if (glyph[r][c]){
+          ctx.fillStyle = '#000';
+          for (const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]]){
+            ctx.fillRect(cx + c * PX + dx*2, startY + r * PX + dy*2, PX, PX);
+          }
+        }
+      }
+    }
+    // 3) Pixel principal de color
+    for (let r = 0; r < 7; r++){
+      for (let c = 0; c < 5; c++){
+        if (glyph[r][c]){
+          ctx.fillStyle = color;
+          ctx.fillRect(cx + c * PX, startY + r * PX, PX, PX);
+          // Highlight arriba-izquierda (brillito pixel-art)
+          ctx.fillStyle = 'rgba(255,255,255,0.35)';
+          ctx.fillRect(cx + c * PX, startY + r * PX, PX, PX*0.3);
+        }
+      }
+    }
+    cx += LETTER_W + GAP_X;
+    letterIdx++;
+  }
+}
+drawPixelTitle();
+
+// =====================================================
+// PAUSA + MUTE
+// =====================================================
+let isPaused = false;
+let isMuted = false;
+
+function showPause(){
+  if (typeof gameState !== 'undefined' && (gameState === 'menu' || gameState === 'gameover')) return;
+  isPaused = true;
+  document.getElementById('pauseMenu').classList.add('show');
+}
+function hidePause(){
+  isPaused = false;
+  document.getElementById('pauseMenu').classList.remove('show');
+}
+function restartGame(){
+  hidePause();
+  currentRound = 0;
+  if (typeof roundEl !== 'undefined' && roundEl) roundEl.textContent = '0';
+  const roundNumEl = document.getElementById('roundNum');
+  if (roundNumEl) roundNumEl.textContent = '0';
+  if (typeof bola !== 'undefined' && bola && bola.body){
+    bola.body.position.set(0, TILE_Y + 5, 0);
+    bola.body.velocity.set(0, 0, 0);
+    bola.body.angularVelocity.set(0, 0, 0);
+  }
+  for (const t of tiles){
+    if (!t.alive){
+      t.alive = true;
+      t.mesh.visible = true;
+      if (t.body){
+        t.body.position.set(t.wx, TILE_Y, t.wz);
+        t.body.velocity.set(0,0,0);
+        try { world.removeBody(t.body); } catch(e){}
+        world.addBody(t.body);
+      }
+    }
+  }
+  if (typeof resetNPCs === 'function') resetNPCs();
+  gameState = 'idle';
+  setTimeout(() => { if (typeof startShowPhase === 'function') startShowPhase(); }, 500);
+}
+function exitToMenu(){
+  hidePause();
+  gameState = 'menu';
+  juegoIniciado = false;
+  document.getElementById('menu').classList.remove('hidden');
+  document.body.classList.add('in-menu');
+  renderer.domElement.style.filter = 'blur(12px) saturate(1.4) brightness(0.85)';
+  if (typeof stopMusic === 'function') stopMusic();
+}
+
+document.getElementById('pauseBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  if (isPaused) hidePause(); else showPause();
+});
+document.getElementById('resumeBtn').addEventListener('click', hidePause);
+document.getElementById('restartBtn').addEventListener('click', restartGame);
+document.getElementById('exitBtn').addEventListener('click', exitToMenu);
+
+document.getElementById('muteBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  isMuted = !isMuted;
+  document.getElementById('muteBtn').textContent = isMuted ? '🔇' : '🔊';
+  if (typeof audioCtx !== 'undefined' && audioCtx && typeof masterGain !== 'undefined' && masterGain){
+    masterGain.gain.setValueAtTime(isMuted ? 0 : 1, audioCtx.currentTime);
+  }
+});
+
+// =====================================================
+// ROUND INDICATOR (fade in/out)
+// =====================================================
+let roundFadeTimer = null;
+function showRoundIndicator(){
+  const el = document.getElementById('roundIndicator');
+  const numEl = document.getElementById('roundNum');
+  if (!el || !numEl) return;
+  numEl.textContent = currentRound;
+  el.classList.add('show');
+  if (roundFadeTimer) clearTimeout(roundFadeTimer);
+  roundFadeTimer = setTimeout(() => { el.classList.remove('show'); }, 2200);
+}
+
+// =====================================================
+// COLOR TARGET DISPLAY (single + double-color)
+// =====================================================
+function updateColorTarget(primaryIdx, secondaryIdx){
+  const el = document.getElementById('colorTarget');
+  const txt = document.getElementById('goToText');
+  if (!el) return;
+  const dict = i18nDict[currentLang];
+  if (secondaryIdx == null || secondaryIdx < 0){
+    const hex = '#' + COLORS[primaryIdx].hex.toString(16).padStart(6, '0');
+    el.style.background = hex;
+    el.style.boxShadow = `0 4px 14px ${hex}88, inset 0 0 0 2px rgba(255,255,255,0.35)`;
+    if (txt){
+      txt.textContent = dict.goTo + ' ' + dict.colors[primaryIdx];
+      txt.style.opacity = '1';
+    }
+  } else {
+    const hex1 = '#' + COLORS[primaryIdx].hex.toString(16).padStart(6, '0');
+    const hex2 = '#' + COLORS[secondaryIdx].hex.toString(16).padStart(6, '0');
+    el.style.background = `radial-gradient(circle at center, ${hex1} 0%, ${hex1} 38%, ${hex2} 50%, ${hex2} 100%)`;
+    el.style.boxShadow = `0 4px 14px ${hex2}88, inset 0 0 0 2px rgba(255,255,255,0.35)`;
+    if (txt){
+      txt.innerHTML = dict.goTo + ' <b>' + dict.colors[primaryIdx] + '</b> + <b>' + dict.colors[secondaryIdx] + '</b>';
+      txt.style.opacity = '1';
+    }
+  }
+}
+function hideGoToText(){
+  const txt = document.getElementById('goToText');
+  if (txt) txt.style.opacity = '0';
+}
+// =====================================================
+// TUTORIAL INTERACTIVO
+// =====================================================
+const tutorialState = {
+  active: false,
+  step: 0,
+  moved: 0,       // distancia movida con joystick
+  jumped: false,
+  cameraSwiped: false,
+  watchedColor: false,
+  watchStartTime: 0
+};
+
+const TUT_STEPS_ES = [
+  { id: 'move',   title: 'MUEVE',     hint: 'Joystick izquierdo' },
+  { id: 'jump',   title: 'SALTA',     hint: 'Botón derecho ↑' },
+  { id: 'color',  title: 'TU COLOR',  hint: 'Mira el cuadro y ve a esos azulejos' },
+  { id: 'done',   title: '¡LISTO!',   hint: 'Sobrevive las rondas' }
+];
+const TUT_STEPS_EN = [
+  { id: 'move',   title: 'MOVE',      hint: 'Left joystick' },
+  { id: 'jump',   title: 'JUMP',      hint: 'Right button ↑' },
+  { id: 'color',  title: 'YOUR COLOR', hint: 'Look at the cube and go to those tiles' },
+  { id: 'done',   title: 'READY!',    hint: 'Survive the rounds' }
+];
+
+function startTutorial(){
+  tutorialState.active = true;
+  tutorialState.step = 0;
+  tutorialState.moved = 0;
+  tutorialState.jumped = false;
+  tutorialState.cameraSwiped = false;
+  tutorialState.watchStartTime = 0;
+  document.getElementById('tutorialUI').style.display = 'block';
+  updateTutorialUI();
+  // Demo color rojo (idx 0) para que el jugador vea como funciona
+  updateColorTarget(0, -1);
+  const phaseEl = document.getElementById('phase');
+  if (phaseEl) phaseEl.textContent = currentLang === 'es' ? 'TUTORIAL' : 'TUTORIAL';
+  const timerEl = document.getElementById('timer');
+  if (timerEl) timerEl.textContent = '∞';
+}
+
+// Pistas de tutorial por plataforma (una cadena por plataforma)
+const TUT_HINTS = {
+  es: {
+    move:  { pc: 'Teclas WASD o flechas', mobile: 'Joystick izquierdo' },
+    jump:  { pc: 'Barra espaciadora',     mobile: 'Botón derecho ↑' },
+    color: { pc: 'Mira el cuadro y ve a esos azulejos', mobile: 'Mira el cuadro y ve a esos azulejos' },
+    done:  { pc: 'Sobrevive las rondas',  mobile: 'Sobrevive las rondas' }
+  },
+  en: {
+    move:  { pc: 'WASD or arrow keys', mobile: 'Left joystick' },
+    jump:  { pc: 'Spacebar',           mobile: 'Right button ↑' },
+    color: { pc: 'Look at the cube and go to those tiles', mobile: 'Look at the cube and go to those tiles' },
+    done:  { pc: 'Survive the rounds', mobile: 'Survive the rounds' }
+  }
+};
+function updateTutorialUI(){
+  const steps = currentLang === 'en' ? TUT_STEPS_EN : TUT_STEPS_ES;
+  const cur = steps[tutorialState.step];
+  if (!cur) return;
+  document.getElementById('tutStepLabel').textContent =
+    (currentLang === 'en' ? 'STEP ' : 'PASO ') + (tutorialState.step + 1) + '/' + steps.length;
+  document.getElementById('tutInstruction').textContent = cur.title;
+  const hintTbl = TUT_HINTS[currentLang] && TUT_HINTS[currentLang][cur.id];
+  document.getElementById('tutHint').textContent = hintTbl ? hintTbl[platform] : cur.hint;
+  document.getElementById('tutStartBtn').style.display = (cur.id === 'done') ? 'inline-block' : 'none';
+}
+
+function advanceTutorial(){
+  tutorialState.step++;
+  const steps = currentLang === 'en' ? TUT_STEPS_EN : TUT_STEPS_ES;
+  if (tutorialState.step >= steps.length){
+    tutorialState.step = steps.length - 1;
+  }
+  updateTutorialUI();
+}
+
+function updateTutorialProgress(dt){
+  if (!tutorialState.active) return;
+  const steps = currentLang === 'en' ? TUT_STEPS_EN : TUT_STEPS_ES;
+  const cur = steps[tutorialState.step];
+  if (!cur) return;
+  
+  if (cur.id === 'move'){
+    // Detectar magnitud del joystick o teclas de movimiento (PC)
+    const mag = Math.sqrt(joyInput.x * joyInput.x + joyInput.y * joyInput.y);
+    const kbdMove = keys['w']||keys['a']||keys['s']||keys['d']||
+                    keys['arrowup']||keys['arrowdown']||keys['arrowleft']||keys['arrowright'];
+    if (mag > 0.4 || kbdMove) tutorialState.moved += dt;
+    if (tutorialState.moved > 0.6) advanceTutorial();
+  } else if (cur.id === 'jump'){
+    if (tutorialState.jumped) advanceTutorial();
+  } else if (cur.id === 'camera'){
+    if (tutorialState.cameraSwiped) advanceTutorial();
+  } else if (cur.id === 'color'){
+    // Esperar 1.5 segundos viendo el color
+    if (tutorialState.watchStartTime === 0) tutorialState.watchStartTime = clock.getElapsedTime();
+    if (clock.getElapsedTime() - tutorialState.watchStartTime > 1.5) advanceTutorial();
+  }
+}
+
+function endTutorialAndStart(){
+  // Fade negro
+  const fade = document.createElement('div');
+  fade.style.cssText = 'position:fixed; inset:0; background:#000; opacity:0; z-index:9999; pointer-events:none; transition:opacity 0.5s;';
+  document.body.appendChild(fade);
+  requestAnimationFrame(() => { fade.style.opacity = '1'; });
+  
+  setTimeout(() => {
+    document.getElementById('tutorialUI').style.display = 'none';
+    tutorialState.active = false;
+    juegoIniciado = true;
+    renderer.domElement.style.filter = 'none';
+    startShowPhase();
+    showKbdLegend();
+    fade.style.opacity = '0';
+    setTimeout(() => fade.remove(), 500);
+  }, 600);
+}
+
+document.getElementById('tutSkipBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  endTutorialAndStart();
+});
+document.getElementById('tutStartBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  endTutorialAndStart();
+});
+
+// Hook jump y camera para detectar acciones
+const _jumpBtnTut = document.getElementById('jumpBtn');
+_jumpBtnTut.addEventListener('pointerdown', () => {
+  if (tutorialState.active) tutorialState.jumped = true;
+}, true);
+const _camzoneTut = document.getElementById('camzone');
+if (_camzoneTut){
+  _camzoneTut.addEventListener('pointermove', () => {
+    if (tutorialState.active) tutorialState.cameraSwiped = true;
+  }, true);
+}
+// Por si el camera swipe es global
+addEventListener('pointermove', e => {
+  if (tutorialState.active && e.clientX > innerWidth / 2){
+    tutorialState.cameraSwiped = true;
+  }
+}, true);
+
+// =====================================================
+// FIN TUTORIAL
+// =====================================================
+
+let juegoIniciado = false;
+let menuTime = 0;
+const menuEl = document.getElementById('menu');
+document.getElementById('playBtn').addEventListener('click', () => {
+  initAudio();
+  startMusic();
+  menuEl.classList.add('hidden');
+  document.body.classList.remove('in-menu');
+  renderer.domElement.style.filter = 'none';
+  // En vez de iniciar directo, abrir el tutorial
+  startTutorial();
+});
+// Aplicar blur al canvas mientras está el menú
+renderer.domElement.style.filter = 'blur(12px) saturate(1.4) brightness(0.85)';
+renderer.domElement.style.transition = 'filter 0.6s ease';
+document.body.classList.add('in-menu');
+
+refreshPlatformText();
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>VECINDARIO</title>
+<style>
+  /* =========================================================================================
+     VECINDARIO — una cinematica en primera persona de ~38 segundos.
+     No hay controles: es una pelicula que corre en el motor del juego. Todo lo que hay en DOM
+     son los velos (blanco del golpe, negro del desmayo, los parpados del despertar), el titulo
+     y los dos botones. El resto vive en el lienzo.
+     ========================================================================================= */
+  html,body{ margin:0; padding:0; width:100%; height:100%; background:#000; overflow:hidden;
+             font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+             -webkit-user-select:none; user-select:none; }
+  #lienzo{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+  /* ---- los velos: cada uno es UNA capa con opacidad, que es lo unico que el compositor
+     anima gratis ---- */
+  #vBlanco,#vNegro,#vRojo{ position:absolute; inset:0; opacity:0; pointer-events:none; }
+  #vBlanco{ background:#fff; z-index:30; }
+  #vNegro{ background:#000; z-index:31; }
+  /* el rojo del golpe es un degrade hacia los bordes, no una pantalla roja: lo que duele es el
+     borde de la vision, el centro tiene que seguir mostrando el pasto donde caes */
+  #vRojo{ z-index:29; background:radial-gradient(ellipse at center,
+          rgba(120,0,0,0) 34%, rgba(120,0,0,.72) 78%, rgba(60,0,0,.95) 100%); }
+
+  /* ---- los parpados del despertar: dos franjas que se separan. Un fundido desde negro se lee
+     a transicion de video; dos franjas que se abren se leen a abrir los ojos. Es la misma
+     decision que ya se tomo en el final de Eco. ---- */
+  #ojos{ position:absolute; inset:0; z-index:32; pointer-events:none; display:none; }
+  #ojos.ver{ display:block; }
+  #ojos i{ position:absolute; left:-5%; right:-5%; height:56%; background:#000;
+           transition:transform 2.8s cubic-bezier(.25,.6,.35,1); }
+  #ojos i:first-child{ top:-6%; border-radius:0 0 50% 50%/0 0 22% 22%; }
+  #ojos i:last-child{ bottom:-6%; border-radius:50% 50% 0 0/22% 22% 0 0; }
+  #ojos.abre i:first-child{ transform:translateY(-105%); }
+  #ojos.abre i:last-child{ transform:translateY(105%); }
+
+  /* la viñeta de siempre: cero triangulos y empuja la vista al centro */
+  #vineta{ position:absolute; inset:0; z-index:20; pointer-events:none;
+           background:radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(0,0,0,.42) 100%); }
+
+  /* ---- el menu ---- */
+  #menu{ position:absolute; inset:0; z-index:40; display:flex; flex-direction:column;
+         align-items:center; justify-content:center; gap:18px; background:#05060a;
+         transition:opacity .8s ease; }
+  #menu.ir{ opacity:0; pointer-events:none; }
+  #menu h1{ margin:0; color:#e8ecf2; font-size:clamp(30px,8vw,54px); font-weight:800;
+            letter-spacing:.24em; text-indent:.24em; }
+  #menu .sub{ color:#5d6675; font-size:clamp(11px,3vw,13px); letter-spacing:.30em;
+              margin-top:-8px; }
+  #menu button{ margin-top:14px; padding:14px 44px; border:1px solid #3a4150;
+                background:transparent; color:#e8ecf2; font-family:inherit; cursor:pointer;
+                font-size:clamp(14px,3.6vw,17px); letter-spacing:.22em; }
+  #menu button:active{ background:#1a1e26; }
+  #menu .nota{ color:#454c59; font-size:clamp(10px,2.6vw,12px); letter-spacing:.12em; }
+
+  /* ---- el final ---- */
+  #fin{ position:absolute; inset:0; z-index:33; display:none; flex-direction:column;
+        align-items:center; justify-content:flex-end; padding-bottom:12vh; gap:14px;
+        pointer-events:none; opacity:0; transition:opacity 1.6s ease; }
+  #fin.ver{ display:flex; opacity:1; pointer-events:auto; }
+  #finT{ color:#e8ecf2; font-size:clamp(22px,6vw,34px); letter-spacing:.34em; text-indent:.34em;
+         text-shadow:0 2px 16px rgba(0,0,0,.8); }
+  #fin button{ padding:11px 34px; border:1px solid rgba(230,236,242,.6);
+               background:rgba(0,0,0,.35); color:#e8ecf2; font-family:inherit; cursor:pointer;
+               font-size:clamp(12px,3.2vw,15px); letter-spacing:.20em; }
+  #fin button:active{ background:rgba(230,236,242,.2); }
+</style>
+</head>
+<body>
+  <canvas id="lienzo"></canvas>
+  <div id="vineta"></div>
+  <div id="vRojo"></div>
+  <div id="vBlanco"></div>
+  <div id="vNegro"></div>
+  <div id="ojos"><i></i><i></i></div>
+  <div id="fin"><div id="finT">VECINDARIO</div><button id="bOtra">OTRA VEZ</button></div>
+  <div id="menu">
+    <h1>VECINDARIO</h1>
+    <div class="sub">UNA NOCHE · 38 SEGUNDOS</div>
+    <button id="bVer">VER</button>
+    <div class="nota">con sonido</div>
+  </div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">

@@ -1,0 +1,869 @@
+
+/* ══════════════════════ EL PERSONAJE: HUESOS Y ANIMACIÓN ══════════════════════
+   El modelo se genera y se riggea afuera; acá se lo mueve. Y las animaciones se
+   escriben como FUNCIONES DEL TIEMPO sobre el esqueleto en vez de traerse
+   clips: con un clip enlatado no hay forma de mezclar la caminata con la
+   mirada, el parpadeo y la mandíbula, que es justo lo que este personaje tiene
+   de más que un maniquí. Es lo mismo que ya se hizo con los cuatro de LEMI. */
+
+const PJ = { ok: false, malla: null, grupo: null, idx: null, huesos: null,
+             bind: {}, qpw: {}, pos0: {}, tri: 0, primeraPersona: false,
+             yawCuerpo: 0, t: 0 };
+
+/* LA ESCALA SALE DE LA ALTURA DEL OJO Y NO DE LA DEL CUERPO. La cámara del
+   juego vive a 1,66 m y el ojo del modelo está a 1,606: dejándolo 1:1, o los
+   pies flotan cinco centímetros o la cámara sale de la frente. */
+const PJ_OJO = 1.6060;
+const PJ_ESC = OJO / PJ_OJO;
+
+const _qA = new T.Quaternion(), _qB = new T.Quaternion(), _eA = new T.Euler();
+/* CUATRO PROPIOS PARA LA TABLA DEL PASO, y no los de `giraH`: el bucle del
+   ciclo y el giro por ejes de mundo corren en la misma pose, y compartir el
+   temporal es la clase de defecto que no falla hoy y falla al agregar una
+   línea en el medio. */
+const _zA = new T.Quaternion(), _zB = new T.Quaternion(),
+      _zC = new T.Quaternion(), _zD = new T.Quaternion();
+
+/* ── LOS BRAZOS SE BAJAN, Y CUÁNTO ESTÁ MEDIDO ──
+   El modelo se generó en pose de A porque es lo que un riggeador automático
+   necesita, y esa pose no es la de nadie: medido sobre el bind, el brazo sale a
+   41 grados de la vertical. Mirándose el pecho en primera persona lo que se ve
+   son dos manos flotando en los costados de la pantalla. */
+const BRAZO_BASE = 0.55;
+/* EL SIGNO DEL CIERRE SE COMPRUEBA, NO SE DEDUCE: el marco del hueso sale de la
+   geometría medida, así que cuál de los dos lados es «hacia la palma» depende
+   de cómo cayó el eje. Fotografiado en los dos sentidos: con +1 los dedos se
+   abren hacia atrás —una mano rota— y con −1 se cierran sobre la palma.
+   Y la pose de reposo de esta malla YA es un puño flojo, así que el recorrido
+   útil es de ahí a cerrado y no de abierto a cerrado. */
+const DEDO_SIGNO = -1;
+/* +2,20 RADIANES. El barrido anterior maximizaba el lado EQUIVOCADO de la mano
+   —estaba usando la normal invertida— asi que daba −1,05 y ponia la palma boca
+   abajo con las cosas apoyadas en el dorso. Decidido el lado por los dedos (la
+   palma es hacia donde se cierran) y rebarrido, la vertical de la palma va:
+   −1,50→−0,992 · 0→−0,167 · +1,00→+0,724 · +1,75→**+0,975** · +2,25→+0,845 ·
+   +3,25→+0,040.
+   Se elige +2,20 y no el +1,75 que maximiza, por lo mismo de siempre: a +1,75 la
+   palma queda horizontal y desde una camara puesta adelante no se le ve el
+   contenido; a +2,20 queda arriba +0,86 y adelante +0,20, inclinada hacia la
+   lente. */
+let PALMA_A = 2.20;
+/* el brazo derecho sosteniendo algo delante del pecho: hombro adelante, hombro
+   bajado contra el cuerpo y codo doblado. Los tres salieron de medir dónde cae
+   la mano, no de elegirlos. */
+/* [hombro X, hombro Y, hombro Z, codo X].
+   EL VALOR VIEJO ERA [-0,55 · 1,55 · 0,70 · -1,95] Y METIA EL BRAZO EN EL TORSO.
+   Medido sobre el rig con cinematica directa: el codo quedaba a z = -0,005, o sea
+   EN EL EJE DEL CUERPO teniendo el hombro en -0,173 — el humero arrastrado 17 cm
+   por delante del esternon, con **160 de 249 vertices del brazo DENTRO del
+   tronco** y un swivel de -52,1 grados cuando un brazo humano sosteniendo algo
+   delante del pecho lo tiene entre +20 y +50. Eso es lo que se veia como «el
+   brazo esta roto».
+   EL CULPABLE ERA EL SEGUNDO NUMERO. Apagando uno por uno: con MANO_A[1] = 0 el
+   codo se va a z = -0,166, o sea que ese giro solo lo empujaba 16,1 cm hacia
+   adentro. Y el comentario que lo justificaba —«lo que la trae al eje del cuerpo
+   es el giro alrededor de la vertical»— era el error de razonamiento: un brazo
+   humano trae la mano al eje del cuerpo con la flexion del codo y la rotacion
+   interna del humero SOBRE SU PROPIO EJE, no rotando el brazo entero alrededor
+   de la vertical, que es lo que arrastra el codo por delante del pecho.
+   EL ANGULO DEL CODO NUNCA FUE EL PROBLEMA: 72,5 grados, dentro del rango humano
+   de 30 a 160, y ademas invariante — barridos los tres angulos del hombro sobre
+   24 valores, se queda clavado en 72,5, porque `giraH` escribe el local del
+   antebrazo con la rotacion de mundo del padre en REPOSO, que es constante.
+   EL VALOR NUEVO SALE DE BARRER LAS 2.520 TERNAS quedandose con las que dejan la
+   muneca a menos de 5,5 cm de donde estaba: deja la muneca a 1,8 cm, pone el codo
+   20,5 cm hacia AFUERA (swivel +74,0 grados) y baja los vertices dentro del torso
+   de 160 a 21. */
+let MANO_A = [0.56, -0.60, -0.82, -1.95];
+/* la misma mano pero LLEVADA A LA BOCA: mas flexion de codo y el hombro un poco
+   mas arriba. El codo es el que hace casi todo el trabajo — es lo que acerca la
+   mano a la cara sin sacarla del eje del cuerpo. */
+/* BARRIDO DE 33 COMBINACIONES midiendo la distancia de la punta del dedo medio
+   al hueso de la boca. El optimo esta aca y es plano: 3,15 de giro sobre la
+   vertical y 1,70 de meceo son los que cruzan el brazo por delante del pecho, y
+   pasarse de ahi EMPEORA (3,60 da 0,276 y 4,05 da 0,336).
+   LO QUE EL BARRIDO DICE Y HAY QUE ANOTAR: la punta del dedo no baja de unos
+   20 cm de la boca. Con la altura clavada (dy = +0,015, o sea a la altura de la
+   boca) lo que falta es horizontal, y no lo dan estos tres ejes — el codo llega
+   a su tope. Alcanza para «se lleva la mano a la cara», no para «se pone la
+   pastilla en la boca». */
+let MANO_B = [-0.55, 3.15, 1.70, -2.20];
+
+/* ── EL BRAZO IZQUIERDO, Y LOS DOS DESTINOS SALEN DE UN SOLVER ──
+   No estan elegidos: se busco sobre los cuatro angulos de `giraH` el minimo de
+   la distancia de la yema del indice izquierdo al destino, con penalizacion por
+   meter el antebrazo en el torso, primero en una rejilla de 4.900 ternas y
+   despues afinando por coordenadas.
+     · TOMA — la yema al centro de la palma derecha, que es donde estan las
+       pastillas: error medido **2,1 cm**, cero vertices en el torso.
+     · BOCA — la yema al hueso `caraBoca`: error **10,7 cm**. Es un minimo local
+       y no baja de ahi con estos cuatro ejes; como `LeftIndiceB` es la falange y
+       no la punta, la yema de verdad queda unos 7 cm de la boca, que a cuadro se
+       lee como la mano en la cara. */
+let MANO_I_TOMA = [0.40, 0.40, 1.60, -1.13];
+let MANO_I_BOCA = [0.69, 0.52, 1.52, -2.36];
+
+/* ── UN GIRO EN LOS EJES DEL MUNDO Y NO EN LOS DEL HUESO ──
+   Los ejes locales de un hueso son los que dejó el bind, así que no significan
+   nada: en este rig la cabeza viene con cuarenta grados de inclinación sobre X
+   y la columna con otros tantos repartidos. Escribiendo `rotation.x` se le
+   BORRA esa rotación al hueso y el personaje se dobla en dos — es la lección
+   que en RECREO costó una vuelta entera con los brazos de Baldi.
+   Acá el giro se pide en ejes de mundo y se lleva al espacio del hueso con
+   `P⁻¹·R·P`, donde P es la rotación de mundo del PADRE en la pose de reposo. */
+function giraH(n, ax, ay, az){
+  const b = PJ.idx[n]; if (!b) return;
+  _eA.set(ax || 0, ay || 0, az || 0, 'XYZ');
+  _qA.setFromEuler(_eA);
+  const p = PJ.qpw[n];
+  _qB.copy(p).invert().multiply(_qA).multiply(p).premultiply(PJ.bind[n]);
+  b.quaternion.copy(_qB);
+}
+function mueveH(n, dx, dy, dz){
+  const b = PJ.idx[n], p = PJ.pos0[n]; if (!b) return;
+  b.position.set(p.x + dx, p.y + dy, p.z + dz);
+}
+
+function cargaPersonaje(){
+  if (PJ.ok) return;
+  let buf;
+  try { buf = B64(PJ_B64); } catch(e){ return; }
+  /* MATERIAL PHONG Y NO LAMBERT, que es lo que usa todo el barrio. Es el único
+     objeto del juego al que se le mira la cara de cerca, y lo que separa una
+     piel mojada de una de cartón es el brillo del farol resbalando por la
+     frente. Cuesta un programa más y se dibuja una vez. */
+  const mat = new T.MeshPhongMaterial({ vertexColors: true, specular: 0x4b5058,
+                                        shininess: 22 });
+  let r;
+  try { r = armaPersonaje(buf, mat); } catch(e){ return; }
+  PJ.malla = r.malla; PJ.idx = r.idx; PJ.huesos = r.huesos; PJ.tri = r.tri;
+  PJ.grupo = new T.Group();
+  PJ.grupo.scale.setScalar(PJ_ESC);
+  PJ.grupo.add(PJ.malla);
+  PJ.grupo.visible = false;
+  escena.add(PJ.grupo);
+
+  /* el reposo se guarda ANTES de tocar nada: todas las poses son deltas sobre
+     él, y sin la copia la primera pose ya destruye la referencia */
+  PJ.malla.updateMatrixWorld(true);
+  for (const b of PJ.huesos){
+    PJ.bind[b.name] = b.quaternion.clone();
+    PJ.pos0[b.name] = b.position.clone();
+    const q = new T.Quaternion();
+    (b.parent && b.parent.isBone ? b.parent : PJ.malla).getWorldQuaternion(q);
+    PJ.qpw[b.name] = q;
+  }
+  PJ.ok = true;
+  /* ── EL PERSONAJE PROYECTA SOMBRA, Y ES LO QUE LO APOYA EN EL SUELO ──
+     Sin ella, en tercera persona el muñeco se ve FLOTANDO sobre el asfalto por
+     más que sus pies estén exactamente en y=0: lo que dice que algo toca el
+     piso no es dónde está, es la sombra de contacto. Cuesta una malla más en la
+     pasada de sombra —una sola, y con esqueleto— y sólo cuando hay sombras. */
+  PJ.malla.castShadow = true;
+  PJ.malla.receiveShadow = true;
+  despejaCabeza();
+  armaCaraSprites();
+  mideOjo();
+}
+
+/* ══════════════════ LO QUE QUEDABA DE LA CABEZA ══════════════════
+   DEFECTO MEDIDO, Y VIEJO: en primera persona la cabeza se achica a la
+   centésima parte, pero `Head` no domina la cabeza entera. Medido girando cada
+   hueso un radián y viendo cuánto se mueven sus propios vértices, `neck` domina
+   **102 vértices que se desplazan 7,5 cm de promedio y 12,7 el que más** — o
+   sea un pedazo de cráneo, no un cuello. Ésos no se achican con `Head`, así que
+   mirando hacia abajo treinta grados aparece la propia nuca llenando el cuadro.
+   Estaba desde siempre en el barrio y salta a la vista en la habitación, donde
+   lo primero que uno hace es asomarse a la ventana y mirar para abajo.
+
+   NO SE ARREGLA ACHICANDO TAMBIÉN `neck`: el tapón que cierra el agujero que
+   deja la cabeza está pesado a ese mismo hueso —vive en y = 1,483 del bind— y
+   achicándolo se abre el agujero y lo que se ve es el forro de la campera
+   desde adentro.
+
+   Lo que sí: pasarle a `Head` los vértices de `neck` que están POR ENCIMA del
+   tapón. Se hace una vez al cargar, sobre el atributo de pesos, y no cuesta un
+   solo ciclo por cuadro. */
+const PJ_CORTE_CUELLO = 1.520;
+function despejaCabeza(){
+  if (!PJ.ok || !PJ.malla) return 0;
+  const g = PJ.malla.geometry;
+  const pos = g.attributes.position, si = g.attributes.skinIndex;
+  if (!pos || !si) return 0;
+  const iN = PJ.huesos.findIndex(b => b.name === 'neck');
+  const iH = PJ.huesos.findIndex(b => b.name === 'Head');
+  if (iN < 0 || iH < 0) return 0;
+  const ejes = ['X', 'Y', 'Z', 'W'];
+  let n = 0;
+  for (let v = 0; v < pos.count; v++){
+    if (pos.getY(v) < PJ_CORTE_CUELLO) continue;
+    let toco = false;
+    for (const e of ejes) if (si['get' + e](v) === iN){ si['set' + e](v, iH); toco = true; }
+    if (toco) n++;
+  }
+  if (n) si.needsUpdate = true;
+  PJ.cuelloArreglado = n;
+  return n;
+}
+
+/* ══════════════════════ LAS POSES ══════════════════════
+   Todo sale de dos números: la FASE del paso —la misma que mueve la cámara y
+   dispara las pisadas, así que el pie y el sonido no se pueden desincronizar— y
+   cuánto se está corriendo. */
+/* `expr` y `bocaExpr` eligen el cuadro del atlas por NOMBRE; `abre` y `boca`
+   son las dos perillas continuas que la cinemática mueve. Los nombres viven en
+   `assets/barrio/cara/cara.json`, o sea que agregar una expresión es agregar un
+   sprite y nombrarlo — no tocar el modelo. */
+const GESTO = { abre: 1, boca: 0, pitch: 0, yawRel: 0,
+                expr: 'neutro', bocaExpr: null, mira: 0, miraY: 0, autoParp: true,
+                /* `libre` = nadie más está manejando la cara. La cinemática la
+                   toma para sí, y quien quiera escribirla mientras tanto —hoy,
+                   la sonda que fotografía las expresiones— la pide con esto. */
+                libre: false,
+                /* `mano` mezcla el brazo derecho a la pose de sostener algo a
+                   la altura del pecho, SIN parar la caminata: lo que hay que
+                   ver es alguien que camina mirándose la mano, no alguien que
+                   se paró a mirarla. */
+                mano: 0,
+                /* cuánto se cierran los dedos, de 0 (abierta) a 1 (puño) */
+                puno: 0, punoIzq: 0,
+                /* la supinación: 0 es como cae la mano y 1 es la palma para
+                   arriba, que es lo único que permite APOYAR algo en ella */
+                palma: 0,
+                /* 0 = la mano donde la deja `mano`; 1 = pegada a la boca */
+                manoBoca: 0,
+                /* el sacudon de la mano despues de tragar. Va sobre el hombro y
+                   no sobre la muneca a proposito: sacudir la mano es un
+                   movimiento del brazo entero, y puesto en la muneca se lee a
+                   glitch. */
+                tiembla: 0,
+                /* EL BRAZO IZQUIERDO EN UN SOLO NUMERO, de 0 a 2: 0 es colgando
+                   como en la caminata, 1 es la yema sobre la palma derecha
+                   —agarrando la pastilla— y 2 es en la boca. Un solo escalar y
+                   no dos mezclas separadas porque el recorrido es una linea:
+                   nunca hay que estar a la vez yendo a la palma y a la boca. */
+                izq: 0 };
+
+/* ── LOS DEDOS ──
+   No son geometría nueva: son los dedos que la malla YA tenía, detectados
+   proyectando la banda de las puntas sobre el eje de los nudillos y riggeados
+   con dos huesos cada uno (`herramientas/barrio/riggear.py`).
+   SE GIRAN SOBRE SU PROPIO EJE X y no sobre uno del mundo, y ésa es la razón de
+   que el hueso se haya creado con la orientación medida del dedo: doblar un
+   dedo pasa a ser un número en vez de tres. Y va POSMULTIPLICADO sobre el bind,
+   que es lo que aplica el giro en el espacio del hueso. */
+const DEDOS_N = ['Indice', 'Medio', 'Anular', 'Menique'];
+/* la falange de abajo dobla menos que la de arriba, y el meñique más que el
+   índice: con todos iguales la mano se cierra como una pinza de metal */
+const DEDOS_K = [[0.95, 1.15], [1.00, 1.20], [1.05, 1.25], [1.10, 1.30]];
+const _qDedo = new T.Quaternion();
+const _ejeDedo = new T.Vector3(1, 0, 0);
+/* EL EJE DE LA MUÑECA ES EL +Y DEL PROPIO HUESO DE LA MANO, y eso no se elige:
+   sale de que los dedos van a lo largo de ese eje —medido, de 0 a 0,188 en y—
+   así que girar sobre él es exactamente supinar. */
+const _ejeMuneca = new T.Vector3(0, 1, 0);
+/* una torsión alrededor del eje del propio hueso, ENCIMA de lo que ya tenga.
+   Posmultiplicar es lo que la deja en el espacio del hueso; premultiplicar la
+   pondría en el del padre y torcería el brazo entero. */
+function torsion(n, a){
+  const b = PJ.idx[n]; if (!b) return;
+  b.quaternion.multiply(_qA.setFromAxisAngle(_ejeMuneca, a));
+}
+function giraMuneca(n, a){
+  const b = PJ.idx[n], q = PJ.bind[n];
+  if (!b || !q) return;
+  b.quaternion.copy(q).multiply(_qDedo.setFromAxisAngle(_ejeMuneca, a));
+}
+function curvaDedo(n, a){
+  const b = PJ.idx[n], q = PJ.bind[n];
+  if (!b || !q) return;
+  b.quaternion.copy(q).multiply(_qDedo.setFromAxisAngle(_ejeDedo, a));
+}
+function ponPuno(lado, k){
+  const c = cl(k, 0, 1) * DEDO_SIGNO;
+  for (let i = 0; i < 4; i++){
+    curvaDedo(lado + DEDOS_N[i], c * DEDOS_K[i][0]);
+    curvaDedo(lado + DEDOS_N[i] + 'B', c * DEDOS_K[i][1]);
+  }
+  /* el pulgar cierra bastante menos y va contra los otros, no con ellos */
+  curvaDedo(lado + 'Pulgar', c * 0.55);
+  curvaDedo(lado + 'PulgarB', c * 0.70);
+}
+
+/* Lo que la pose que corrió dejó en el brazo derecho. Existe para que la mezcla
+   de `GESTO.mano` parta de LO QUE HAY y no de una copia de la fórmula: dos
+   sitios que describen el mismo vaivén terminan siempre desincronizados. */
+const POSE = { bdX: 0, bdZ: 0, bdA: 0 };
+
+/* ══════════════════════ EL IDLE ══════════════════════
+   Respirar es el piso, no el idle. Alguien parado a las tres de la mañana bajo
+   la lluvia no se queda quieto respirando: cambia el peso de pierna, se acomoda
+   la mochila, tirita, mira alrededor. Con sólo la respiración, en tercera
+   persona —donde ahora el personaje se ve todo el tiempo— el muñeco se lee a
+   maniquí a los cuatro segundos, que es justo lo que tarda el ciclo en repetirse.
+
+   DOS CAPAS Y NO UNA, y la división importa:
+
+   1. EL CAMBIO DE PESO ES CONTINUO. Nadie se queda con el peso repartido en las
+      dos piernas: se apoya en una, y cada tanto cambia. No es un gesto que pasa
+      y termina — es un estado, y por eso va aparte y siempre encendido.
+   2. LOS GESTOS SON DE UNA VEZ, con su duración y su espera. Se elige uno al
+      azar, se lo mezcla con una campana —entra y sale, nunca corta— y después
+      hay entre seis y catorce segundos de nada. Un gesto cada dos segundos se
+      lee a tic nervioso.
+
+   Y NINGUNO SE APLICA CON UN `giraH` PROPIO. `giraH` escribe el cuaternión
+   ENTERO del hueso, así que un segundo giro sobre el mismo hueso borra el
+   primero: es el mismo defecto que ya costó una vuelta con la supinación del
+   antebrazo. Los gestos devuelven DELTAS y `poseQuieto` los suma antes de
+   escribir. */
+const IDLE = {
+  lado: 1, l: 1, tLado: 0,       /* el cambio de peso */
+  cual: -1, t: 0, prox: 3.2,     /* el gesto de turno */
+  nY: 0, hY: 0, hZ: 0, hX: 0     /* lo que el gesto le pide a la cabeza */
+};
+const suav = (x) => { const k = cl(x, 0, 1); return k*k*(3 - 2*k); };
+/* cada gesto recibe u de 0 a 1 y devuelve deltas; el peso lo pone la campana */
+const IDLE_GESTOS = [
+  /* ── HOMBROS ── los sube y los deja caer. Es el más corto y el más frecuente
+     porque es lo que hace cualquiera que lleva una mochila. */
+  { dur: 1.9, fn: (u, d) => {
+      const a = Math.sin(u * Math.PI);
+      d.homZ = a * 0.20; d.espX = a * 0.05; d.braZ = -a * 0.09; } },
+  /* ── EL CUELLO ── inclina la cabeza a un lado y vuelve, con el hombro de ese
+     lado subiendo un poco: estirarse el cuello no es sólo girar la cabeza. */
+  { dur: 2.4, fn: (u, d, s) => {
+      const a = Math.sin(u * Math.PI);
+      d.hZ = a * 0.26 * s; d.nZ = a * 0.10 * s; d.homZ = a * 0.07; } },
+  /* ── MIRAR ALREDEDOR ── gira despacio, SE QUEDA, y vuelve. La pausa en el
+     medio es lo que separa mirar algo de barrer la vista: sin ella se lee a
+     torreta. */
+  { dur: 3.6, fn: (u, d, s) => {
+      const a = u < 0.30 ? suav(u / 0.30) : (u > 0.72 ? 1 - suav((u - 0.72) / 0.28) : 1);
+      d.nY = a * 0.34 * s; d.hY = a * 0.40 * s; d.hX = a * 0.06; } },
+  /* ── TIRITAR ── son las tres de la mañana y está lloviendo. Ocho sacudidas por
+     segundo con los brazos cerrándose contra el cuerpo; más lento se lee a que
+     se está riendo. */
+  { dur: 1.5, fn: (u, d) => {
+      const a = Math.sin(u * Math.PI);
+      const v = Math.sin(u * Math.PI * 2 * 8) * a;
+      d.espX = v * 0.030; d.hX = v * 0.022;
+      d.braZ = -a * 0.16; d.antX = -a * 0.22; d.homZ = a * 0.12; } },
+  /* ── ACOMODARSE LA MOCHILA ── la mano derecha sube a la correa y baja. Va
+     último porque es el único que necesita el brazo libre. */
+  { dur: 2.8, fn: (u, d) => {
+      const a = Math.sin(u * Math.PI);
+      d.braDX = a * 0.30; d.braDZ = -a * 1.02; d.antDX = -a * 1.35;
+      d.espX = a * 0.03; d.hZ = -a * 0.05; } }
+];
+
+function idlePaso(dt, t){
+  /* ── EL CAMBIO DE PESO ── entre siete y trece segundos, y el `lerp` tarda casi
+     dos: cambiar de pierna de un cuadro al otro es un salto lateral. */
+  IDLE.tLado -= dt;
+  if (IDLE.tLado <= 0){ IDLE.tLado = 7 + Math.random() * 6; IDLE.lado = -IDLE.lado; }
+  IDLE.l = mez(IDLE.l, IDLE.lado, Math.min(1, dt * 0.85));
+
+  const d = { homZ:0, espX:0, braZ:0, antX:0, braDX:0, braDZ:0, antDX:0,
+              nY:0, nZ:0, hY:0, hZ:0, hX:0 };
+  if (IDLE.cual < 0){
+    IDLE.prox -= dt;
+    if (IDLE.prox <= 0){
+      IDLE.cual = Math.floor(Math.random() * IDLE_GESTOS.length);
+      /* el de la mochila necesita el brazo derecho libre */
+      if (IDLE.cual === 4 && GESTO.mano > 0.01) IDLE.cual = 0;
+      IDLE.t = 0; IDLE.signo = Math.random() < 0.5 ? -1 : 1;
+    }
+  } else {
+    const g = IDLE_GESTOS[IDLE.cual];
+    IDLE.t += dt;
+    const u = IDLE.t / g.dur;
+    if (u >= 1){ IDLE.cual = -1; IDLE.prox = 6 + Math.random() * 8; }
+    else g.fn(u, d, IDLE.signo);
+  }
+  IDLE.nY = d.nY; IDLE.hY = d.hY; IDLE.hZ = d.hZ; IDLE.hX = d.hX; IDLE.nZ = d.nZ;
+  return d;
+}
+
+function poseQuieto(f, t, dt){
+  /* respirar es lo único que separa a alguien parado de un maniquí — y es el
+     piso, no el idle: lo que hace que no se lea a maniquí es lo de arriba */
+  const r = Math.sin(t * 1.15);
+  const d = idlePaso(dt || 0, t);
+  const L = IDLE.l;                         /* −1 apoyado en la izquierda, +1 en la derecha */
+
+  giraH('Spine01', r * 0.016 + d.espX, 0, -L * 0.022);
+  giraH('Spine', -r * 0.012 + d.espX * 0.5, 0, Math.sin(t * 0.37) * 0.010 + L * 0.030);
+  /* los hombros: el gesto los sube a los dos, y el cambio de peso baja el del
+     lado en el que se apoya — que es lo que hace una cadera desnivelada */
+  giraH('LeftShoulder',  0, 0, -d.homZ - L * 0.030);
+  giraH('RightShoulder', 0, 0,  d.homZ - L * 0.030);
+  giraH('LeftArm',  0.02, 0, -BRAZO_BASE + Math.sin(t*0.53)*0.012 - d.braZ);
+  POSE.bdX = 0.02 + d.braDX;
+  POSE.bdZ = BRAZO_BASE - Math.sin(t*0.53+1.7)*0.012 + d.braZ + d.braDZ;
+  POSE.bdA = -0.12 + d.antX + d.antDX;
+  giraH('RightArm', POSE.bdX, 0, POSE.bdZ);
+  giraH('LeftForeArm',  -0.12 + d.antX, 0, 0);
+  giraH('RightForeArm', POSE.bdA, 0, 0);
+  /* ── LAS PIERNAS DEL CAMBIO DE PESO ──
+     La que aguanta se estira y la otra se dobla un poco y se abre. Sin esto la
+     cadera se mueve de costado con las dos piernas rectas, que se lee a que el
+     muñeco se desliza y no a que descansa. */
+  const li = cl(-L, 0, 1), de = cl(L, 0, 1);   /* cuánto descansa cada una */
+  giraH('LeftUpLeg',  de * 0.10, 0,  de * 0.055);
+  giraH('RightUpLeg', li * 0.10, 0, -li * 0.055);
+  giraH('LeftLeg',  -de * 0.17, 0, 0);
+  giraH('RightLeg', -li * 0.17, 0, 0);
+  giraH('LeftFoot',  de * 0.07, 0, 0);
+  giraH('RightFoot', li * 0.07, 0, 0);
+  /* la cadera se corre HACIA la pierna que aguanta y baja un pelo */
+  mueveH('Hips', L * 0.032, r * 0.004 - Math.abs(L) * 0.004, 0);
+  giraH('Hips', 0, 0, -L * 0.045);
+}
+
+function poseCamina(f, k){
+  /* k va de 0 (caminando) a 1 (corriendo): lo que cambia es la amplitud y la
+     inclinación del tronco, no el ciclo — correr no es caminar más rápido, es
+     caminar más grande y echado adelante */
+  /* ── LAS PIERNAS Y LA COLUMNA SALEN DE UN CICLO DE VERDAD ──
+     `PASO_CAMINA` y `PASO_CORRE` son un ciclo de caminata y uno de carrera
+     generados con Rezona Lab (Tripo) y retargeteados al esqueleto de este juego
+     por `herramientas/barrio/hornear_paso.py`. Diez huesos por veinticuatro
+     fases; los brazos, la cabeza y las manos NO están en la tabla porque los
+     maneja el juego —la mirada, el idle, la linterna, las pastillas—.
+
+     POR QUÉ HIZO FALTA, Y NO ES CAPRICHO: reporte del jugador, *«las piernas
+     van de lado a lado, no adelante»*. Medido con la sonda `ejeH` —que gira un
+     hueso un radián y devuelve adónde se fue el PIE, en el marco del
+     personaje— el muslo en X daba **7,0 cm adelante y 8,9 de costado**: o sea
+     que la pierna se movía más de costado que hacia adelante, y encima ocho
+     veces menos de lo que podía. Los ejes de un rig no se adivinan.
+
+     Y NO SE GUARDA UN CLIP, SE GUARDA UNA TABLA POR FASE. El juego ya tiene
+     `AND.fase`, de la que dependen el sonido de la pisada, el cabeceo de la
+     cámara y el balanceo del cuerpo; un `AnimationMixer` con su propio reloj se
+     desincronizaría de las tres. La tabla viene GIRADA para que el pie
+     izquierdo toque el suelo en la fase 0, que es donde suena el paso. */
+  const _u = (f / (Math.PI*2)) * PASO_N;
+  const _i = ((Math.floor(_u) % PASO_N) + PASO_N) % PASO_N;
+  const _j = (_i + 1) % PASO_N;
+  const _t = _u - Math.floor(_u);
+  for (let b = 0; b < PASO_H.length; b++){
+    const h = PJ.idx[PASO_H[b]]; if (!h) continue;
+    /* caminar y correr se mezclan por `k`, que es el mismo número que ya
+       mezclaba las amplitudes: correr no es caminar más rápido, es otro ciclo */
+    _zA.fromArray(PASO_CAMINA[b][_i]); _zB.fromArray(PASO_CAMINA[b][_j]);
+    _zA.slerp(_zB, _t);
+    if (k > 0.001){
+      _zC.fromArray(PASO_CORRE[b][_i]); _zD.fromArray(PASO_CORRE[b][_j]);
+      _zC.slerp(_zD, _t);
+      _zA.slerp(_zC, k);
+    }
+    h.quaternion.copy(_zA);
+  }
+  const C = 0.38 + k * 0.32;          /* brazo */
+  const s = Math.sin(f), c = Math.cos(f);
+  const s2 = Math.sin(f + Math.PI);
+  /* los brazos van al revés que las piernas: es lo que mantiene el equilibrio y
+     lo primero que se nota si falta */
+  giraH('LeftArm',  s2 * C, 0, -BRAZO_BASE + 0.10 + k*0.06);
+  POSE.bdX = s * C; POSE.bdZ = BRAZO_BASE - 0.10 - k*0.06;
+  POSE.bdA = -(0.20 + k*0.55) - Math.max(0, s) * (0.25 + k*0.5);
+  giraH('RightArm', POSE.bdX, 0, POSE.bdZ);
+  giraH('LeftForeArm',  -(0.20 + k*0.55) - Math.max(0, s2) * (0.25 + k*0.5), 0, 0);
+  giraH('RightForeArm', POSE.bdA, 0, 0);
+  /* la pelvis bascula y el tronco gira AL REVÉS que ella: sin ese
+     contramovimiento el personaje camina como una tabla */
+  /* ── LA ALTURA DE LA CADERA TAMBIÉN SALE DE LA TABLA ──
+     El ciclo trae sólo rotaciones, así que sin esto el cuerpo se queda a altura
+     fija y el pie de apoyo FLOTA: medido sobre el clip de carrera, el tobillo
+     más bajo queda en 17,2 cm contra los 10,3 que mide en reposo, o sea siete
+     centímetros de aire. `PASO_Y` es cuánto hay que bajar la cadera en cada
+     fase para que el pie de apoyo toque, y de paso es de donde sale el rebote:
+     sin él el personaje se desliza a altura constante. */
+  const _y0 = PASO_Y.camina[_i] + (PASO_Y.camina[_j] - PASO_Y.camina[_i]) * _t;
+  const _y1 = PASO_Y.corre[_i]  + (PASO_Y.corre[_j]  - PASO_Y.corre[_i])  * _t;
+  mueveH('Hips', 0, _y0 + (_y1 - _y0) * k, 0);
+  /* LOS HOMBROS VUELVEN A CERO ACÁ. Los escribe el idle y NO los escribía nadie
+     más: sin esta línea, terminar un encogimiento de hombros y salir caminando
+     deja los hombros levantados para siempre. Es el defecto de siempre de una
+     pose que escribe huesos que la otra no toca. */
+  giraH('LeftShoulder', 0, 0, 0);
+  giraH('RightShoulder', 0, 0, 0);
+}
+
+function pasoPersonaje(dt){
+  if (!PJ.ok || !PJ.grupo.visible) return;
+  PJ.t += dt;
+  const f = AND.fase;
+  const and = cl(AND.v / VEL, 0, 1);
+  const k = cl((AND.v - VEL) / (CORRE - VEL), 0, 1);
+  if (and < 0.06) poseQuieto(f, PJ.t, dt);
+  else poseCamina(f, k);
+
+  /* ── LA CABEZA ──
+     Lleva la vista del jugador, y el cuello se reparte el giro con ella: una
+     cabeza que gira ochenta grados sobre un cuello quieto se lee a exorcismo.
+     Y le RESTA la inclinación que el tronco acaba de tomar al correr, porque si
+     no, corriendo se mira los pies. */
+  const incl = (and < 0.06) ? 0 : (0.06 + k * 0.16) + (0.02 + k * 0.06);
+  const py = cl(GESTO.pitch, -1.1, 0.9);
+  const yr = cl(GESTO.yawRel, -1.15, 1.15);
+  /* Y LA CABEZA SUMA LO QUE EL IDLE PIDIÓ. Va acá y no adentro de `poseQuieto`
+     porque el cuello y la cabeza los escribe este bloque: puestos allá, estas
+     dos líneas los borrarían. Caminando el idle vale cero, así que la suma no
+     hace nada. */
+  const iq = (and < 0.06) ? 1 : 0;
+  giraH('neck', -incl * 0.55 + py * 0.35 + IDLE.hX * iq * 0.4,
+        yr * 0.35 + IDLE.nY * iq, IDLE.nZ * iq);
+  giraH('Head', -incl * 0.45 + py * 0.65 + (and > 0.06 ? Math.sin(f*2) * 0.010 : 0) + IDLE.hX * iq,
+        yr * 0.65 + IDLE.hY * iq,
+        (and > 0.06 ? Math.cos(f) * 0.018 : 0) + IDLE.hZ * iq);
+
+  /* la mandíbula acompaña a la boca dibujada: el sprite dice QUÉ forma tiene la
+     boca y el hueso le da el movimiento del mentón. Con sólo el sprite, hablar
+     se ve como una calcomanía que cambia; con sólo el hueso, como alguien que
+     abre la boca sin labios. */
+  giraH('mandibula', GESTO.boca * 0.26, 0, 0);
+
+  /* ── EL BRAZO QUE SOSTIENE, MEZCLADO SOBRE EL QUE CAMINA ──
+     Se mezcla y no se reemplaza: el resto del cuerpo sigue en su ciclo, así que
+     lo que se ve es un brazo que se levanta mientras las piernas siguen. Los
+     ángulos están medidos con `__V.manoDer()` contra el pecho, no elegidos. */
+  ponPuno('Right', GESTO.puno);
+  ponPuno('Left', GESTO.punoIzq);
+
+  const m = cl(GESTO.mano, 0, 1);
+  if (m > 0.001){
+    const q = cl(GESTO.manoBoca, 0, 1);
+    const a0 = mez(MANO_A[0], MANO_B[0], q), a1 = mez(MANO_A[1], MANO_B[1], q),
+          a2 = mez(MANO_A[2], MANO_B[2], q), a3 = mez(MANO_A[3], MANO_B[3], q);
+    /* 34 rad/s son cinco sacudidas por segundo, que es lo que hace una mano
+       cuando algo le da asco: mas lento se lee a saludo y mas rapido a vibrador */
+    const tb = GESTO.tiembla > 0.001 ? Math.sin(PJ.t * 34.0) * 0.17 * GESTO.tiembla : 0;
+    giraH('RightArm', mez(POSE.bdX, a0, m), a1 * m, mez(POSE.bdZ, a2 + tb, m));
+    giraH('RightForeArm', mez(POSE.bdA, a3, m), 0, 0);
+  }
+  /* ── LA SUPINACIÓN ES DEL ANTEBRAZO, NO DE LA MUÑECA ──
+     Estaba todo en la muñeca: `PALMA_A` en 2,60 son CIENTO CUARENTA Y NUEVE
+     GRADOS de giro en un hueso que en una persona llega a noventa. En pantalla
+     eso no es una palma para arriba, es una mano quebrada — la paleta pegada de
+     costado al brazo que se veía en la captura.
+     Poner la palma hacia arriba es pronosupinación, y eso pasa en el ANTEBRAZO:
+     el radio gira sobre el cúbito. Se reparte 70/30 y ninguno de los dos pasa
+     de los grados que tiene.
+     VA DESPUÉS de `giraH` y POSMULTIPLICANDO, no antes: `giraH` escribe el
+     cuaternión entero, así que un giro puesto antes lo borra — y encima la
+     torsión tiene que ser alrededor del eje del propio hueso, que es lo que
+     hace la posmultiplicación. */
+  /* ── EL BRAZO IZQUIERDO ──
+     Mismo tratamiento que el derecho: los angulos se mezclan y despues se
+     aplican de una, para que no haya dos giros encadenados moviendose a la vez
+     (que es lo que hacia el tirabuzon en el derecho). */
+  const qi = cl(GESTO.izq, 0, 2);
+  if (qi > 0.001){
+    const t1 = Math.min(qi, 1), t2 = Math.max(0, qi - 1);
+    const i0 = mez(0, MANO_I_TOMA[0], t1) + (MANO_I_BOCA[0] - MANO_I_TOMA[0]) * t2;
+    const i1 = mez(0, MANO_I_TOMA[1], t1) + (MANO_I_BOCA[1] - MANO_I_TOMA[1]) * t2;
+    const i2 = mez(0, MANO_I_TOMA[2], t1) + (MANO_I_BOCA[2] - MANO_I_TOMA[2]) * t2;
+    const i3 = mez(0, MANO_I_TOMA[3], t1) + (MANO_I_BOCA[3] - MANO_I_TOMA[3]) * t2;
+    giraH('LeftArm', i0, i1, i2);
+    giraH('LeftForeArm', i3, 0, 0);
+  }
+
+  if (Math.abs(GESTO.palma) > 0.001){
+    /* ── TODA LA TORSION VA AL ANTEBRAZO, Y NADA A LA MUNECA ──
+       Estaba repartida 70/30. El 30 % que caia en la muneca es lo que se veia
+       como «la muneca tan tirada que parece un palo apretado»: medido, el giro
+       relativo entre la mano y el antebrazo llegaba a 34,4 grados, y la piel de
+       la muneca no tiene donde absorberlo — un solo anillo de vertices se lleva
+       todo el retorcimiento.
+       Y anatomicamente el reparto era un invento: la pronosupinacion es del
+       ANTEBRAZO entero, el radio girando sobre el cubito. La muneca no supina,
+       flexiona y desvia. Con el 100 % en el antebrazo el giro relativo mide 0,0
+       grados en todo el rango. */
+    torsion('RightForeArm', GESTO.palma * PALMA_A);
+  }
+  pasoCaraSprites(dt);
+
+}
+
+/* ══════════════════════ LA CARA DIBUJADA ══════════════════════
+   Los ojos, las cejas y la boca NO son geometría: son dos placas con textura
+   pegadas a la cara, cada una con un atlas de dieciséis cuadros generados y
+   registrados con `herramientas/barrio/hornear_cara.py`.
+
+   POR QUÉ, Y ES LA DECISIÓN DE FONDO DE ESTA VUELTA: en una cabeza low poly SIN
+   CUENCA EXCAVADA un ojo de volumen o queda enterrado —medido, veintidós
+   milímetros adentro del cráneo, con la sonda diciendo que estaba en cuadro— o
+   queda saltado, y no hay punto medio. Y aunque quedara bien, seis huesos de
+   párpado dan UNA forma de ojo; un atlas da dieciséis expresiones y se le
+   agregan más sin tocar el modelo.
+
+   Y LAS PLACAS SE CURVAN. Una cara es convexa: un rectángulo plano de dieciséis
+   centímetros pegado a una cabeza de trece de radio se hunde centímetro y medio
+   en las puntas — o sea que las cejas quedarían adentro del cráneo. La placa se
+   arquea con la misma flecha que la cabeza y por eso apoya en todo su ancho. */
+const CARA = { ojos: null, boca: null, texO: null, texB: null,
+               t: 0, prox: 2.4, parp: -1, frameO: -1, frameB: -1 };
+
+function placaCara(anchoM, altoM, flechaX, flechaY){
+  /* una rejilla de 5×5 arqueada hacia atrás en las dos direcciones */
+  const N = 4, pos = [], uv = [], idx = [];
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++){
+    const u = i/N, v = j/N;
+    const x = (u - 0.5) * anchoM, y = (0.5 - v) * altoM;
+    const k = (u - 0.5) * 2, m = (0.5 - v) * 2;
+    pos.push(x, y, -(k*k*flechaX + m*m*flechaY));
+    uv.push(u, 1 - v);
+  }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++){
+    const a = j*(N+1) + i;
+    idx.push(a, a+N+1, a+1, a+1, a+N+1, a+N+2);
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+function texAtlas(b64, g){
+  const im = new Image();
+  const t = new T.Texture(im);
+  t.colorSpace = T.SRGBColorSpace;
+  /* SIN MIPMAPS: un atlas con mipmaps mezcla el cuadro de al lado en cuanto la
+     cara se aleja, y en una cara eso es un ojo con la ceja de otra expresión
+     encima. Y la repetición SALE DE LA GRILLA que escribió el horno: con el
+     cuarto clavado a mano, agregar una hoja de expresiones deja la mitad del
+     atlas fuera de alcance sin que nada avise. */
+  t.generateMipmaps = false;
+  t.minFilter = T.LinearFilter; t.magFilter = T.LinearFilter;
+  t.repeat.set(1 / g[0], 1 / g[1]);
+  im.onload = () => { t.needsUpdate = true; };
+  im.src = 'data:image/png;base64,' + b64;
+  return t;
+}
+
+function armaCaraSprites(){
+  if (CARA.ojos || !PJ.ok) return;
+  const anO = PJ.idx['caraOjos'], anB = PJ.idx['caraBoca'];
+  if (!anO || !anB) return;
+  CARA.texO = texAtlas(CARA_OJOS_B64, CARA_OJOS_G);
+  CARA.texB = texAtlas(CARA_BOCA_B64, CARA_BOCA_G);
+  /* ALFA POR CORTE Y NO POR TRANSPARENCIA: un material transparente no escribe
+     profundidad, así que la placa de la boca y la de los ojos se dibujarían en
+     el orden equivocado contra la nariz. Es la misma corrección que las cercas
+     de piquetes. */
+  const mO = new T.MeshPhongMaterial({ map: CARA.texO, alphaTest: 0.45,
+                                       shininess: 6, specular: 0x101216 });
+  const mB = new T.MeshPhongMaterial({ map: CARA.texB, alphaTest: 0.45,
+                                       shininess: 6, specular: 0x101216 });
+  /* ── LAS DOS MEDIDAS SALEN DE LA PROPORCIÓN DE LA CELDA, NO DEL GUSTO ──
+     El atlas de los ojos tiene celdas de 112×84 y el de la boca de 96×84: una
+     placa con otra proporción estira el dibujo, y un ojo estirado no se lee a
+     estilo sino a error. Lo que se elige es UN número —el ancho— y el alto sale
+     de la celda. Y el ancho se elige midiendo: la cara mide 0,18 de oreja a
+     oreja a la altura de los ojos, y la tinta ocupa el 78,6 % de la celda, así
+     que 0,158 deja el par de ojos en 0,124 — dos tercios de la cara, que es lo
+     que mide un par de ojos. */
+  /* EL ANCHO DE LAS PLACAS SE MIDE CONTRA LA CARA, no se hereda del modelo
+     anterior. En el personaje denso el frente de la cara mide 0,155 m de ancho a
+     la altura de los ojos y el par de ojos pintado del propio modelo mide 0,12:
+     con los 0,158 de antes la placa tapaba de oreja a oreja y los ojos salian
+     del tamano de la cabeza. */
+  CARA.ojos = new T.Mesh(placaCara(0.150, 0.150 * 84 / 112, 0.017, 0.007), mO);
+  CARA.boca = new T.Mesh(placaCara(0.078, 0.078 * 84 / 96, 0.006, 0.003), mB);
+  CARA.ojos.frustumCulled = false; CARA.boca.frustumCulled = false;
+  anO.add(CARA.ojos); anB.add(CARA.boca);
+  ponOjos('neutro'); ponBoca('cerrada');
+}
+
+/* la fila se cuenta DESDE ARRIBA en la imagen y desde abajo en la UV, así que
+   el desplazamiento vertical va al revés: es el único lugar donde el atlas y la
+   textura no hablan el mismo idioma */
+function ponCuadro(t, g, i){
+  t.offset.set((i % g[0]) / g[0], (g[1] - 1 - Math.floor(i / g[0])) / g[1]);
+}
+function ponOjos(n){
+  const i = CARA_OJOS_N.indexOf(n);
+  if (i < 0 || i === CARA.frameO || !CARA.texO) return;
+  CARA.frameO = i; ponCuadro(CARA.texO, CARA_OJOS_G, i);
+}
+function ponBoca(n){
+  const i = CARA_BOCA_N.indexOf(n);
+  if (i < 0 || i === CARA.frameB || !CARA.texB) return;
+  CARA.frameB = i; ponCuadro(CARA.texB, CARA_BOCA_G, i);
+}
+
+/* ── HACIA DÓNDE MIRA ──
+   Con las dos hojas hay ocho direcciones y no dos, así que la mirada deja de
+   ser «izquierda o derecha» y pasa a ser un punto: `mira` es el eje horizontal
+   y `miraY` el vertical, y las diagonales existen de verdad en vez de salir de
+   promediar dos cuadros que no se pueden promediar. */
+function mirada(){
+  const x = GESTO.mira, y = GESTO.miraY;
+  const dx = x < -0.35 ? -1 : (x > 0.35 ? 1 : 0);
+  const dy = y < -0.35 ? -1 : (y > 0.35 ? 1 : 0);
+  if (dy > 0) return dx < 0 ? 'arribaIzq' : (dx > 0 ? 'arribaDer' : 'arriba');
+  if (dy < 0) return dx < 0 ? 'abajoIzq' : (dx > 0 ? 'abajoDer' : 'abajo');
+  return dx < 0 ? 'izq' : (dx > 0 ? 'der' : 'neutro');
+}
+
+/* ── EL PARPADEO ES ASIMÉTRICO Y NO PERIÓDICO ──
+   Un parpadeo baja en menos de una décima y sube en dos, y no cae cada tantos
+   segundos exactos: con un período fijo se lee a luz que titila. */
+function pasoCaraSprites(dt){
+  if (!CARA.ojos) return;
+  CARA.t += dt;
+  let abre = cl(GESTO.abre, 0, 1);
+  if (GESTO.autoParp){
+    CARA.prox -= dt;
+    if (CARA.prox <= 0 && CARA.parp < 0){ CARA.parp = 0; CARA.prox = azr(2.6, 6.4); }
+    if (CARA.parp >= 0){
+      CARA.parp += dt;
+      const k = CARA.parp;
+      abre = Math.min(abre, k < 0.09 ? 1 - k/0.09 : (k < 0.27 ? (k-0.09)/0.18 : 1));
+      if (k > 0.30) CARA.parp = -1;
+    }
+  }
+  /* ── DE LA APERTURA AL CUADRO: CINCO ESCALONES Y NO UNO ──
+     Con un solo cuadro intermedio, un parpadeo son tres estados —abierto, a
+     medias, cerrado— y a sesenta cuadros por segundo eso se ve como un
+     interruptor: el ojo salta. La rampa `ab90 · ab70 · ab50 · ab25` es la
+     razón de ser de la segunda hoja de expresiones, y es lo único que hace que
+     bajar un párpado se lea a párpado. */
+  let n;
+  if (abre < 0.13) n = 'cerrado';
+  else if (abre < 0.30) n = 'ab25';
+  else if (abre < 0.48) n = 'ab50';
+  else if (abre < 0.66) n = 'ab70';
+  else if (abre < 0.84) n = 'ab90';
+  else if (GESTO.expr && GESTO.expr !== 'neutro') n = GESTO.expr;
+  else n = mirada();
+  ponOjos(n);
+
+  /* y la boca: la expresión manda, y si no hay, la abertura */
+  const b = cl(GESTO.boca, 0, 1);
+  ponBoca(GESTO.bocaExpr ? GESTO.bocaExpr
+        : (b < 0.12 ? 'cerrada' : (b < 0.38 ? 'entreabierta'
+        : (b < 0.70 ? 'a' : 'grande'))));
+}
+
+/* ── DÓNDE SE PLANTA ──
+   `fp` es primera persona: se le achica la cabeza a la centésima parte. Es el
+   truco de siempre y es el correcto: con la cabeza entera, la cámara vive
+   adentro del cráneo y lo único que se ve es la cara interna de la nuca. Y no
+   alcanza con acercar el plano de recorte, porque el pelo y la capucha llegan
+   más lejos que la nariz. */
+/* ── DÓNDE SE PLANTA EL CUERPO EN PRIMERA PERSONA, Y ES UNA CUENTA ──
+   Lo anatómicamente correcto es poner el OJO del modelo en la cámara, y sale
+   mal: el ojo está quince centímetros POR DELANTE del torso, así que el pecho
+   queda quince centímetros DETRÁS de uno. Medido, con la vista a sesenta y seis
+   grados hacia abajo el esternón proyectaba en −0,66 y lo único que entraba en
+   el cuadro eran las zapatillas. Y con setenta grados de campo vertical no hay
+   ángulo que alcance: el pecho está más allá de la vertical del ojo, o sea más
+   allá de donde el lente puede mirar.
+
+   Adelantar el cuerpo tampoco alcanza: con el cuerpo cinco centímetros adelante
+   la cámara queda encima del cuello y el cuadro entero es el cuello de la
+   campera visto desde adentro. Y BAJAR EL CUERPO ENTERO hunde las zapatillas en
+   el asfalto.
+
+   Lo que sí funciona es bajar SÓLO EL TORSO: en primera persona el hueso
+   `Spine02` —el primero por encima de la cadera— se corre quince centímetros y
+   medio hacia abajo y tres hacia adelante. Con eso el cuello queda a treinta y
+   siete centímetros por debajo del ojo, el pecho aparece en el cuadro a partir
+   de los cincuenta grados, y LA PELVIS Y LAS PIERNAS NO SE MUEVEN, así que los
+   pies siguen pisando el suelo. Lo que se deforma es la cintura, que es
+   justamente lo único que desde adentro no se ve. */
+/* ── LA CABEZA SE ACHICA EN PRIMERA PERSONA, Y SE PROBÓ LO CONTRARIO ──
+   Pedido: *«que la cabeza se vea por más que me tape visión»*. Se implementó
+   entera la primera persona de verdad —la cámara metida en el globo del ojo,
+   el corrimiento del cuerpo medido cuadro a cuadro sobre el hueso `caraOjos`,
+   el tronco enderezado y el plano de recorte a 3,5 cm— y NO SE PUEDE con este
+   modelo. La razón es una medida suya y está en los huesos: lleva **los ojos
+   21,7 cm por delante del esternón** (z 0,281 contra 0,064), cuando en una
+   persona son ocho o diez. Con el lente ahí, mirando hacia abajo lo que se ve
+   es el AGUJERO DEL CUELLO por dentro y el forro del torso — fotografiado en
+   las cuatro combinaciones de cabeza y enderezado, las cuatro se ven rotas.
+   Así que en primera persona la cabeza sigue achicándose a la centésima parte,
+   que es el truco de siempre y el correcto: una cámara en la cabeza no puede
+   ver la cabeza, sólo su interior. La cabeza se ve con VISTA, que para eso
+   está. */
+const PJ_ADELANTO = 0.020;
+let PJ_CABEZA_FP = 0.01;
+const PJ_TORSO = { y: -0.155, z: 0.030 };
+/* ── DÓNDE ESTÁ EL OJO DEL MODELO, EN SU PROPIO MARCO ──
+   Se mide una vez, con el personaje en reposo y sin girar: cuánto adelante y a
+   qué altura está el hueso `caraOjos` respecto del origen del cuerpo, que está
+   entre los pies. Es el número con el que se descartó la primera persona de
+   verdad —0,281 de adelante contra 0,064 del esternón— y queda medido acá para
+   que la próxima vez no haya que volver a averiguarlo. */
+function mideOjo(){
+  const b = PJ.idx['caraOjos']; if (!b) return;
+  const gy = PJ.grupo.rotation.y, gp = PJ.grupo.position.clone();
+  PJ.grupo.rotation.y = 0; PJ.grupo.position.set(0, 0, 0);
+  PJ.grupo.updateMatrixWorld(true);
+  const v = new T.Vector3(); b.getWorldPosition(v);
+  PJ.grupo.rotation.y = gy; PJ.grupo.position.copy(gp);
+  PJ.grupo.updateMatrixWorld(true);
+  /* el modelo mira a su +Z local, así que su «adelante» es +z */
+  PJ.ojoZ = v.z; PJ.ojoY = v.y;
+}
+
+function ponPersonaje(x, z, yaw, suelo, fp){
+  if (!PJ.ok) return;
+  PJ.grupo.visible = true;
+  const ax = -Math.sin(yaw), az = -Math.cos(yaw);
+  PJ.grupo.position.set(x + (fp ? ax*PJ_ADELANTO : 0), suelo,
+                        z + (fp ? az*PJ_ADELANTO : 0));
+  /* el modelo mira a su +Z local, y el frente del juego es (−sen yaw, −cos yaw) */
+  PJ.grupo.rotation.y = yaw + Math.PI;
+  if (fp !== PJ.primeraPersona){
+    PJ.primeraPersona = fp;
+    /* LA CABEZA Y EL CUELLO SE ACHICAN A LA CENTÉSIMA PARTE. Con la cabeza
+       entera la cámara vive adentro del cráneo; y sacando sólo la cabeza queda
+       el cuello de la campera levantado rodeando el lente. Es el truco de
+       siempre en primera persona y es el correcto: no hay forma de recortar por
+       distancia sin recortar también el mundo. */
+    /* SE ACHICA LA CABEZA Y NO EL CUELLO. Achicando los dos, lo que queda es un
+       torso ABIERTO por arriba y la cámara mirando adentro; el cuello entero, en
+       cambio, cae veinte centímetros por debajo del ojo —o sea fuera del cuadro
+       mirando al frente— y su tapón cierra el agujero que deja la cabeza. */
+    if (PJ.idx['Head']) PJ.idx['Head'].scale.setScalar(fp ? PJ_CABEZA_FP : 1);
+    mueveH('Spine02', 0, fp ? PJ_TORSO.y : 0, fp ? PJ_TORSO.z : 0);
+    /* y el plano de recorte se aleja: lo que queda del hombro y de la capucha
+       está a menos de quince centímetros del ojo */
+    cam.near = fp ? 0.15 : 0.1;
+    cam.updateProjectionMatrix();
+    ponLuzCuerpo(fp);
+  }
+}
+/* ── LA LUZ DEL PROPIO CUERPO ──
+   A las tres de la mañana, entre farol y farol, mirarse el pecho es mirar una
+   silueta negra: medido en la captura, con pitch −0,62 no había un solo píxel
+   de personaje en el cuadro. Va una luz mínima colgada de la cámara, con
+   ALCANCE 1,6 m — o sea que se apaga antes de llegar al asfalto y no rompe la
+   regla del juego, que es que lo único que ilumina de verdad son los faroles.
+   Y es lo que hace cualquier juego en primera persona: uno se ve. */
+let luzCuerpo = null;
+function ponLuzCuerpo(v){
+  if (!luzCuerpo){
+    luzCuerpo = new T.PointLight(0xbcd0e6, 0, 1.6, 1.1);
+    luzCuerpo.position.set(0, 0.05, 0.10);
+    cam.add(luzCuerpo);
+    escena.add(cam);
+  }
+  /* EN TERCERA PERSONA LA MISMA LUZ NO ALCANZA, y es aritmética: el cuerpo pasa
+     de estar a treinta centímetros del lente a estar a casi tres metros, y con
+     `decay 1,1` y alcance 1,6 m ahí no llega nada. Y no puede quedar en cero:
+     entre farol y farol el personaje sería una silueta negra en el medio de la
+     pantalla, que es justo lo que la tercera persona viene a mostrar. */
+  const t = CFG.tercera;
+  luzCuerpo.distance = t ? 5.0 : 1.6;
+  luzCuerpo.intensity = v ? (t ? 2.6 : 0.38) : 0;
+}
+function escondePersonaje(){ if (PJ.ok) PJ.grupo.visible = false; ponLuzCuerpo(false); }
+function capaPersonaje(k){ if (PJ.ok) PJ.grupo.traverse(o => o.layers.set(k)); }

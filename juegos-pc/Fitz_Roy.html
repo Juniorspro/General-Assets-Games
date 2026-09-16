@@ -1,0 +1,1303 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>FITZ ROY · mundo real</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;
+    background:#06090d;color:#e8eef5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  /* El juego es apaisado. Si el teléfono está parado —o tiene el giro trabado,
+     que es lo normal— se acuesta TODO noventa grados en vez de pedir pantalla
+     completa: la imagen ocupa el largo del teléfono y se juega de costado. */
+  #rot{position:fixed;left:50%;top:50%;transform-origin:50% 50%;
+    transform:translate(-50%,-50%);background:#06090d;touch-action:none;overflow:hidden}
+  #stage{position:absolute;inset:0;overflow:hidden;touch-action:none}
+  #stage canvas{display:block;width:100%;height:100%;touch-action:none}
+  #mandos{position:absolute;inset:0;z-index:9;pointer-events:none;touch-action:none}
+  #err{display:none;position:fixed;top:0;left:0;right:0;z-index:999;background:#8e2b20;color:#fff;
+    font:11px/1.5 ui-monospace,monospace;padding:8px;white-space:pre-wrap;max-height:40vh;overflow:auto}
+
+  #hud{position:absolute;inset:0;pointer-events:none;z-index:10}
+  .fila{position:absolute;display:flex;gap:7px;flex-wrap:wrap;pointer-events:auto}
+  #arriba{left:10px;top:10px}
+  .btn{cursor:pointer;font:700 10px/1 ui-monospace,monospace;letter-spacing:2px;
+    padding:11px 12px;border-radius:7px;border:1px solid rgba(190,205,220,.30);
+    color:#e9f1f8;background:rgba(12,20,28,.62);backdrop-filter:blur(6px);white-space:nowrap}
+  .btn:active{background:rgba(50,80,110,.85)}
+  .btn.on{border-color:#8fd0ff;color:#dff0ff;background:rgba(24,68,104,.85)}
+  #panel{position:absolute;right:10px;top:10px;z-index:11;
+    width:min(58%,244px);padding:11px 12px;border-radius:10px;pointer-events:auto;
+    border:1px solid rgba(190,205,220,.22);background:rgba(10,15,21,.86);backdrop-filter:blur(8px);
+    display:none;flex-direction:column;gap:8px;max-height:calc(100% - 20px);overflow:auto}
+  #panel.show{display:flex}
+  #panel h3{font-size:9.5px;letter-spacing:3px;color:#9fc0da;font-weight:700}
+  .ctl{display:flex;flex-direction:column;gap:2px}
+  .ctl label{font-size:9px;letter-spacing:1.3px;color:#a8bccb;display:flex;justify-content:space-between}
+  .ctl label b{color:#dceaf5;font-weight:700}
+  input[type=range]{-webkit-appearance:none;width:100%;height:19px;background:transparent}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:#2d3d4c}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;margin-top:-6px;
+    border-radius:50%;background:#8fd0ff;border:none}
+  input[type=range]::-moz-range-track{height:3px;border-radius:3px;background:#2d3d4c}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border:none;border-radius:50%;background:#8fd0ff}
+  #stats{position:absolute;left:10px;bottom:8px;z-index:11;
+    font:9.5px/1.6 ui-monospace,monospace;color:#8ba5b8;letter-spacing:1px;pointer-events:none}
+  #sitio{position:absolute;right:12px;bottom:8px;z-index:11;text-align:right;
+    font:9.5px/1.5 ui-monospace,monospace;color:#7f97a8;letter-spacing:1px;pointer-events:none}
+  #carga{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:16px;background:#06090d;
+    font:700 11px/1.7 ui-monospace,monospace;letter-spacing:4px;color:#8fd0ff;text-align:center}
+  #carga small{display:block;letter-spacing:2px;color:#5f7a8d;font-weight:400}
+  #barra{width:min(70vw,320px);height:2px;background:#1a2530;overflow:hidden}
+  #barra i{display:block;height:100%;width:0;background:#8fd0ff;transition:width .3s}
+  #ayuda{position:absolute;left:50%;top:12px;transform:translateX(-50%);
+    z-index:12;font:9.5px/1.6 ui-monospace,monospace;color:#93aec0;letter-spacing:1.5px;
+    text-align:center;pointer-events:none;transition:opacity .8s}
+</style>
+</head>
+<body>
+<div id="err"></div>
+<div id="rot">
+  <div id="stage"></div>
+  <canvas id="mandos"></canvas>
+  <div id="ayuda">pulgar izquierdo: caminar · derecho: mirar · SALTO y CORRER</div>
+  <div id="stats"></div>
+  <div id="sitio">CERRO FITZ ROY · EL CHALTÉN<br>SANTA CRUZ · ARGENTINA</div>
+  <div id="hud">
+    <div class="fila" id="arriba">
+      <button class="btn" id="bPanel">AJUSTES</button>
+      <button class="btn" id="bCorrer">CORRER</button>
+      <button class="btn" id="bIr">MIRADOR</button>
+    </div>
+  </div>
+  <div id="panel">
+    <h3>IMAGEN</h3>
+    <div class="ctl"><label>EXPOSICIÓN <b id="vExp">0.82</b></label>
+      <input type="range" id="sExp" min="0.4" max="2" step="0.02" value="0.82"></div>
+    <div class="ctl"><label>CONTRASTE <b id="vCon">1.06</b></label>
+      <input type="range" id="sCon" min="0.8" max="1.5" step="0.01" value="1.06"></div>
+    <div class="ctl"><label>COLOR <b id="vSat">1.06</b></label>
+      <input type="range" id="sSat" min="0.6" max="1.6" step="0.02" value="1.06"></div>
+    <div class="ctl"><label>NITIDEZ <b id="vNit">0.45</b></label>
+      <input type="range" id="sNit" min="0" max="1.5" step="0.05" value="0.45"></div>
+    <div class="ctl"><label>BRILLO DERRAMADO <b id="vBloom">0.22</b></label>
+      <input type="range" id="sBloom" min="0" max="1.2" step="0.02" value="0.22"></div>
+    <h3>MUNDO</h3>
+    <div class="ctl"><label>SOL <b id="vSol">0.52</b></label>
+      <input type="range" id="sSol" min="0.10" max="1" step="0.01" value="0.52"></div>
+    <div class="ctl"><label>NEBLINA <b id="vNiebla">0.50</b></label>
+      <input type="range" id="sNiebla" min="0" max="1.8" step="0.02" value="0.50"></div>
+    <div class="ctl"><label>PASTO <b id="vDens">1.00</b></label>
+      <input type="range" id="sDens" min="0" max="1" step="0.05" value="1"></div>
+    <div class="ctl"><label>ÁRBOLES <b id="vArb">1.00</b></label>
+      <input type="range" id="sArb" min="0" max="1" step="0.05" value="1"></div>
+    <div class="ctl"><label>DETALLE DEL SUELO <b id="vDet">0.75</b></label>
+      <input type="range" id="sDet" min="0" max="1.5" step="0.05" value="0.75"></div>
+  </div>
+</div>
+<div id="carga">
+  <div>CARGANDO EL MUNDO<small id="cargaTxt">buscando el terreno…</small></div>
+  <div id="barra"><i></i></div>
+  <small style="letter-spacing:1.5px;color:#48606f;max-width:min(80vw,420px)">
+    altura y ortofoto reales · 10 × 10 km · cielo HDR de 4K
+  </small>
+</div>
+
+<script>
+window.addEventListener('error',e=>{const b=document.getElementById('err'); if(!b) return;
+  b.style.display='block';
+  b.textContent+=(e.message||e.error)+'\n'+(e.filename||'')+':'+(e.lineno||'')+'\n';});
+</script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+
+/* ============================================================================
+   FITZ ROY · un pedazo real del planeta, explorable
+
+   Nada de este terreno está inventado. La altura sale del modelo global de
+   elevación (los tiles terrarium que sirve AWS, derivados de SRTM y
+   Copernicus) y el color, de la ortofoto satelital. Diez kilómetros por diez,
+   centrados en el macizo del Fitz Roy, en Santa Cruz. Uno arranca en el
+   mirador de la Laguna de los Tres mirando la pared oeste.
+
+   Los datos pesados no van embebidos: viven en el repositorio y los sirve
+   jsDelivr. Por eso este archivo son cien kilobytes y el mundo, treinta y
+   pico de megas que se bajan una vez y quedan en la caché del navegador.
+
+   Lo que hace que parezca real y no una foto pegada sobre un molde:
+   · la LUZ ESTÁ HORNEADA. Antes de empaquetar nada se barre el mapa de
+     alturas en la dirección del sol para saber qué está a la sombra de qué,
+     y en dieciséis direcciones más para saber cuánto cielo ve cada punto.
+     Las aristas proyectan sombras largas de verdad y el fondo de los valles
+     está apagado, que es lo que uno ve en la montaña.
+   · la ortofoto se mezcla con una capa de DETALLE a escala de metros, porque
+     a un metro por píxel la foto sola se ve como un cuadro borroso.
+   · el pasto y los árboles crecen DONDE LA FOTO DICE QUE HAY VEGETACIÓN:
+     el shader mira el verdor del píxel satelital y la altura sobre el nivel
+     del mar, y sólo planta ahí.
+   · el cielo es una panorámica HDR de 4K capturada de verdad, y no sólo se
+     ve: ilumina la escena.
+============================================================================ */
+
+/* ---------------------------------------------------------------- de dónde */
+const CDN='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@06731ba97c/mundo/fitzroy/';
+const A=(f)=>CDN+f;
+
+/* ---------------------------------------------------------------- constantes */
+const LADO=10000.0;          // el mundo, en metros
+const MEDIO=LADO/2;
+const META={min:246.808, max:2866.103};   // el rango real del relieve
+const MOVIL=matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+const FOV0=62;
+/* El mirador de Laguna de los Tres, en metros desde el centro del mapa.
+   X crece al este, Z crece al SUR. */
+/* El punto de partida no lo elegí a ojo: se buscó sobre los datos el lugar con
+   más verdor en la ortofoto, pendiente caminable, entre 450 y 1050 metros y con
+   línea de vista despejada a la cumbre. Cae en el bosque de lenga del valle,
+   a seis kilómetros de la pared. */
+const INICIO={x:2849, z:-3456, yaw:1.8173};
+const CERCA={x:-1526, z:-1935, lado:4000};   // la ortofoto de alta resolución
+
+/* --------------------------------------------------------------- utilidades */
+let SEM=20260813;
+const rr=()=>{ SEM=(SEM*1664525+1013904223)>>>0; return SEM/4294967296; };
+const cv=(w,h)=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; };
+const lerp=(a,b,t)=>a+(b-a)*t;
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const suave=(t)=>t*t*(3-2*t);
+const paso01=(a,b,x)=>suave(clamp((x-a)/(b-a),0,1));
+
+/* ---------------------------------------------------------------- pantalla */
+const rotEl=document.getElementById('rot');
+const stage=document.getElementById('stage');
+let ROT=false, CAJA={w:1,h:1};
+function acomodarCaja(){
+  const vw=innerWidth, vh=innerHeight;
+  ROT = vh > vw*1.02;
+  CAJA.w = ROT? vh : vw;
+  CAJA.h = ROT? vw : vh;
+  rotEl.style.width=CAJA.w+'px'; rotEl.style.height=CAJA.h+'px';
+  rotEl.style.transform='translate(-50%,-50%) rotate('+(ROT?90:0)+'deg)';
+}
+acomodarCaja();
+
+/* ---------------------------------------------------------------- renderer */
+const renderer=new THREE.WebGLRenderer({antialias:false, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1, MOVIL? 1.6 : 2));
+renderer.setSize(CAJA.w, CAJA.h, false);
+/* Todo se dibuja en LINEAL sobre un buffer; el tono, el color y el paso a sRGB
+   los hace el pase de post una sola vez y para todos. */
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.NoToneMapping;
+stage.appendChild(renderer.domElement);
+const escena=new THREE.Scene();
+const camara=new THREE.PerspectiveCamera(FOV0, CAJA.w/CAJA.h, 0.10, 26000);
+camara.rotation.order='YXZ';
+const ANISO=Math.min(16, renderer.capabilities.getMaxAnisotropy());
+
+const SOL=new THREE.Vector3();
+const CIELO_COL=new THREE.Color(0x8fbfe4);
+const NIEBLA=new THREE.Color(0xa9c4d8);
+const MATS=[];
+let nieblaD=0.000085;
+/* ============================================================================
+   CARGA
+   Los datos pesados viven en el repositorio y los sirve jsDelivr. Acá se bajan
+   una vez, se decodifican y se convierten en lo que necesita la GPU.
+
+   El mapa de alturas viene en un PNG donde cada punto va en dos bytes —rojo y
+   verde— porque un PNG normal de ocho bits sólo daría 256 escalones para dos
+   mil seiscientos metros de desnivel, o sea diez metros de escalón. Con dos
+   bytes son sesenta y cinco mil escalones: cuatro centímetros.
+============================================================================ */
+const REC={};
+let ALT=null, ALT_N=0, ALT_MIN=0, ALT_MAX=0;
+
+const _barra=document.querySelector('#barra i');
+const _txt=document.getElementById('cargaTxt');
+let _hechos=0, _total=1;
+function avance(msg){
+  _hechos++;
+  if(_barra) _barra.style.width=Math.round(_hechos/_total*100)+'%';
+  if(_txt && msg) _txt.textContent=msg;
+}
+function bajarImagen(url){
+  return new Promise((ok,mal)=>{
+    const im=new Image();
+    im.crossOrigin='anonymous';
+    im.onload=()=>ok(im);
+    im.onerror=()=>mal(new Error('no cargó '+url));
+    im.src=url;
+  });
+}
+function texDe(im, srgb, repetir){
+  const t=new THREE.Texture(im);
+  t.colorSpace = srgb? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.flipY=false;                          // fila 0 de la imagen = norte
+  t.wrapS=t.wrapT = repetir? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+  t.magFilter=THREE.LinearFilter;
+  t.minFilter=THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps=true;
+  t.anisotropy=ANISO;
+  t.needsUpdate=true;
+  return t;
+}
+/* De la imagen de alturas a un arreglo de metros. Se guardan las dos cosas: el
+   arreglo, para la malla y para caminar, y los bytes crudos como textura, para
+   que el pasto averigüe su altura sin pasar por JavaScript. */
+function decodificarAltura(im, min, max){
+  const N=im.width;
+  const c=cv(N,N), q=c.getContext('2d', {willReadFrequently:true});
+  q.drawImage(im,0,0);
+  const d=q.getImageData(0,0,N,N).data;
+  const f=new Float32Array(N*N);
+  const bytes=new Uint8Array(N*N*2);
+  const k=(max-min)/65535;
+  for(let i=0,j=0;i<N*N;i++,j+=4){
+    const v=d[j]*256 + d[j+1];
+    f[i]=min + v*k;
+    bytes[i*2]=d[j]; bytes[i*2+1]=d[j+1];
+  }
+  ALT=f; ALT_N=N; ALT_MIN=min; ALT_MAX=max;
+  const t=new THREE.DataTexture(bytes, N, N, THREE.RGFormat, THREE.UnsignedByteType);
+  /* A propósito SIN filtro lineal: interpolar bytes de una altura codificada
+     daría saltos enormes al cruzar de 255 a 0. El shader hace la bilineal a
+     mano con cuatro lecturas. */
+  t.magFilter=THREE.NearestFilter; t.minFilter=THREE.NearestFilter;
+  t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;
+  t.generateMipmaps=false; t.needsUpdate=true;
+  return t;
+}
+/* La altura del suelo en cualquier punto, bilineal sobre el mismo arreglo que
+   usa el shader. Es la que camina el jugador. */
+function suelo(x,z){
+  const N=ALT_N;
+  const u=(x+MEDIO)/LADO*(N-1), v=(z+MEDIO)/LADO*(N-1);
+  if(!(u>=0&&v>=0&&u<=N-1&&v<=N-1)) return ALT_MIN;
+  const i=Math.min(N-2,u|0), j=Math.min(N-2,v|0);
+  const fx=u-i, fz=v-j, f=j*N+i;
+  const a=ALT[f], b=ALT[f+1], c=ALT[f+N], d=ALT[f+N+1];
+  return (a*(1-fx)+b*fx)*(1-fz) + (c*(1-fx)+d*fx)*fz;
+}
+const _g2=[0,0];
+function gradiente(x,z,out){
+  const e=6.0;
+  out[0]=(suelo(x+e,z)-suelo(x-e,z))/(2*e);
+  out[1]=(suelo(x,z+e)-suelo(x,z-e))/(2*e);
+  return out;
+}
+function pendiente(x,z){ gradiente(x,z,_g2); return Math.hypot(_g2[0],_g2[1]); }
+
+/* La misma bilineal, escrita en GLSL. La usan el pasto y los árboles para
+   plantarse sin que JavaScript les diga dónde. */
+const ALTURA_GLSL=`
+  uniform sampler2D tAlt;
+  uniform vec3 uAltInfo;          // N, min, max
+  float alturaEn(vec2 p){
+    float N=uAltInfo.x;
+    vec2 t=(p+${(LADO/2).toFixed(1)})/${LADO.toFixed(1)}*(N-1.0);
+    t=clamp(t, 0.0, N-1.001);
+    vec2 i=floor(t), f=t-i;
+    vec2 px=vec2(1.0/N);
+    vec2 uv=(i+0.5)*px;
+    vec2 a=texture2D(tAlt, uv).rg;
+    vec2 b=texture2D(tAlt, uv+vec2(px.x,0.0)).rg;
+    vec2 c=texture2D(tAlt, uv+vec2(0.0,px.y)).rg;
+    vec2 d=texture2D(tAlt, uv+px).rg;
+    float ha=a.r*255.0*256.0+a.g*255.0;
+    float hb=b.r*255.0*256.0+b.g*255.0;
+    float hc=c.r*255.0*256.0+c.g*255.0;
+    float hd=d.r*255.0*256.0+d.g*255.0;
+    float h=mix(mix(ha,hb,f.x), mix(hc,hd,f.x), f.y);
+    return uAltInfo.y + h*(uAltInfo.z-uAltInfo.y)/65535.0;
+  }
+  vec2 mapaUV(vec2 p){ return (p+${(LADO/2).toFixed(1)})/${LADO.toFixed(1)}; }`;
+
+async function cargarMundo(){
+  const lista=[
+    ['altura.png','el relieve real'],
+    ['normal.png','el relieve fino'],
+    ['luz.png','sombras y oclusión horneadas'],
+    ['orto_lejos.jpg','la ortofoto de diez kilómetros'],
+    ['orto_cerca.jpg','la ortofoto de alta resolución'],
+    ['pasto_rgb.jpg','matas de pasto'],
+    ['pasto_a.jpg','recorte de las matas'],
+    ['follaje_rgb.jpg','follaje'],
+    ['follaje_a.jpg','recorte del follaje'],
+    ['detalle.jpg','detalle del suelo'],
+    ['cielo.hdr','el cielo HDR de cuatro mil']
+  ];
+  _total=lista.length+1;
+  const im={};
+  for(const [f,msg] of lista){
+    if(f.endsWith('.hdr')) continue;
+    _txt && (_txt.textContent=msg+'…');
+    im[f]=await bajarImagen(A(f));
+    avance(msg);
+  }
+  _txt && (_txt.textContent='el cielo HDR de cuatro mil…');
+  const hdr=await new Promise((ok,mal)=>
+    new RGBELoader().load(A('cielo.hdr'), ok, undefined, ()=>mal(new Error('cielo'))));
+  avance('armando el mundo');
+
+  REC.tAlt   = decodificarAltura(im['altura.png'], META.min, META.max);
+  REC.tNor   = texDe(im['normal.png'], false);
+  REC.tLuz   = texDe(im['luz.png'], false);
+  REC.tLejos = texDe(im['orto_lejos.jpg'], true);
+  REC.tCerca = texDe(im['orto_cerca.jpg'], true);
+  REC.tDet   = texDe(im['detalle.jpg'], true, true);
+  REC.tPasto = juntarAlfa(im['pasto_rgb.jpg'], im['pasto_a.jpg']);
+  REC.tHoja  = juntarAlfa(im['follaje_rgb.jpg'], im['follaje_a.jpg']);
+
+  hdr.mapping=THREE.EquirectangularReflectionMapping;
+  hdr.colorSpace=THREE.NoColorSpace;
+  REC.cielo=hdr;
+  const pmrem=new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  REC.entorno=pmrem.fromEquirectangular(hdr).texture;
+  escena.environment=REC.entorno;
+  pmrem.dispose();
+  avance('listo');
+  return REC;
+}
+/* El color y el alfa vienen en dos JPEG y se juntan acá en un lienzo: guardar
+   un PNG con alfa pesaba tres megas y así pesa doscientos kilos. */
+function juntarAlfa(imRGB, imA){
+  const S=imRGB.width;
+  const c=cv(S,S), q=c.getContext('2d',{willReadFrequently:true});
+  q.drawImage(imRGB,0,0,S,S);
+  const d=q.getImageData(0,0,S,S);
+  const c2=cv(S,S), q2=c2.getContext('2d',{willReadFrequently:true});
+  q2.drawImage(imA,0,0,S,S);
+  const a=q2.getImageData(0,0,S,S).data;
+  for(let i=0;i<d.data.length;i+=4) d.data[i+3]=a[i];
+  q.putImageData(d,0,0);
+  const t=new THREE.CanvasTexture(c);
+  t.colorSpace=THREE.SRGBColorSpace;
+  t.magFilter=THREE.LinearFilter; t.minFilter=THREE.LinearMipmapLinearFilter;
+  t.anisotropy=ANISO;
+  return t;
+}
+
+
+/* ---- se espera a que baje el mundo ---- */
+await cargarMundo();
+
+/* ============================================================================
+   POST · los filtros
+   La escena se dibuja en lineal sobre un buffer y acá se hace, una sola vez:
+   brillo derramado, tono ACES, contraste, color, NITIDEZ y el paso a sRGB.
+   La nitidez es la que más se nota en un mundo hecho de fotos: un realce de
+   contraste local barato, el mismo que usan las consolas, que le devuelve el
+   filo a la ortofoto sin marcarle halos.
+============================================================================ */
+const QUAD=new THREE.PlaneGeometry(2,2);
+const escPost=new THREE.Scene(), camPost=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+const mallaPost=new THREE.Mesh(QUAD); escPost.add(mallaPost);
+const VQP='varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }';
+function rtLin(w,h,ms){
+  return new THREE.WebGLRenderTarget(w,h,{
+    minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter,
+    type:THREE.HalfFloatType, colorSpace:THREE.NoColorSpace,
+    samples:ms||0, depthBuffer:true, stencilBuffer:false});
+}
+const rtEsc=rtLin(2,2, MOVIL?0:4);
+const rtBr=rtLin(2,2), rtB1=rtLin(2,2), rtB2=rtLin(2,2);
+const matBrillo=new THREE.ShaderMaterial({vertexShader:VQP, fragmentShader:`
+  precision highp float; varying vec2 vUv;
+  uniform sampler2D tEsc; uniform float uUmbral, uSuave;
+  void main(){ vec3 c=texture2D(tEsc,vUv).rgb;
+    float l=max(max(c.r,c.g),c.b);
+    float k=clamp((l-uUmbral)/max(uSuave,1e-4),0.0,1.0);
+    gl_FragColor=vec4(c*k*k,1.0); }`,
+  uniforms:{tEsc:{value:null}, uUmbral:{value:1.5}, uSuave:{value:1.4}}});
+const matBorron=new THREE.ShaderMaterial({vertexShader:VQP, fragmentShader:`
+  precision highp float; varying vec2 vUv;
+  uniform sampler2D tIn; uniform vec2 uDir;
+  void main(){ vec3 s=texture2D(tIn,vUv).rgb*0.227027;
+    s+=texture2D(tIn,vUv+uDir*1.3846).rgb*0.316216;
+    s+=texture2D(tIn,vUv-uDir*1.3846).rgb*0.316216;
+    s+=texture2D(tIn,vUv+uDir*3.2308).rgb*0.070270;
+    s+=texture2D(tIn,vUv-uDir*3.2308).rgb*0.070270;
+    gl_FragColor=vec4(s,1.0); }`,
+  uniforms:{tIn:{value:null}, uDir:{value:new THREE.Vector2()}}});
+const matGrado=new THREE.ShaderMaterial({vertexShader:VQP, fragmentShader:`
+  precision highp float; varying vec2 vUv;
+  uniform sampler2D tEsc, tBloom;
+  uniform vec2 uPx;
+  uniform float uBloom, uExp, uCon, uSat, uVin, uNit;
+  vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
+  vec3 aSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,1e-5),vec3(0.4166667))-0.055,
+                                 step(0.0031308,c)); }
+  void main(){
+    vec3 c=texture2D(tEsc,vUv).rgb;
+    /* Nitidez de contraste adaptativo: se compara con los cuatro vecinos y se
+       realza sólo lo que ya tiene filo, limitado por el mínimo y el máximo del
+       vecindario para que no aparezcan halos blancos en los bordes. */
+    if(uNit>0.001){
+      vec3 a=texture2D(tEsc,vUv+vec2(uPx.x,0)).rgb, b=texture2D(tEsc,vUv-vec2(uPx.x,0)).rgb;
+      vec3 d=texture2D(tEsc,vUv+vec2(0,uPx.y)).rgb, e=texture2D(tEsc,vUv-vec2(0,uPx.y)).rgb;
+      vec3 mn=min(min(a,b),min(d,e)), mx=max(max(a,b),max(d,e));
+      vec3 realce=c+(c*4.0-(a+b+d+e))*0.25*uNit;
+      c=clamp(realce, min(mn,c), max(mx,c));
+    }
+    c+=texture2D(tBloom,vUv).rgb*uBloom;
+    c=aces(c*uExp);
+    c=(c-0.5)*uCon+0.5;
+    float l=dot(c, vec3(0.2126,0.7152,0.0722));
+    c=mix(vec3(l), c, uSat);
+    float dd=length((vUv-0.5)*vec2(1.30,1.0));
+    c*=1.0-uVin*dd*dd;
+    gl_FragColor=vec4(aSRGB(clamp(c,0.0,1.0)),1.0);
+  }`,
+  uniforms:{tEsc:{value:null}, tBloom:{value:null}, uPx:{value:new THREE.Vector2()},
+            uBloom:{value:0.22}, uExp:{value:0.82}, uCon:{value:1.06},
+            uSat:{value:1.06}, uVin:{value:0.18}, uNit:{value:0.45}}});
+let postBloom=true;
+function acomodarPost(w,h){
+  const d=renderer.getPixelRatio();
+  const W=Math.round(w*d), H=Math.round(h*d);
+  if(rtEsc.width===W && rtEsc.height===H) return;
+  rtEsc.setSize(W,H);
+  matGrado.uniforms.uPx.value.set(1/W, 1/H);
+  const w4=Math.max(4,W>>2), h4=Math.max(4,H>>2);
+  rtBr.setSize(w4,h4); rtB1.setSize(w4,h4); rtB2.setSize(w4,h4);
+}
+function pasar(mat, destino){ mallaPost.material=mat;
+  renderer.setRenderTarget(destino); renderer.render(escPost, camPost); }
+const NEGRO=new THREE.DataTexture(new Uint8Array([0,0,0,255]),1,1); NEGRO.needsUpdate=true;
+function pintarPost(){
+  if(postBloom){
+    matBrillo.uniforms.tEsc.value=rtEsc.texture; pasar(matBrillo, rtBr);
+    matBorron.uniforms.tIn.value=rtBr.texture;
+    matBorron.uniforms.uDir.value.set(1.2/rtBr.width,0); pasar(matBorron, rtB1);
+    matBorron.uniforms.tIn.value=rtB1.texture;
+    matBorron.uniforms.uDir.value.set(0,1.2/rtBr.height); pasar(matBorron, rtB2);
+  }
+  matGrado.uniforms.tEsc.value=rtEsc.texture;
+  matGrado.uniforms.tBloom.value=postBloom? rtB2.texture : NEGRO;
+  pasar(matGrado, null);
+}
+
+/* ============================================================================
+   EL TERRENO REAL
+   La malla sale del mapa de alturas; el color, de la ortofoto. Encima van tres
+   cosas que son las que lo sacan de "foto pegada sobre un molde":
+
+   · la LUZ HORNEADA (luz.png): en rojo, qué está a la sombra de qué según el
+     sol; en verde, cuánto cielo ve cada punto. Las dos se calcularon barriendo
+     el propio mapa de alturas antes de empaquetar. Una arista de granito
+     proyecta su sombra sobre el glaciar de al lado, y el fondo del valle está
+     apagado. Eso no se puede fingir con luces de escena.
+   · el mapa de NORMALES a resolución plena, que le da relieve fino a una malla
+     que tiene un vértice cada diez metros.
+   · una capa de DETALLE a escala de metros: a un metro por píxel la ortofoto
+     sola se ve como un cuadro borroso, y multiplicarla por un grano fino la
+     devuelve a la realidad.
+============================================================================ */
+const SEGS=MOVIL?512:1024;
+const geoTerreno=(()=>{
+  const n=SEGS+1, pos=new Float32Array(n*n*3), uv=new Float32Array(n*n*2);
+  for(let j=0;j<n;j++) for(let i=0;i<n;i++){
+    const k=j*n+i;
+    const x=-MEDIO + i/SEGS*LADO, z=-MEDIO + j/SEGS*LADO;
+    pos[k*3]=x; pos[k*3+1]=suelo(x,z); pos[k*3+2]=z;
+    uv[k*2]=i/SEGS; uv[k*2+1]=j/SEGS;
+  }
+  const idx=new Uint32Array(SEGS*SEGS*6);
+  let p=0;
+  for(let j=0;j<SEGS;j++) for(let i=0;i<SEGS;i++){
+    const a=j*n+i, b=a+1, c=a+n, d=c+1;
+    idx[p++]=a; idx[p++]=c; idx[p++]=b;
+    idx[p++]=b; idx[p++]=c; idx[p++]=d;
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv,2));
+  g.setIndex(new THREE.BufferAttribute(idx,1));
+  g.computeBoundingSphere();
+  return g;
+})();
+
+const matTierra=new THREE.ShaderMaterial({
+  uniforms:{
+    tLejos:{value:REC.tLejos}, tCerca:{value:REC.tCerca},
+    tNor:{value:REC.tNor}, tLuz:{value:REC.tLuz}, tDet:{value:REC.tDet},
+    luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
+    uSolCol:{value:new THREE.Color(1,0.97,0.92)},
+    uCieloCol:{value:CIELO_COL.clone()},
+    uFog:{value:NIEBLA.clone()}, uFogSol:{value:new THREE.Color(1,0.94,0.84)},
+    uFogD:{value:nieblaD}, uDet:{value:0.75}, uCorte:{value:-1e9},
+    uCercaC:{value:new THREE.Vector2(CERCA.x, CERCA.z)}, uCercaL:{value:CERCA.lado}
+  },
+  vertexShader:`
+    varying vec3 vW; varying vec2 vUV;
+    void main(){ vW=position; vUV=uv;
+      gl_Position=projectionMatrix*viewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vW; varying vec2 vUV;
+    uniform sampler2D tLejos, tCerca, tNor, tLuz, tDet;
+    uniform vec3 luz, uOjo, uSolCol, uCieloCol, uFog, uFogSol;
+    uniform float uFogD, uDet, uCorte, uCercaL;
+    uniform vec2 uCercaC;
+    void main(){
+      if(vW.y<uCorte) discard;
+      vec3 N=normalize(texture2D(tNor, vUV).xyz*2.0-1.0);
+      vec3 lz=texture2D(tLuz, vUV).rgb;             // r sombra, g cielo, b agua
+
+      /* el color: la foto de diez kilómetros, y encima la de alta resolución
+         donde la hay, difuminada en el borde para que no se vea el recorte */
+      vec3 alb=texture2D(tLejos, vUV).rgb;
+      vec2 uc=(vW.xz-uCercaC)/uCercaL+0.5;
+      vec2 b=min(uc, 1.0-uc);
+      float dentro=smoothstep(0.0, 0.06, min(b.x,b.y));
+      alb=mix(alb, texture2D(tCerca, uc).rgb, dentro);
+
+      /* el detalle: dos escalas de grano que rompen el borrón del satélite.
+         Centrado en 0.5, así multiplica sin cambiarle el tono medio. */
+      float dcam=length(vW-uOjo);
+      float cerca=1.0-smoothstep(30.0, 420.0, dcam);
+      float d1=texture2D(tDet, vW.xz*0.21).r;
+      float d2=texture2D(tDet, vW.xz*0.037).r;
+      float det=d1*0.62+d2*0.38;
+      alb*=mix(1.0, det*2.0, uDet*cerca);
+      // el relieve fino también entra por la normal, no sólo por el color
+      float e=0.35;
+      vec3 Nd=normalize(N + vec3(
+        (texture2D(tDet, vW.xz*0.21+vec2(e,0.0)).r-d1)*2.4, 0.0,
+        (texture2D(tDet, vW.xz*0.21+vec2(0.0,e)).r-d1)*2.4)*uDet*cerca);
+
+      float ndl=max(dot(Nd, luz), 0.0);
+      // la sombra horneada se combina con el terminador propio de la normal
+      float sol=ndl*mix(0.06, 1.0, smoothstep(0.15,0.85,lz.r));
+      vec3 col=alb*(sol*uSolCol*1.95 + lz.g*uCieloCol*0.72 + 0.040);
+      // un brillo rasante: la nieve y la roca mojada lo tienen
+      vec3 V=normalize(uOjo-vW), H=normalize(V+luz);
+      col+=uSolCol*pow(max(dot(Nd,H),0.0), 26.0)*0.11*lz.r*smoothstep(0.55,0.85,dot(alb,vec3(0.33)));
+
+      /* perspectiva aérea: a diez kilómetros la distancia se ve, y mirando
+         hacia el sol la neblina se prende */
+      vec3 dirV=normalize(vW-uOjo);
+      float f=1.0-exp(-uFogD*dcam);
+      vec3 nieb=mix(uFog, uFogSol, pow(max(dot(dirV,luz),0.0), 6.0)*0.75);
+      gl_FragColor=vec4(mix(col, nieb, clamp(f,0.0,1.0)), 1.0);
+    }`
+});
+MATS.push(matTierra);
+const terreno=new THREE.Mesh(geoTerreno, matTierra);
+terreno.frustumCulled=false;
+escena.add(terreno);
+
+/* ============================================================================
+   EL AGUA
+   Las lagunas salen de la máscara horneada: dónde el modelo de elevación está
+   plano y la ortofoto es turquesa o muy oscura. Comparten la misma malla que
+   el terreno —cero geometría extra— y se descarta el píxel donde no hay agua.
+============================================================================ */
+const matAgua=new THREE.ShaderMaterial({
+  uniforms:{
+    tLuz:{value:REC.tLuz}, tCielo:{value:REC.cielo}, tLejos:{value:REC.tLejos},
+    luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()}, uT:{value:0},
+    uFog:{value:NIEBLA.clone()}, uFogSol:{value:new THREE.Color(1,0.94,0.84)},
+    uFogD:{value:nieblaD}, uCorte:{value:-1e9}, uCieloCol:{value:CIELO_COL.clone()}
+  },
+  vertexShader:`
+    varying vec3 vW; varying vec2 vUV;
+    uniform sampler2D tLuz;
+    void main(){
+      vUV=uv;
+      // la superficie va un pelo por encima del terreno, si no pelean por el z
+      vW=position+vec3(0.0, 0.28, 0.0);
+      gl_Position=projectionMatrix*viewMatrix*vec4(vW,1.0);
+    }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vW; varying vec2 vUV;
+    uniform sampler2D tLuz, tCielo, tLejos;
+    uniform vec3 luz, uOjo, uFog, uFogSol, uCieloCol;
+    uniform float uT, uFogD, uCorte;
+    vec3 cielo(vec3 d){
+      vec2 uv=vec2(atan(d.z,d.x)/6.2831853+0.5, acos(clamp(d.y,-1.0,1.0))/3.14159265);
+      return texture2D(tCielo, uv).rgb;
+    }
+    void main(){
+      if(vW.y<uCorte) discard;
+      float a=texture2D(tLuz, vUV).b;
+      if(a<0.55) discard;
+      /* rizos: tres trenes cruzados a distintas escalas. No hay simulación
+         acá —son lagunas de montaña, no un estanque con cosas adentro— pero
+         la normal tiene que moverse o el agua parece un vidrio. */
+      vec2 p=vW.xz;
+      vec2 n=vec2(
+        sin(p.x*0.95+p.y*0.62+uT*1.7)*0.35 + sin(p.x*2.7-p.y*1.9-uT*2.6)*0.18
+       +sin(p.x*0.21+p.y*0.13+uT*0.6)*0.55,
+        cos(p.y*0.88-p.x*0.51+uT*1.5)*0.35 + cos(p.y*2.4+p.x*1.7+uT*2.3)*0.17
+       +cos(p.y*0.24-p.x*0.11+uT*0.5)*0.55);
+      vec3 N=normalize(vec3(n.x*0.055, 1.0, n.y*0.055));
+      vec3 V=normalize(uOjo-vW);
+      float fres=0.02+0.98*pow(1.0-max(dot(N,V),0.0), 5.0);
+      vec3 R=reflect(-V,N);
+      vec3 refl=cielo(R);
+      /* el agua de deshielo es turquesa por la harina de roca en suspensión:
+         casi no deja ver el fondo y devuelve un verde azulado propio */
+      vec3 hondo=vec3(0.045,0.20,0.24)*(0.55+0.45*max(dot(N,luz),0.0));
+      vec3 col=mix(hondo, refl, clamp(fres,0.0,1.0));
+      col+=uCieloCol*0.10;
+      col+=vec3(1.0,0.97,0.90)*pow(max(dot(R,luz),0.0), 900.0)*9.0;   // el sol partido
+      float dcam=length(vW-uOjo);
+      vec3 dirV=normalize(vW-uOjo);
+      float f=1.0-exp(-uFogD*dcam);
+      vec3 nieb=mix(uFog, uFogSol, pow(max(dot(dirV,luz),0.0), 6.0)*0.75);
+      gl_FragColor=vec4(mix(col, nieb, clamp(f,0.0,1.0)), 1.0);
+    }`
+});
+MATS.push(matAgua);
+const agua=new THREE.Mesh(geoTerreno, matAgua);
+agua.frustumCulled=false; agua.renderOrder=2;
+escena.add(agua);
+
+/* ---- el cielo: la misma panorámica HDR que ilumina la escena ---- */
+const cieloMat=new THREE.ShaderMaterial({
+  side:THREE.BackSide, depthWrite:false,
+  uniforms:{ tCielo:{value:REC.cielo}, uGiro:{value:0.0}, uInt:{value:1.0} },
+  vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
+    gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vD; uniform sampler2D tCielo; uniform float uGiro, uInt;
+    void main(){
+      vec3 d=normalize(vD);
+      vec2 uv=vec2(atan(d.z,d.x)/6.2831853+0.5+uGiro, acos(clamp(d.y,-1.0,1.0))/3.14159265);
+      gl_FragColor=vec4(texture2D(tCielo, uv).rgb*uInt, 1.0);
+    }`
+});
+const cielo=new THREE.Mesh(new THREE.SphereGeometry(20000, 48, 32), cieloMat);
+cielo.frustumCulled=false; escena.add(cielo);
+
+/* ============================================================================
+   PASTO Y ÁRBOLES
+   Misma idea que en Pradera: las instancias NO se mueven nunca desde
+   JavaScript. Cada una tiene un índice fijo en una grilla y el shader calcula
+   qué celda del mundo le toca según dónde está el jugador:
+
+       celda = uBase + mod(indice - uBase, N)
+
+   Acá se le suma lo que hace que encaje con un mundo real: la mata pregunta su
+   altura al mapa de elevación y, sobre todo, LE PREGUNTA A LA ORTOFOTO si en
+   ese punto hay vegetación. Mira el verdor del píxel satelital y la altura
+   sobre el nivel del mar, y sólo crece donde el satélite dice que hay verde y
+   por debajo del límite del bosque. Por eso el pasto para justo donde para en
+   la realidad, y los árboles no trepan al glaciar.
+============================================================================ */
+const PASTO_U={
+  uT:{value:0}, uViento:{value:0.5},
+  uJug:{value:new THREE.Vector3()}, uRJug:{value:1.30},
+  uOjo:{value:new THREE.Vector3()},
+  luz:{value:SOL.clone()}, uFog:{value:NIEBLA.clone()},
+  uFogSol:{value:new THREE.Color(1,0.94,0.84)},
+  uFogD:{value:nieblaD}, uCieloCol:{value:CIELO_COL.clone()},
+  uCorte:{value:-1e9},
+  tAlt:{value:REC.tAlt}, uAltInfo:{value:new THREE.Vector3(ALT_N, ALT_MIN, ALT_MAX)},
+  tLejos:{value:REC.tLejos}, tLuz:{value:REC.tLuz}
+};
+const CAMPOS=[];
+function crearCampo(o){
+  const N=o.N, Q=o.quads, S=o.segs;
+  const pos=[], uvs=[], quad=[], idx=[];
+  for(let q=0;q<Q;q++){
+    const base=pos.length/3;
+    for(let k=0;k<=S;k++){
+      const v=k/S, an=0.5*(1-(o.afinar||0.42)*v*v);
+      pos.push(-an, v, 0, an, v, 0);
+      uvs.push(0.5-an, v, 0.5+an, v);
+      quad.push(q,q);
+    }
+    for(let k=0;k<S;k++){ const a=base+k*2; idx.push(a,a+1,a+3, a,a+3,a+2); }
+  }
+  const geo=new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs,2));
+  geo.setAttribute('aQuad', new THREE.Float32BufferAttribute(quad,1));
+  geo.setIndex(idx);
+  const ii=new Float32Array(N*N*2);
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){ const k=(j*N+i)*2; ii[k]=i; ii[k+1]=j; }
+  geo.setAttribute('iIdx', new THREE.InstancedBufferAttribute(ii,2));
+  geo.instanceCount=N*N;
+  geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(), 1e6);
+
+  const mat=new THREE.ShaderMaterial({
+    side:THREE.DoubleSide, transparent:false,
+    uniforms:Object.assign({
+      uBase:{value:new THREE.Vector2()}, uN:{value:N}, uCelda:{value:o.celda},
+      uQuads:{value:Q}, uAltoMin:{value:o.altoMin}, uAltoMax:{value:o.altoMax},
+      uAncho:{value:o.ancho}, uDist:{value:o.dist}, uCerca:{value:o.cerca||0},
+      uSemilla:{value:o.semilla||0}, tAtlas:{value:o.atlas},
+      uAtlasC:{value:o.atlasC||4}, uDens:{value:1.0},
+      uVerdeMin:{value:o.verdeMin}, uTope:{value:o.tope},
+      uTronco:{value:o.tronco?1.0:0.0},
+      uTinte:{value:new THREE.Color(o.tinte||0xffffff)}, uBrillo:{value:o.brillo||2.1}
+    }, PASTO_U),
+    vertexShader:`
+      precision highp float;
+      attribute float aQuad; attribute vec2 iIdx;
+      uniform vec2 uBase; uniform float uN, uCelda, uQuads, uSemilla;
+      uniform float uAltoMin, uAltoMax, uAncho, uDist, uCerca, uDens;
+      uniform float uT, uViento, uRJug, uVerdeMin, uTope, uAtlasC;
+      uniform vec3 uJug, uOjo;
+      uniform sampler2D tLejos, tLuz;
+      varying vec2 vUv; varying vec3 vW, vNor;
+      varying float vAlto, vTono, vLejos, vSol, vUx;
+      ${ALTURA_GLSL}
+      float h21(vec2 p){ vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z); }
+      void main(){
+        vec2 g=uBase + mod(iIdx-uBase, vec2(uN));
+        vec2 sm=g+vec2(uSemilla);
+        float r1=h21(sm), r2=h21(sm+vec2(17.3,5.1)), r3=h21(sm+vec2(3.7,29.9));
+        float r4=h21(sm+vec2(41.1,13.7)), r5=h21(sm+vec2(7.9,53.3)), r6=h21(sm+vec2(63.1,2.9));
+        float r7=h21(sm+vec2(11.5,71.3));
+        vec2 P=(g+0.5)*uCelda + (vec2(r1,r2)-0.5)*uCelda*0.98;
+        float y=alturaEn(P);
+        float e=6.0;
+        float hx=(alturaEn(P+vec2(e,0.0))-alturaEn(P-vec2(e,0.0)))/(2.0*e);
+        float hz=(alturaEn(P+vec2(0.0,e))-alturaEn(P-vec2(0.0,e)))/(2.0*e);
+        float pend=sqrt(hx*hx+hz*hz);
+
+        /* ¿hay vegetación acá? se lo pregunta al satélite */
+        vec2 mu=mapaUV(P);
+        vec3 sat=texture2D(tLejos, mu).rgb;
+        float verdor=sat.g-(sat.r+sat.b)*0.5;
+        float agua=texture2D(tLuz, mu).b;
+        float vive=smoothstep(uVerdeMin, uVerdeMin+0.055, verdor)
+                 * (1.0-smoothstep(uTope-160.0, uTope, y))
+                 * (1.0-smoothstep(0.55, 1.05, pend))
+                 * (1.0-smoothstep(0.30,0.60,agua))
+                 * step(r5, uDens);
+        float esc=(uAltoMin + r3*(uAltoMax-uAltoMin))*vive;
+        float dcam=length(P-uOjo.xz);
+        esc*=1.0-smoothstep(uDist*0.78, uDist, dcam);
+        if(uCerca>0.0) esc*=smoothstep(uCerca*0.55, uCerca, dcam);
+        vLejos=dcam;
+
+        float a=r4*6.2831853 + aQuad*(3.14159265/uQuads);
+        vec2 dir=vec2(cos(a), sin(a));
+        float hh=uv.y;
+        vec3 loc;
+        loc.xz=dir*position.x*esc*uAncho;
+        loc.y=position.y*esc;
+        vec2 volc=vec2(cos(r6*6.2831853), sin(r6*6.2831853));
+        float arco=(0.14+r7*0.34)*hh*hh;
+        loc.xz+=volc*arco*esc; loc.y-=arco*arco*esc*0.5;
+        // viento en ráfagas que cruzan el campo
+        float raf=max(0.05, 0.45+0.38*sin(P.x*0.045+P.y*0.033-uT*0.58)
+                                +0.20*sin(P.x*0.013-P.y*0.021-uT*0.29));
+        float f=uViento*raf*hh*hh;
+        float osc=sin(uT*1.9+P.x*0.31+P.y*0.25+r4*6.283)+0.45*sin(uT*3.8+P.x*0.66-P.y*0.5);
+        loc.x+=osc*f*esc*0.55; loc.z+=cos(uT*1.4+P.y*0.28+r1*6.283)*f*esc*0.42;
+        loc.y-=abs(osc)*f*esc*0.12;
+        // el jugador aparta lo que le pasa por al lado
+        vec3 W=vec3(P.x,y,P.y)+loc;
+        vec2 dj=W.xz-uJug.xz; float dd=length(dj);
+        float mismo=clamp(1.0-abs(W.y-uJug.y)/2.4,0.0,1.0);
+        float emp=(1.0-smoothstep(uRJug*0.30,uRJug,dd))*mismo;
+        loc.xz+=(dj/max(dd,0.0015))*emp*hh*esc*1.0;
+        loc.y-=emp*hh*esc*0.7;
+        W=vec3(P.x,y,P.y)+loc; vW=W;
+        vec3 nSuelo=normalize(vec3(-hx,1.0,-hz));
+        float lat=(uv.x-0.5)*2.0;
+        vec3 nHoja=normalize(vec3(dir.y,0.0,-dir.x)*lat*0.8+vec3(0.0,1.0,0.0)*0.8
+                             +vec3(volc.x,0.0,volc.y)*hh*0.4);
+        vNor=normalize(mix(nSuelo,nHoja,0.6));
+        float C=uAtlasC;
+        float k=floor(r6*(C*C-0.001));
+        vUv=uv/C + vec2(mod(k,C), floor(k/C))/C;
+        vAlto=hh; vTono=0.84+r2*0.32; vUx=uv.x;
+        vSol=texture2D(tLuz, mu).r;              // la sombra horneada también le pega
+        gl_Position=projectionMatrix*viewMatrix*vec4(W,1.0);
+      }`,
+    fragmentShader:`
+      precision highp float;
+      uniform sampler2D tAtlas;
+      uniform vec3 luz, uFog, uFogSol, uOjo, uCieloCol;
+      uniform float uFogD, uCorte, uTronco, uBrillo;
+      uniform vec3 uTinte;
+      varying vec2 vUv; varying vec3 vW, vNor;
+      varying float vAlto, vTono, vLejos, vSol, vUx;
+      void main(){
+        if(vW.y<uCorte) discard;
+        vec4 t=texture2D(tAtlas, vUv);
+        vec3 col;
+        /* Los árboles llevan su tronco dibujado en el propio shader: una franja
+           angosta y oscura debajo de la copa. Sale gratis y sin él, de cerca,
+           el bosque flota. */
+        if(uTronco>0.5 && vAlto<0.30 && abs(vUx-0.5)<0.045){
+          col=vec3(0.085,0.062,0.045);
+        } else {
+          if(t.a<0.34) discard;
+          col=t.rgb*vTono*uTinte;
+        }
+        vec3 N=normalize(vNor);
+        vec3 E=normalize(uOjo-vW);
+        float ndl=max(dot(N,luz),0.0);
+        float sol=mix(0.10,1.0,smoothstep(0.15,0.85,vSol));
+        float lamb=0.30+0.72*ndl*sol;
+        float atras=pow(max(dot(-E,luz),0.0),2.4)*(uTronco>0.5?0.30:0.75)*vAlto*sol;
+        vec3 H=normalize(E+luz);
+        float esp=pow(max(dot(N,H),0.0),42.0)*0.35*vAlto*sol;
+        float ao=mix(0.66,1.10,vAlto);
+        col=col*lamb*ao*uBrillo + vec3(0.62,1.0,0.40)*atras*col + vec3(1.0)*esp;
+        col+=col*uCieloCol*0.32;
+        vec3 dirV=normalize(vW-uOjo);
+        float f=1.0-exp(-uFogD*vLejos);
+        vec3 nieb=mix(uFog, uFogSol, pow(max(dot(dirV,luz),0.0),6.0)*0.75);
+        gl_FragColor=vec4(mix(col, nieb, clamp(f,0.0,1.0)),1.0);
+      }`
+  });
+  MATS.push(mat);
+  const m=new THREE.Mesh(geo, mat);
+  m.frustumCulled=false; m.renderOrder=1;
+  escena.add(m);
+  const c={malla:m, mat, N, celda:o.celda, base:mat.uniforms.uBase.value, clase:o.clase};
+  CAMPOS.push(c);
+  return c;
+}
+const K=MOVIL?0.72:1.0;
+/* dos capas de pasto y una de bosque; el límite del bosque en El Chaltén anda
+   por los mil cien metros y la ortofoto se encarga del resto */
+crearCampo({clase:'pasto', N:Math.round(96*K), celda:0.34, quads:3, segs:MOVIL?2:3,
+  altoMin:0.22, altoMax:0.46, ancho:2.0, atlas:REC.tPasto, atlasC:4, tinte:0xc8d4b4, brillo:1.7,
+  verdeMin:0.010, tope:1250.0, dist:16*K, cerca:0, semilla:0});
+crearCampo({clase:'pasto', N:Math.round(104*K), celda:0.82, quads:2, segs:MOVIL?1:2,
+  altoMin:0.34, altoMax:0.72, ancho:2.2, atlas:REC.tPasto, atlasC:4, tinte:0xc8d4b4, brillo:1.7,
+  verdeMin:0.014, tope:1250.0, dist:40*K, cerca:5*K, semilla:97});
+/* La lenga es oscura: la lámina de follaje viene de un arce bien iluminado y
+   sin bajarle el tono el bosque queda fosforescente sobre un suelo que la
+   ortofoto pinta casi negro. */
+crearCampo({clase:'arbol', N:Math.round(160*K), celda:3.1, quads:3, segs:1, afinar:0.10,
+  altoMin:5.5, altoMax:13.0, ancho:0.92, atlas:REC.tHoja, atlasC:3, tronco:true,
+  tinte:0x6e8a55, brillo:1.15,
+  verdeMin:0.020, tope:1150.0, dist:560*K, cerca:0, semilla:311});
+
+function seguirPasto(x,z){
+  for(const c of CAMPOS)
+    c.base.set(Math.floor(x/c.celda)-(c.N>>1), Math.floor(z/c.celda)-(c.N>>1));
+}
+
+/* ============================================================================
+   EL JUGADOR, LOS MANDOS Y EL BUCLE
+   Igual que en Pradera: movimiento por velocidad con peso, la cuesta arriba
+   frena y la de abajo empuja, y la cámara se inclina con la pendiente. Acá
+   además hay un modo VOLAR, porque un mundo de diez kilómetros con dos mil
+   ochocientos metros de desnivel a pie se recorre en media hora.
+============================================================================ */
+const PJ={ x:INICIO.x, z:INICIO.z, y:0, vx:0, vz:0, vy:0,
+           yaw:INICIO.yaw, cabeceo:-0.06, altoOjo:1.70, radio:0.4,
+           andando:0, paso:0, enSuelo:true, rapidez:0 };
+PJ.y=suelo(PJ.x,PJ.z);
+const CAM={bobY:0,bobX:0,rol:0,cabT:0,rolT:0,hundir:0,vHundir:0,fov:FOV0,sacudir:0};
+let correr=false, volar=false, yawAnt=PJ.yaw, giroVel=0;
+const _g=[0,0];
+
+function moverJugador(dt){
+  const n=Math.min(5, Math.max(1, Math.ceil(dt*90)));
+  for(let k=0;k<n;k++) pasoJugador(dt/n);
+  ponerCamara(dt);
+}
+function pasoJugador(paso){
+  const fx=-Math.sin(PJ.yaw), fz=-Math.cos(PJ.yaw);
+  const dx= Math.cos(PJ.yaw), dz=-Math.sin(PJ.yaw);
+  let mx=0, mz=0;
+  if(palanca.activa){ mx=palanca.x; mz=palanca.y; }
+  if(teclas['w']||teclas['arrowup']) mz-=1;
+  if(teclas['s']||teclas['arrowdown']) mz+=1;
+  if(teclas['a']||teclas['arrowleft']) mx-=1;
+  if(teclas['d']||teclas['arrowright']) mx+=1;
+  const largo=Math.hypot(mx,mz);
+  gradiente(PJ.x,PJ.z,_g);
+
+  let qx=0,qz=0,tope=0;
+  if(largo>0.06){
+    const k=Math.min(1,largo)/largo;
+    qx=(fx*(-mz)+dx*mx)*k; qz=(fz*(-mz)+dz*mx)*k;
+    const q=Math.hypot(qx,qz);
+    const sube=(_g[0]*qx+_g[1]*qz)/Math.max(q,1e-4);
+    const cuesta=sube>0 ? 1/(1+sube*1.5) : 1+Math.min(0.30,-sube*0.26);
+    tope=(volar? 46 : (correr||teclas['shift']?5.9:3.3))*cuesta;
+    if(volar) tope=volar? (correr?110:46) : tope;
+  }
+  const acel=volar?4.0:(PJ.enSuelo?22:5), roza=volar?3.0:(PJ.enSuelo?(tope>0?3:12):0.6);
+  PJ.vx += (qx*tope-PJ.vx)*Math.min(1,(tope>0?acel:roza)*paso);
+  PJ.vz += (qz*tope-PJ.vz)*Math.min(1,(tope>0?acel:roza)*paso);
+  PJ.rapidez=Math.hypot(PJ.vx,PJ.vz);
+  let nx=PJ.x+PJ.vx*paso, nz=PJ.z+PJ.vz*paso;
+  nx=clamp(nx,-MEDIO+30,MEDIO-30); nz=clamp(nz,-MEDIO+30,MEDIO-30);
+  const sy=suelo(nx,nz);
+  if(volar || sy-PJ.y < 2.4*Math.max(0.05,PJ.rapidez*paso)+0.45 || sy<PJ.y){ PJ.x=nx; PJ.z=nz; }
+  else { PJ.vx*=0.4; PJ.vz*=0.4; }
+
+  PJ.andando += (Math.min(1,PJ.rapidez/2.4)-PJ.andando)*Math.min(1,7*paso);
+  if(!volar){
+    PJ.paso += paso*PJ.rapidez*0.58;
+    if(PJ.paso>1){ PJ.paso-=1; CAM.vHundir-=0.5+PJ.rapidez*0.09; roce(0.45); }
+  }
+  const piso=suelo(PJ.x,PJ.z);
+  if(volar){
+    if(teclas[' ']||subiendo>0) PJ.vy=Math.min(PJ.vy+34*paso, 22);
+    else if(teclas['c']||bajando>0) PJ.vy=Math.max(PJ.vy-34*paso,-22);
+    else PJ.vy*=Math.max(0,1-3.5*paso);
+    PJ.y+=PJ.vy*paso;
+    if(PJ.y<piso+1.2){ PJ.y=piso+1.2; PJ.vy=Math.max(0,PJ.vy); }
+  }else{
+    PJ.vy-=19.5*paso; PJ.y+=PJ.vy*paso;
+    if(PJ.y<piso){
+      if(!PJ.enSuelo && PJ.vy<-3){ CAM.vHundir-=Math.min(5.5,-PJ.vy*0.55);
+        CAM.sacudir=Math.min(0.5,-PJ.vy*0.045); roce(0.9,true); }
+      PJ.y=piso; PJ.vy=0; PJ.enSuelo=true;
+    } else if(PJ.y>piso+0.06) PJ.enSuelo=false;
+  }
+}
+function saltar(){ if(volar||!PJ.enSuelo) return; PJ.vy=6.6; PJ.enSuelo=false; CAM.vHundir+=1.5; roce(0.5); }
+function ponerCamara(dt){
+  const dx=Math.cos(PJ.yaw), dz=-Math.sin(PJ.yaw);
+  const k=Math.min(1,dt*10);
+  const amp=PJ.andando*(volar?0:1)*(0.028+PJ.rapidez*0.005);
+  CAM.bobY += (Math.sin(PJ.paso*Math.PI*4)*amp - CAM.bobY)*Math.min(1,dt*22);
+  CAM.bobX += (Math.sin(PJ.paso*Math.PI*2)*amp*1.35 - CAM.bobX)*Math.min(1,dt*22);
+  CAM.vHundir += (-CAM.hundir*46 - CAM.vHundir*9.5)*dt;
+  CAM.hundir += CAM.vHundir*dt; CAM.hundir=clamp(CAM.hundir,-0.55,0.30);
+  CAM.sacudir=Math.max(0,CAM.sacudir-dt*2.2);
+  gradiente(PJ.x,PJ.z,_g);
+  const fx=-Math.sin(PJ.yaw), fz=-Math.cos(PJ.yaw);
+  const pF=_g[0]*fx+_g[1]*fz, pL=_g[0]*dx+_g[1]*dz;
+  const act=PJ.andando*(volar?0:1);
+  CAM.cabT += (clamp(-pF*0.18,-0.12,0.12)*act - CAM.cabT)*k;
+  CAM.rolT += (clamp( pL*0.22,-0.14,0.14)*act - CAM.rolT)*k;
+  const lateral=(PJ.vx*dx+PJ.vz*dz)/Math.max(1,PJ.rapidez);
+  CAM.rol += ((-lateral*PJ.andando*0.05 - clamp(giroVel,-3,3)*0.028) - CAM.rol)*Math.min(1,dt*8);
+  const objFov=FOV0+Math.max(0,PJ.rapidez-3.4)*(volar?0.28:2.4);
+  if(Math.abs(objFov-CAM.fov)>0.01){
+    CAM.fov+=(objFov-CAM.fov)*Math.min(1,dt*4.5);
+    camara.fov=Math.min(88,CAM.fov); camara.updateProjectionMatrix();
+  }
+  const s=CAM.sacudir;
+  camara.position.set(PJ.x+dx*CAM.bobX+(Math.random()-0.5)*s*0.08,
+                      PJ.y+PJ.altoOjo+CAM.hundir+CAM.bobY+(Math.random()-0.5)*s*0.08,
+                      PJ.z+dz*CAM.bobX+(Math.random()-0.5)*s*0.08);
+  camara.rotation.set(PJ.cabeceo+CAM.cabT+CAM.bobY*0.16, PJ.yaw, CAM.rol+CAM.rolT+CAM.bobX*0.1);
+}
+/* ---- audio: sólo el roce del paso, sintetizado ---- */
+let AC=null, master=null;
+function initAudio(){ if(AC) return;
+  try{ AC=new (window.AudioContext||window.webkitAudioContext)();
+    master=AC.createGain(); master.gain.value=0.55; master.connect(AC.destination);
+  }catch(e){ AC=null; } }
+function roce(f,grave){
+  if(!AC) return;
+  const t0=AC.currentTime, dur=0.16+f*0.12;
+  const n=Math.floor(AC.sampleRate*dur), b=AC.createBuffer(1,n,AC.sampleRate), d=b.getChannelData(0);
+  for(let i=0;i<n;i++){ const u=i/n; d[i]=(Math.random()*2-1)*Math.pow(1-u,1.5); }
+  const src=AC.createBufferSource(); src.buffer=b;
+  const bp=AC.createBiquadFilter(); bp.type='bandpass';
+  bp.frequency.value=2200+Math.random()*2600; bp.Q.value=0.6;
+  const g=AC.createGain();
+  g.gain.setValueAtTime(0.0001,t0);
+  g.gain.linearRampToValueAtTime(0.075*f,t0+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+  src.connect(bp); bp.connect(g); g.connect(master); src.start(t0);
+  const o=AC.createOscillator(); o.type='sine';
+  o.frequency.setValueAtTime((grave?92:120)+Math.random()*40,t0);
+  o.frequency.exponentialRampToValueAtTime(46,t0+0.10);
+  const og=AC.createGain();
+  og.gain.setValueAtTime(0.0001,t0);
+  og.gain.linearRampToValueAtTime((grave?0.10:0.05)*f,t0+0.008);
+  og.gain.exponentialRampToValueAtTime(0.0001,t0+0.13);
+  o.connect(og); og.connect(master); o.start(t0); o.stop(t0+0.15);
+}
+
+/* ============================================================================
+   MANDOS · palanca izquierda, mirada derecha, y dos botones
+============================================================================ */
+const mandos=document.getElementById('mandos');
+const gm=mandos.getContext('2d');
+const palanca={activa:false,id:-1,ox:0,oy:0,x:0,y:0};
+const mirada={activa:false,id:-1,x:0,y:0};
+const teclas={};
+let bA={x:0,y:0,r:0}, bB={x:0,y:0,r:0}, pulsA=0, pulsB=0, subiendo=0, bajando=0;
+function acomodarMandos(){
+  const d=Math.min(devicePixelRatio||1,2);
+  mandos.width=Math.round(CAJA.w*d); mandos.height=Math.round(CAJA.h*d);
+  mandos.style.width=CAJA.w+'px'; mandos.style.height=CAJA.h+'px';
+  gm.setTransform(d,0,0,d,0,0);
+  const m=Math.min(CAJA.w,CAJA.h);
+  bA.r=m*0.082; bA.x=CAJA.w-bA.r-m*0.055; bA.y=CAJA.h-bA.r-m*0.070;
+  bB.r=m*0.070; bB.x=bA.x-bA.r-bB.r*0.95; bB.y=bA.y-bA.r*0.62;
+}
+function boton(b,txt,puls,col){
+  const k=puls>0?0.9:1;
+  gm.globalAlpha=0.28; gm.fillStyle='#0a1620';
+  gm.beginPath(); gm.arc(b.x,b.y,b.r*k,0,6.2832); gm.fill();
+  gm.globalAlpha=puls>0?0.95:0.6; gm.lineWidth=3; gm.strokeStyle=col;
+  gm.beginPath(); gm.arc(b.x,b.y,b.r*k,0,6.2832); gm.stroke();
+  gm.globalAlpha=0.88; gm.fillStyle=col;
+  gm.font='700 '+Math.round(b.r*0.28)+'px ui-monospace, monospace';
+  gm.textAlign='center'; gm.textBaseline='middle'; gm.fillText(txt,b.x,b.y);
+}
+function dibujarMandos(){
+  gm.clearRect(0,0,CAJA.w,CAJA.h);
+  const m=Math.min(CAJA.w,CAJA.h), R=m*0.115;
+  const cx=palanca.activa?palanca.ox:m*0.155, cy=palanca.activa?palanca.oy:CAJA.h-m*0.155;
+  gm.globalAlpha=palanca.activa?0.55:0.26; gm.lineWidth=2.5; gm.strokeStyle='#dceffc';
+  gm.beginPath(); gm.arc(cx,cy,R,0,6.2832); gm.stroke();
+  gm.globalAlpha=palanca.activa?0.62:0.30; gm.fillStyle='#eaf6ff';
+  gm.beginPath(); gm.arc(cx+palanca.x*R*0.55, cy+palanca.y*R*0.55, R*0.42,0,6.2832); gm.fill();
+  boton(bA, volar?'SUBIR':'SALTO', pulsA, '#b6e4ff');
+  boton(bB, volar?'BAJAR':'VOLAR', pulsB, '#9fe8cf');
+  gm.globalAlpha=0.40; gm.strokeStyle='#eaf6ff'; gm.lineWidth=1.5;
+  const mx=CAJA.w/2, my=CAJA.h/2, s=m*0.010;
+  gm.beginPath(); gm.moveTo(mx-s,my); gm.lineTo(mx-s*0.35,my);
+  gm.moveTo(mx+s*0.35,my); gm.lineTo(mx+s,my);
+  gm.moveTo(mx,my-s); gm.lineTo(mx,my-s*0.35);
+  gm.moveTo(mx,my+s*0.35); gm.lineTo(mx,my+s); gm.stroke();
+  gm.globalAlpha=1;
+}
+/* El dedo llega en coordenadas de pantalla; si la imagen está acostada hay que
+   deshacer el giro a mano, porque el rectángulo que informa el navegador es el
+   envolvente y miente. */
+function aUI(ev){
+  let dx=ev.clientX-innerWidth/2, dy=ev.clientY-innerHeight/2;
+  if(ROT){ const t=dx; dx=dy; dy=-t; }
+  return [dx+CAJA.w/2, dy+CAJA.h/2];
+}
+const lienzo=renderer.domElement;
+const punteros=new Map();
+const dentro=(b,x,y)=>Math.hypot(x-b.x,y-b.y)<b.r*1.3;
+lienzo.addEventListener('pointerdown', ev=>{
+  ev.preventDefault(); initAudio(); if(AC&&AC.state==='suspended') AC.resume();
+  esconderAyuda();
+  const [x,y]=aUI(ev);
+  if(dentro(bA,x,y)){ pulsA=0.14; if(volar) subiendo=1; else saltar();
+    punteros.set(ev.pointerId,{rol:'A'}); return; }
+  if(dentro(bB,x,y)){ pulsB=0.14;
+    if(volar) bajando=1; else { volar=true; PJ.vy=0; }
+    punteros.set(ev.pointerId,{rol:'B'}); return; }
+  if(x<CAJA.w*0.44 && !palanca.activa){
+    palanca.activa=true; palanca.id=ev.pointerId;
+    palanca.ox=x; palanca.oy=y; palanca.x=0; palanca.y=0;
+    punteros.set(ev.pointerId,{rol:'palanca'});
+  } else {
+    mirada.activa=true; mirada.id=ev.pointerId; mirada.x=x; mirada.y=y;
+    punteros.set(ev.pointerId,{rol:'mirada'});
+  }
+  try{ lienzo.setPointerCapture(ev.pointerId); }catch(e){}
+},{passive:false});
+lienzo.addEventListener('pointermove', ev=>{
+  const r=punteros.get(ev.pointerId); if(!r) return;
+  ev.preventDefault();
+  const [x,y]=aUI(ev);
+  if(r.rol==='palanca'){
+    const R=Math.min(CAJA.w,CAJA.h)*0.115;
+    palanca.x=clamp((x-palanca.ox)/R,-1,1); palanca.y=clamp((y-palanca.oy)/R,-1,1);
+  } else if(r.rol==='mirada'){
+    PJ.yaw-=(x-mirada.x)*0.0042;
+    PJ.cabeceo=clamp(PJ.cabeceo-(y-mirada.y)*0.0036,-1.35,1.25);
+    mirada.x=x; mirada.y=y;
+  }
+},{passive:false});
+function soltar(ev){
+  const r=punteros.get(ev.pointerId); punteros.delete(ev.pointerId);
+  if(!r) return;
+  if(r.rol==='palanca'){ palanca.activa=false; palanca.x=0; palanca.y=0; }
+  if(r.rol==='mirada') mirada.activa=false;
+  if(r.rol==='A') subiendo=0;
+  if(r.rol==='B') bajando=0;
+}
+lienzo.addEventListener('pointerup',soltar);
+lienzo.addEventListener('pointercancel',soltar);
+lienzo.addEventListener('lostpointercapture',soltar);
+for(const e of ['touchstart','touchmove','touchend'])
+  lienzo.addEventListener(e, ev=>ev.preventDefault(), {passive:false});
+lienzo.addEventListener('contextmenu', e=>e.preventDefault());
+addEventListener('keydown', e=>{
+  const k=e.key.toLowerCase(); teclas[k]=true; initAudio();
+  if(k===' '){ e.preventDefault(); if(!volar) saltar(); }
+  if(k==='v'){ volar=!volar; PJ.vy=0; }
+  if(k==='r'){ correr=!correr; document.getElementById('bCorrer').classList.toggle('on',correr); }
+});
+addEventListener('keyup', e=>{ teclas[e.key.toLowerCase()]=false; });
+
+/* ============================================================================
+   BUCLE
+============================================================================ */
+let T=0, ultimo=performance.now(), fps=0, cuadros=0, fpsT=0;
+const NIVELES=[
+  {pasto:[0.60,0.50,0.55], dens:0.5, bloom:false},
+  {pasto:[0.80,0.75,0.78], dens:0.8, bloom:true},
+  {pasto:[1.00,1.00,1.00], dens:1.0, bloom:true}
+];
+let nivel=MOVIL?1:2, autoNivel=true, nivelT=0;
+const DIST0=[];
+function aplicarNivel(){
+  const n=NIVELES[nivel];
+  for(let i=0;i<CAMPOS.length;i++) CAMPOS[i].mat.uniforms.uDist.value=DIST0[i]*n.pasto[i];
+  postBloom=n.bloom;
+}
+function ponerSol(a){
+  /* El sol del juego tiene que coincidir con el que se usó para hornear las
+     sombras, si no la sombra pintada y la luz no se hablan. El deslizador sólo
+     lo sube y lo baja alrededor de ese rumbo. */
+  const AZ=38*Math.PI/180, EL=lerp(0.12, 1.15, a);
+  SOL.set(Math.sin(AZ)*Math.cos(EL), Math.sin(EL), -Math.cos(AZ)*Math.cos(EL)).normalize();
+  const calor=Math.max(0,1-a*1.5);
+  const solCol=new THREE.Color(1, 0.97-calor*0.16, 0.93-calor*0.34);
+  CIELO_COL.setHSL(0.575, lerp(0.34,0.42,a), lerp(0.42,0.58,a));
+  NIEBLA.setHSL(0.565, lerp(0.22,0.30,a), lerp(0.62,0.80,a));
+  for(const m of MATS){
+    if(m.uniforms.luz) m.uniforms.luz.value.copy(SOL);
+    if(m.uniforms.uSolCol) m.uniforms.uSolCol.value.copy(solCol);
+    if(m.uniforms.uCieloCol) m.uniforms.uCieloCol.value.copy(CIELO_COL);
+    if(m.uniforms.uFog) m.uniforms.uFog.value.copy(NIEBLA);
+  }
+}
+function ponerNiebla(d){
+  nieblaD=0.000018+d*0.00022;
+  for(const m of MATS) if(m.uniforms.uFogD) m.uniforms.uFogD.value=nieblaD;
+}
+function acomodar(){
+  acomodarCaja();
+  renderer.setSize(CAJA.w,CAJA.h,false);
+  camara.aspect=CAJA.w/CAJA.h; camara.updateProjectionMatrix();
+  acomodarPost(CAJA.w,CAJA.h);
+  acomodarMandos();
+}
+addEventListener('resize', acomodar);
+addEventListener('orientationchange', ()=>setTimeout(acomodar,120));
+function bucle(ahora){
+  requestAnimationFrame(bucle);
+  let dt=(ahora-ultimo)/1000; ultimo=ahora;
+  if(dt>0.08) dt=0.08;
+  T+=dt; cuadros++; fpsT+=dt;
+  if(fpsT>0.5){
+    fps=Math.round(cuadros/fpsT); cuadros=0; fpsT=0;
+    if(autoNivel){ nivelT+=0.5;
+      if(nivelT>2.0){
+        if(fps<26 && nivel>0){ nivel--; aplicarNivel(); nivelT=-2; }
+        else if(fps>52 && nivel<NIVELES.length-1){ nivel++; aplicarNivel(); nivelT=-2; }
+        else nivelT=0;
+      } }
+  }
+  giroVel=(PJ.yaw-yawAnt)/Math.max(dt,1e-3); yawAnt=PJ.yaw;
+  moverJugador(dt);
+  pulsA=Math.max(0,pulsA-dt); pulsB=Math.max(0,pulsB-dt);
+  seguirPasto(PJ.x,PJ.z);
+  PASTO_U.uT.value=T;
+  PASTO_U.uJug.value.set(PJ.x,PJ.y,PJ.z);
+  PASTO_U.uOjo.value.copy(camara.position);
+  matTierra.uniforms.uOjo.value.copy(camara.position);
+  matAgua.uniforms.uOjo.value.copy(camara.position);
+  matAgua.uniforms.uT.value=T;
+  cielo.position.copy(camara.position);
+  renderer.setRenderTarget(rtEsc);
+  renderer.render(escena, camara);
+  pintarPost();
+  dibujarMandos();
+  const st=document.getElementById('stats');
+  if(st) st.textContent=fps+' fps · '+Math.round(PJ.y)+' m s.n.m. · '+
+    (volar?'volando':'a pie')+' · calidad '+(nivel+1)+'/3';
+}
+/* ---------------------------------------------------------------- interfaz */
+function esconderAyuda(){ const a=document.getElementById('ayuda');
+  if(a && a.style.opacity!=='0') a.style.opacity='0'; }
+const $=(id)=>document.getElementById(id);
+$('bPanel').onclick=()=>{ $('panel').classList.toggle('show'); $('bPanel').classList.toggle('on'); };
+$('bCorrer').onclick=()=>{ correr=!correr; $('bCorrer').classList.toggle('on',correr); };
+$('bIr').onclick=()=>{ PJ.x=INICIO.x; PJ.z=INICIO.z; PJ.y=suelo(PJ.x,PJ.z);
+  PJ.vx=PJ.vz=PJ.vy=0; PJ.yaw=INICIO.yaw; PJ.cabeceo=-0.06; volar=false;
+  seguirPasto(PJ.x,PJ.z); ponerCamara(0.016); };
+function slider(id,vid,fn){
+  const s=$(id), v=$(vid);
+  const ap=()=>{ const x=parseFloat(s.value); v.textContent=x.toFixed(2); fn(x); };
+  s.addEventListener('input',ap); ap();
+}
+slider('sExp','vExp', x=>matGrado.uniforms.uExp.value=x);
+slider('sCon','vCon', x=>matGrado.uniforms.uCon.value=x);
+slider('sSat','vSat', x=>matGrado.uniforms.uSat.value=x);
+slider('sNit','vNit', x=>matGrado.uniforms.uNit.value=x);
+slider('sBloom','vBloom', x=>matGrado.uniforms.uBloom.value=x);
+slider('sSol','vSol', x=>ponerSol(x));
+slider('sNiebla','vNiebla', x=>ponerNiebla(x));
+slider('sDens','vDens', x=>{ for(const c of CAMPOS) if(c.clase==='pasto')
+  c.mat.uniforms.uDens.value=Math.min(x,NIVELES[nivel].dens); });
+slider('sArb','vArb', x=>{ for(const c of CAMPOS) if(c.clase==='arbol')
+  c.mat.uniforms.uDens.value=x; });
+slider('sDet','vDet', x=>matTierra.uniforms.uDet.value=x);
+
+acomodar();
+for(let i=0;i<CAMPOS.length;i++) DIST0[i]=CAMPOS[i].mat.uniforms.uDist.value;
+aplicarNivel();
+ponerSol(0.52); ponerNiebla(0.50);
+seguirPasto(PJ.x,PJ.z); ponerCamara(0.016);
+requestAnimationFrame(bucle);
+const _c=document.getElementById('carga'); if(_c) _c.remove();
+setTimeout(esconderAyuda, 12000);
+
+window.__dbg={
+  get fps(){ return fps; },
+  get jugador(){ return {x:+PJ.x.toFixed(1), y:+PJ.y.toFixed(1), z:+PJ.z.toFixed(1),
+    yaw:+PJ.yaw.toFixed(2), vel:+PJ.rapidez.toFixed(2), suelo:+suelo(PJ.x,PJ.z).toFixed(1),
+    volar}; },
+  get pantalla(){ return {ROT, caja:[CAJA.w,CAJA.h], rt:[rtEsc.width,rtEsc.height]}; },
+  poner(x,z,y){ PJ.x=x; PJ.z=z; PJ.y=(y===undefined?suelo(x,z):y); PJ.vx=PJ.vz=PJ.vy=0;
+    seguirPasto(x,z); ponerCamara(0.016); },
+  mirar(yaw,cab){ if(yaw!==undefined) PJ.yaw=yaw; if(cab!==undefined) PJ.cabeceo=cab;
+    ponerCamara(0.016); },
+  volar(v){ volar=!!v; PJ.vy=0; },
+  palanca(x,y){ palanca.activa=(x||y)!==0; palanca.x=x||0; palanca.y=y||0; },
+  calidad(n){ autoNivel=(n===undefined); if(n!==undefined){ nivel=n; aplicarNivel(); } return nivel; },
+  /* La prueba que importa acá: la altura que camina el jugador (JavaScript,
+     sobre el arreglo) y la que usa el pasto (GLSL, sobre la textura) tienen que
+     dar lo mismo. Se corre la del shader sobre una grilla, se lee de vuelta de
+     la GPU y se comparan. */
+  probarAltura(n){
+    n=n||64;
+    const rt=new THREE.WebGLRenderTarget(n,n,{type:THREE.FloatType,
+      minFilter:THREE.NearestFilter, magFilter:THREE.NearestFilter});
+    const mat=new THREE.ShaderMaterial({
+      uniforms:{tAlt:{value:REC.tAlt}, uAltInfo:{value:new THREE.Vector3(ALT_N,ALT_MIN,ALT_MAX)},
+                uEsc:{value:MEDIO*0.96}},
+      vertexShader:'varying vec2 c; void main(){ c=position.xy; gl_Position=vec4(position.xy,0.,1.); }',
+      fragmentShader:'precision highp float; varying vec2 c; uniform float uEsc;'+ALTURA_GLSL+
+        ' void main(){ gl_FragColor=vec4(alturaEn(c*uEsc),0.,0.,1.); }'});
+    const esc=new THREE.Scene(), cam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+    esc.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), mat));
+    const ant=renderer.getRenderTarget();
+    renderer.setRenderTarget(rt); renderer.render(esc,cam);
+    const buf=new Float32Array(n*n*4);
+    renderer.readRenderTargetPixels(rt,0,0,n,n,buf);
+    renderer.setRenderTarget(ant);
+    let peor=0,px=0,pz=0;
+    for(let j=0;j<n;j++) for(let i=0;i<n;i++){
+      const cx=((i+0.5)/n*2-1)*MEDIO*0.96, cz=((j+0.5)/n*2-1)*MEDIO*0.96;
+      const d=Math.abs(buf[(j*n+i)*4]-suelo(cx,cz));
+      if(d>peor){ peor=d; px=cx; pz=cz; }
+    }
+    rt.dispose(); mat.dispose();
+    return {peor:+peor.toFixed(4), x:+px.toFixed(0), z:+pz.toFixed(0)};
+  },
+  get piezas(){ let n=0,t=0; escena.traverse(o=>{ if(o.isMesh&&o.visible){ n++;
+    const g=o.geometry, ic=g.instanceCount||1;
+    t+=(g.index? g.index.count/3 : g.attributes.position.count/3)*ic; } });
+    return {mallas:n, tri:Math.round(t)}; }
+};
+
+</script>
+</body>
+</html>

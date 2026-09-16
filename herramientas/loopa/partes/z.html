@@ -1,0 +1,464 @@
+/* ══════════════════════ SONDAS ══════════════════════
+   Una afirmación sin número no vale. Y acá hay una que es la de la vuelta: el
+   oído se audita METIÉNDOLE LA BATERÍA DEL PROPIO JUEGO. Si no distingue los
+   tres sonidos que el juego sabe dibujar por código —que son limpios, repetibles
+   y de espectro conocido— no va a distinguir los de una boca, y eso se puede
+   afirmar sin micrófono y sin persona.
+
+   Todo lo que se pueda entrar por el mismo camino que el dedo, se entra así: los
+   toques de la grilla se despachan como PointerEvent de verdad sobre el lienzo. */
+window.__errs = [];
+window.addEventListener('error', e => window.__errs.push(String(e.message || e)));
+window.addEventListener('unhandledrejection', e => window.__errs.push('rej: ' + String(e.reason)));
+
+const esp = ms => new Promise(r => setTimeout(r, ms));
+function pev(tipo, px, py){
+  const r = LZE.getBoundingClientRect();
+  LZE.dispatchEvent(new PointerEvent(tipo, { pointerId: 1, pointerType: 'touch',
+    isPrimary: true, clientX: r.left + px, clientY: r.top + py,
+    bubbles: true, cancelable: true }));
+}
+
+/* un nodo aislado al que sólo le entra lo que la prueba dispara */
+let PRB = null;
+function pruebaNodo(){
+  audioDespierta();
+  if (!PRB){ PRB = AC.createGain(); PRB.gain.value = 1; }
+  return PRB;
+}
+
+window.__L = {
+  /* ══════════ ESTADO ══════════ */
+  estado(){
+    return { pant: PANT, lang: LANG, bpm: SEC.bpm, compases: SEC.compases,
+             pasos: secPasos(), segPaso: +segPaso().toFixed(5),
+             tocando: SEC.tocando, rec: SEC.estado, modo: SEC.modo,
+             paso: SEC.tocando ? secPasoAhora() : -1, compasVer: COMPAS_VER,
+             inst: SEC.inst, esc: ESCALAS[SEC.esc].id, sens: +SEC.sens.toFixed(2),
+             metro: SEC.metro, retardo: +SEC.retardo.toFixed(3), vol: +VOL.toFixed(2),
+             mic: MIC_EST, oido: oidoListo(), vacio: secVacio(),
+             cap: { golpes: CAP.golpes.length, tono: CAP.tono.length } };
+  },
+  marco(){
+    const m = document.getElementById('marco').getBoundingClientRect();
+    const l = LZE.getBoundingClientRect();
+    return { marco: [Math.round(m.width), Math.round(m.height)],
+             lienzo: [Math.round(l.width), Math.round(l.height)],
+             buffer: [LZ.width, LZ.height], pxr: PXR, ven: [innerWidth, innerHeight],
+             fila: +filaH().toFixed(1), celda: +celdaW().toFixed(1) };
+  },
+  ir(p){ verPantalla(p); return PANT; },
+  lang(l){ ponIdioma(l); return LANG; },
+  entra(){ entra(); return PANT; },
+  cfg(k, v){
+    if (k === 'bpm') ponBpm(v); else if (k === 'comp') ponComp(v);
+    else if (k === 'esc') ponEsc(v); else if (k === 'sens') ponSens(v);
+    else if (k === 'ret') ponRet(v); else if (k === 'metro') SEC.metro = !!v;
+    else if (k === 'vol'){ volMaestro(v); guarda('vol', v); }
+    else if (k === 'inst'){ SEC.inst = v; guarda('inst', v); }
+    return this.estado();
+  },
+
+  /* ══════════ LA GRILLA ══════════ */
+  patron(){
+    const o = {};
+    for (const p of PISTAS) o[p.id] = SEC.pistas[p.id].slice();
+    return o;
+  },
+  /* dónde cae cada celda en píxeles: lo que se dibuja y lo que se toca tienen
+     que ser la misma cuenta, si no el jugador toca una casilla y se enciende otra */
+  alinea(){
+    const mal = [], fh = filaH(), cw = celdaW();
+    for (let f = 0; f < PISTAS.length; f++) for (let c = 0; c < PASOS_COMPAS; c++){
+      const px = ROT_W + c*cw + cw/2, py = MED_H + HUECO + f*fh + fh/2;
+      const q = celdaEn(px, py);
+      if (!q || q.fila !== f || q.col !== c) mal.push([f, c, q]);
+    }
+    /* y los rótulos de la izquierda tienen que devolver su propia pista */
+    for (let f = 0; f < PISTAS.length; f++){
+      const r = rotEn(ROT_W/2, MED_H + HUECO + f*fh + fh/2);
+      if (r !== PISTAS[f].id) mal.push(['rot', f, r]);
+    }
+    return { celdas: PISTAS.length*PASOS_COMPAS, mal, ok: mal.length === 0 };
+  },
+  /* el dedo de verdad sobre el lienzo */
+  toca(fila, col){
+    const fh = filaH(), cw = celdaW();
+    pev('pointerdown', ROT_W + col*cw + cw/2, MED_H + HUECO + fila*fh + fh/2);
+    return SEC.pistas[PISTAS[fila].id][baseCompas() + col];
+  },
+  tocaRot(fila){
+    const fh = filaH();
+    pev('pointerdown', ROT_W/2, MED_H + HUECO + fila*fh + fh/2);
+    return SEC.mudas[PISTAS[fila].id];
+  },
+  pone(pista, pasos, midi){
+    for (const p of pasos) SEC.pistas[pista][p] = pista === 'melo' ? (midi || 60) : 1;
+    guardaPatron();
+    return SEC.pistas[pista].slice();
+  },
+  borra(p){ if (p) secBorra(p); else secLimpiaTodo(); guardaPatron(); return this.patron(); },
+  demo(){ secDemo(); guardaPatron(); return this.patron(); },
+  compas(n){ verCompas(n); pintaCompases(); return COMPAS_VER; },
+
+  /* ══════════ EL RELOJ ══════════
+     Lo único que hay que probar del secuenciador es que los instantes agendados
+     estén separados por el paso exacto: de eso depende que el ritmo no se
+     arrastre cuando el navegador pierde cuadros. Se mide envolviendo el disparo,
+     que es donde el instante ya está decidido. */
+  async reloj(ms){
+    audioDespierta();
+    const orig = secDispara, v = [];
+    secDispara = function(p, t){ v.push([p, t]); return orig(p, t); };
+    const antes = SEC.tocando;
+    if (!antes) secPlay();
+    await esp(ms || 1500);
+    if (!antes) secStop();
+    secDispara = orig;
+    const sp = segPaso(), d = [];
+    for (let i = 1; i < v.length; i++) d.push(v[i][1] - v[i-1][1]);
+    const err = d.map(x => Math.abs(x - sp)*1000);
+    /* y los pasos tienen que salir en orden y dar la vuelta */
+    let saltos = 0;
+    for (let i = 1; i < v.length; i++){
+      const q = (v[i][0] - v[i-1][0] + secPasos()) % secPasos();
+      if (q !== 1) saltos++;
+    }
+    return { disparos: v.length, pasoTeorico: +(sp*1000).toFixed(3),
+             pasoMedio: d.length ? +(d.reduce((a,b)=>a+b,0)/d.length*1000).toFixed(3) : 0,
+             errMax: err.length ? +Math.max.apply(null, err).toFixed(5) : 0,
+             saltos, vueltas: Math.floor(v.length/secPasos()) };
+  },
+
+  /* ══════════ EL OÍDO, AUDITADO CON LA BATERÍA DEL JUEGO ══════════
+     Se le enchufa un nodo al que sólo le entra lo que esta prueba dispara —ni la
+     claqueta ni el patrón— y se le mandan los tres golpes uno por uno. La matriz
+     que sale dice si cada sonido se detecta Y si se clasifica como el que es. */
+  /* ── LA SONDA TIENE QUE MUESTREAR AL RITMO DEL JUEGO ──
+     El flujo es la diferencia entre dos espectros, y la ventana del analizador
+     mide 23 ms: muestreando cada 5 ms las dos ventanas comparten el 78 % de las
+     muestras y el flujo sale aplastado por construcción. El bucle del juego
+     corre a 16,7 ms, así que ése es el hueco que hay que reproducir. */
+  async auditaOido(n, vol, hop){
+    n = n || 5; hop = hop || 17;
+    const D = pruebaNodo();
+    window.__oidoSonda = true;          /* el bucle deja de consumir el oído */
+    if (!oidoListo()) oidoInit(D); else oidoEntrada(D);
+    oidoCalibra();
+    /* el piso se mide en silencio: sin esta espera el primer golpe cae mientras
+       la calibración todavía está corriendo y se lo come */
+    const t0 = performance.now();
+    while (performance.now() - t0 < 1100){ oidoCuadro(AC.currentTime); await esp(hop); }
+    const M = {}, det = [], dia = [];
+    for (const tipo of ['bombo', 'caja', 'charles']){
+      M[tipo] = { bombo: 0, caja: 0, charles: 0, nada: 0 };
+      for (let k = 0; k < n; k++){
+        const t = AC.currentTime + 0.05, hasta = t + 0.30;
+        golpe(tipo, t, vol === undefined ? 1 : vol, D);
+        let vio = null, mf = 0, u0 = -1, mr = 0;
+        while (AC.currentTime < hasta){
+          const o = oidoCuadro(AC.currentTime);
+          if (o){
+            /* el umbral que importa es el de ANTES del golpe: el propio golpe
+               entra en la historia y sube la mediana, así que el máximo mide el
+               efecto y no la causa */
+            if (u0 < 0) u0 = o.umbral;
+            if (o.flujo > mf) mf = o.flujo;
+            if (o.rms > mr) mr = o.rms;
+            if (o.onset && !vio){ vio = o.tipo; det.push([tipo, o.tipo, +o.G.toFixed(3), +o.A.toFixed(3)]); }
+          }
+          await esp(hop);
+        }
+        if (k === 0) dia.push([tipo, +mf.toFixed(3), +u0.toFixed(3), +(mf/Math.max(1e-6,u0)).toFixed(2), +mr.toFixed(4)]);
+        M[tipo][vio || 'nada']++;
+        await esp(90);   /* más que el tiempo muerto, para que el próximo cuente */
+      }
+    }
+    window.__oidoSonda = false;
+    oidoEntrada(MIC);
+    let bien = 0, tot = 0;
+    for (const k in M){ bien += M[k][k]; for (const q in M[k]) tot += M[k][q]; }
+    return { n: tot, aciertos: bien, matriz: M, muestra: det.slice(0, 9),
+             /* flujo pico, umbral y rms del primero de cada clase: cuando algo
+                no se detecta, esto dice si fue el flujo o el nivel */
+             dia, piso: +PISO.toFixed(5) };
+  },
+  /* que el oído NO dispare con silencio es tan importante como que dispare:
+     un detector que ve golpes en el ruido del micrófono llena la grilla sola */
+  async silencio(ms){
+    const D = pruebaNodo();
+    window.__oidoSonda = true;
+    if (!oidoListo()) oidoInit(D); else oidoEntrada(D);
+    oidoCalibra();
+    let n = 0, c = 0;
+    const t0 = performance.now();
+    while (performance.now() - t0 < (ms || 2200)){
+      const o = oidoCuadro(AC.currentTime);
+      if (o){ c++; if (o.onset) n++; }
+      await esp(8);
+    }
+    window.__oidoSonda = false;
+    oidoEntrada(MIC);
+    return { cuadros: c, onsets: n, piso: +PISO.toFixed(5) };
+  },
+  /* ── EL DETECTOR DE TONO, SOBRE UN SENO DE FRECUENCIA CONOCIDA ──
+     YIN no toca el DOM ni el audio: entra un array y sale una frecuencia, así
+     que se puede probar exactamente, sin voz y sin margen de interpretación. */
+  yin(hz){
+    const sr = 11025, n = 512, x = new Float32Array(n);
+    const f = hz || [82.4, 110, 164.8, 220, 329.6, 440, 659.3, 880];
+    const lista = Array.isArray(f) ? f : [f];
+    const r = [];
+    for (const q of lista){
+      for (let i = 0; i < n; i++){
+        /* con un seno puro el problema es demasiado fácil: se le suman dos
+           armónicos, que es lo que trae una voz y lo que hace tropezar a la
+           autocorrelación pura en el período doble */
+        x[i] = 0.8*Math.sin(2*Math.PI*q*i/sr) + 0.35*Math.sin(4*Math.PI*q*i/sr)
+             + 0.18*Math.sin(6*Math.PI*q*i/sr);
+      }
+      const y = yin(x, sr, 0.16);
+      const cents = y ? 1200*Math.log2(y.f/q) : null;
+      r.push([q, y ? +y.f.toFixed(2) : null, cents === null ? null : +cents.toFixed(1),
+              y ? +y.claridad.toFixed(3) : 0]);
+    }
+    const c = r.filter(a => a[2] !== null).map(a => Math.abs(a[2]));
+    return { n: r.length, ok: r.filter(a => a[2] !== null && Math.abs(a[2]) < 35).length,
+             peor: c.length ? +Math.max.apply(null, c).toFixed(1) : null, filas: r };
+  },
+
+  /* la traza cuadro por cuadro de UN golpe: cuando el flujo pasa el umbral y aun
+     así no hay onset, la causa está en alguna de las otras tres condiciones */
+  async traza(tipo, hop){
+    hop = hop || 17;
+    const D = pruebaNodo();
+    window.__oidoSonda = true;
+    if (!oidoListo()) oidoInit(D); else oidoEntrada(D);
+    oidoCalibra();
+    const t0 = performance.now();
+    while (performance.now() - t0 < 1200){ oidoCuadro(AC.currentTime); await esp(hop); }
+    const v = [];
+    const t = AC.currentTime + 0.05, hasta = t + 0.32;
+    golpe(tipo || 'bombo', t, 1, D);
+    while (AC.currentTime < hasta){
+      const o = oidoCuadro(AC.currentTime);
+      if (o) v.push([+(o.t - t).toFixed(3), +o.flujo.toFixed(3), +o.umbral.toFixed(3),
+                     +o.rms.toFixed(4), o.onset ? 1 : 0, FLUJO.length,
+                     +(o.t - T_ULT).toFixed(3)]);
+      await esp(hop);
+    }
+    window.__oidoSonda = false;
+    oidoEntrada(MIC);
+    return { cols: 'dt flujo umbral rms onset nHist tDesdeUlt', filas: v };
+  },
+
+  /* perillas del oído, para barrerlas sin recompilar */
+  oidoCfg(o){
+    if (!ANA_E) return null;
+    if (o && o.maxdb !== undefined) ANA_E.maxDecibels = o.maxdb;
+    if (o && o.mindb !== undefined) ANA_E.minDecibels = o.mindb;
+    if (o && o.sens !== undefined) oidoSens(o.sens);
+    return { maxdb: ANA_E.maxDecibels, mindb: ANA_E.minDecibels, sens: SENS };
+  },
+
+  /* ══════════ DE LO OÍDO A LA GRILLA ══════════
+     La cuantización es lo que convierte un tarareo torcido en un patrón. Se le
+     meten golpes en instantes CORRIDOS a propósito y se comprueba que caigan en
+     el paso que les toca. */
+  cuantiza(desvios){
+    const sp = segPaso(), np = secPasos();
+    const d = desvios || [0, 0.018, -0.022, 0.040, -0.045];
+    SEC.tG0 = 0; SEC.retardo = 0;
+    const mal = [];
+    for (let p = 0; p < np; p++) for (const q of d){
+      const r = pasoDe(p*sp + q);
+      if (r !== p) mal.push([p, q, r]);
+    }
+    return { probados: np*d.length, mal: mal.slice(0, 8), n: mal.length,
+             pasoMs: +(sp*1000).toFixed(1), desvioMax: Math.max.apply(null, d.map(Math.abs))*1000 };
+  },
+  /* la grabación entera, sin micrófono: se pone el estado de grabación a mano y
+     se le entregan capturas por el MISMO camino que usa el bucle */
+  grabaFalsa(modo, plan){
+    audioDespierta();
+    if (!SEC.tocando) secPlay();
+    SEC.modo = modo; SEC.estado = 'grabando'; SEC.tG0 = 0;
+    CAP.golpes.length = 0; CAP.tono.length = 0;
+    const sp = segPaso();
+    if (modo === 'percu'){
+      for (const [tipo, paso, dev] of (plan || [['bombo',0,0],['charles',2,0.02],['caja',4,-0.03],['charles',6,0],['bombo',8,0.01],['charles',10,0],['caja',12,0.02],['charles',14,0]]))
+        secOye({ t: paso*sp + (dev || 0), onset: true, tipo, G: 0.5, A: 0.2, midi: null, rms: 0.1 });
+    } else {
+      const cuadros = Math.max(3, Math.round(sp*1000/OIDO_MS*0.6));
+      for (const [paso, midi] of (plan || [[0,60],[4,62],[8,64],[12,67]]))
+        for (let k = 0; k < cuadros; k++)
+          secOye({ t: paso*sp + k*(sp/cuadros)*0.9 + 0.002, onset: false, tipo: null,
+                   midi: midi + (k % 3 - 1)*0.28, claridad: 0.8, rms: 0.1 });
+    }
+    const r = secCierra();
+    return { res: r, patron: this.patron() };
+  },
+  escala(){
+    const casos = [], mal = [];
+    for (let e = 0; e < ESCALAS.length; e++){
+      for (let m = 48; m <= 72; m++){
+        const q = aEscala(m + 0.4, e, 0);
+        const E = ESCALAS[e];
+        if (E.g){
+          const r = ((q % 12) + 12) % 12;
+          if (E.g.indexOf(r) < 0) mal.push([E.id, m, q, r]);
+          if (Math.abs(q - m) > 2) mal.push([E.id, m, q, 'lejos']);
+        } else if (q !== Math.round(m + 0.4)) mal.push([E.id, m, q, 'croma']);
+        casos.push([E.id, m, q]);
+      }
+    }
+    return { probados: casos.length, mal: mal.slice(0, 8), n: mal.length };
+  },
+
+  /* ══════════ AUDIO ══════════ */
+  audio(){
+    return { ac: AC ? AC.state : 'no', sr: AC ? AC.sampleRate : 0,
+             vol: MAE ? +MAE.gain.value.toFixed(3) : null,
+             instrs: INSTRS.length, buffers: Object.keys(BUF).length,
+             cargado: cargado(SEC.inst) };
+  },
+  async cargaTodos(){
+    audioDespierta();
+    let ok = 0; const mal = [];
+    for (const I of INSTRS){
+      await cargaInstr(I.id);
+      const n = I.m.filter(m => !!BUF[I.id + '|' + m.n]).length;
+      if (n === I.m.length) ok++; else mal.push([I.id, n, I.m.length]);
+    }
+    return { instrumentos: INSTRS.length, ok, mal, buffers: Object.keys(BUF).length,
+             lp: INSTRS.map(I => [I.id, I.m.filter(m => !!m.lp).length]) };
+  },
+  /* nivel medido en el maestro, que es lo único que prueba que sonó */
+  async nivel(ms){
+    if (!ANA) return null;
+    const n = ANA.fftSize, d = new Float32Array(n);
+    let pico = 0, s = 0, c = 0;
+    const t = performance.now();
+    while (performance.now() - t < (ms || 700)){
+      ANA.getFloatTimeDomainData(d);
+      for (let i = 0; i < n; i++){ const v = Math.abs(d[i]); if (v > pico) pico = v; s += d[i]*d[i]; c++; }
+      await esp(12);
+    }
+    return { pico: +pico.toFixed(4), rms: +Math.sqrt(s/Math.max(1, c)).toFixed(4) };
+  },
+  async niveles(){
+    audioDespierta();
+    const r = [];
+    for (const tipo of ['bombo', 'caja', 'charles', 'click', 'clickF']){
+      await esp(120);
+      golpe(tipo, AC.currentTime + 0.03, 1);
+      r.push([tipo].concat(Object.values(await this.nivel(320))));
+    }
+    await cargaInstr(SEC.inst);
+    await esp(140);
+    nota(SEC.inst, 60, AC.currentTime + 0.03, 0.5, 0.7);
+    r.push(['nota'].concat(Object.values(await this.nivel(420))));
+    return r;
+  },
+
+  /* ══════════ DIBUJO E INTERFAZ ══════════ */
+  pinta(n, p){ pinta(n === undefined ? 0.4 : n, p === undefined ? 0.6 : p); return true; },
+  /* lo que cuesta un cuadro de dibujo y una lectura del oído, por separado */
+  costo(n){
+    n = n || 200;
+    let t = performance.now();
+    for (let i = 0; i < n; i++) pinta(0.4, 0.6);
+    const dib = (performance.now() - t)/n;
+    t = performance.now();
+    for (let i = 0; i < n; i++) oidoCuadro(AC ? AC.currentTime : i*0.016);
+    const oid = (performance.now() - t)/n;
+    return { dibujoMs: +dib.toFixed(3), oidoMs: +oid.toFixed(3),
+             totalMs: +(dib + oid).toFixed(3), presupuesto60: 16.7 };
+  },
+  brillo(){
+    pinta(0.4, 0.6);
+    const d = CX.getImageData(0, 0, LZ.width, LZ.height).data;
+    let s = 0, mx = 0, on = 0, n = 0;
+    for (let y = 0; y < LZ.height; y += 2) for (let x = 0; x < LZ.width; x += 2){
+      const i = (y*LZ.width + x)*4;
+      const l = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      s += l; n++; if (l > mx) mx = l; if (l > 10) on++;
+    }
+    return { medio: +(s/n).toFixed(2), max: Math.round(mx), pctOn: +(100*on/n).toFixed(2) };
+  },
+  solapes(){
+    const ids = ['bVolver', 'tTit', 'bCfg', 'estado', 'lz', 'compases',
+                 'bPlay', 'bPercu', 'bMelo', 'bBpmM', 'tBpm', 'bBpmP', 'bInst', 'bUndo', 'bBorra'];
+    const c = [];
+    const v = ids.map(i => document.getElementById(i)).filter(e => {
+      if (!e) return false;
+      const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+      return r.width > 1 && r.height > 1 && s.display !== 'none' &&
+             s.visibility !== 'hidden' && +s.opacity > 0.05;
+    });
+    for (let i = 0; i < v.length; i++) for (let j = i + 1; j < v.length; j++){
+      const a = v[i].getBoundingClientRect(), b = v[j].getBoundingClientRect();
+      if (a.left < b.right - 0.5 && b.left < a.right - 0.5 &&
+          a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) c.push(v[i].id + '×' + v[j].id);
+    }
+    const m = document.getElementById('marco').getBoundingClientRect();
+    const fuera = v.filter(e => { const r = e.getBoundingClientRect();
+      return r.bottom > m.bottom + 0.5 || r.top < m.top - 0.5; }).map(e => e.id);
+    return { n: v.length, choques: c, fuera };
+  },
+  panel(sel){
+    const p = document.querySelector(sel);
+    if (!p) return null;
+    const pr = p.getBoundingClientRect();
+    const hs = Array.prototype.slice.call(p.children).filter(e => {
+      const r = e.getBoundingClientRect(); return r.height > 1 && getComputedStyle(e).display !== 'none';
+    });
+    const c = [];
+    for (let i = 0; i < hs.length; i++) for (let j = i + 1; j < hs.length; j++){
+      const a = hs[i].getBoundingClientRect(), b = hs[j].getBoundingClientRect();
+      if (a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) c.push(i + '×' + j);
+    }
+    const alto = hs.length ? hs[hs.length-1].getBoundingClientRect().bottom - hs[0].getBoundingClientRect().top : 0;
+    return { visible: getComputedStyle(p).display !== 'none', n: hs.length,
+             alto: Math.round(alto), marco: Math.round(pr.height),
+             entra: alto <= pr.height, choques: c };
+  },
+  textos(){
+    const o = {};
+    for (const i of ['iSub','mSub','bJugar','bAjustes','mPie','mCred','aTit','aVol','aMetro',
+                     'aSens','aEsc','aComp','aRet','aIdi','bCerrarCfg','nTit','bCerrarInstr',
+                     'bPercu','bMelo','bInst','estado','tTit']){
+      const e = document.getElementById(i); if (e) o[i] = e.textContent;
+    }
+    return o;
+  },
+  instrs(){ return INSTRS.map(I => [I.id, I.fam, I.base, I.sost, I.nom[LI()], I.m.map(m => m.n)]); },
+
+  /* ══════════ EL BOTÓN DE GRABAR, POR EL CAMINO DEL DEDO ══════════
+     Lo que se prueba acá es la máquina de estados: que apretar arranque la
+     cuenta, que la cuenta pase a grabar en el paso cero, que la pista se limpie
+     antes y que al cerrar la vuelta vuelva a quieto. */
+  async grabaBoton(modo, ms){
+    document.getElementById(modo === 'percu' ? 'bPercu' : 'bMelo').click();
+    const v = [];
+    const t0 = performance.now();
+    let ant = '';
+    while (performance.now() - t0 < (ms || 9000)){
+      if (SEC.estado !== ant){ ant = SEC.estado; v.push([ant, SEC.tocando, SEC.tocando ? secPasoAhora() : -1]); }
+      if (v.length >= 3 && SEC.estado === 'quieto') break;
+      await esp(20);
+    }
+    return { fases: v, rec: SEC.estado, res: SEC.res || SEC.ultResumen, patron: this.patron() };
+  },
+  undo(){ return deshace(); },
+  cap(on){ if (on) window.__cap = []; else window.__cap = null; return !!window.__cap; },
+  capVer(){
+    const c = window.__cap || [];
+    return { n: c.length, onsets: c.filter(o => o.onset).length,
+             conTono: c.filter(o => o.midi !== null).length,
+             piso: c.length ? +c[c.length-1].piso.toFixed(5) : null };
+  }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,672 @@
+
+/* ============================================================
+   z.html — el arranque y el reloj.
+
+   PASO FIJO CON INTERPOLACION. Un telefono a 30 y una notebook a
+   144 tienen que jugar el MISMO juego: con dt variable la
+   velocidad, el alcance de las balas y el enfriamiento de la
+   esquiva salen distintos, y eso no es rendimiento, es otro
+   juego. La verdad se calcula 60 veces por segundo y el dibujo
+   rellena lo que sobra.
+   ============================================================ */
+
+const PASO = 1/60, PASO_TOPE = .25, PASOS_MAX = 8;
+let acum = 0, ultimo = performance.now();
+
+function cuadro(ahora){
+  requestAnimationFrame(cuadro);
+
+  let dt = (ahora - ultimo) / 1000;
+  ultimo = ahora;
+  /* una pestaña que estuvo dormida no simula cuarenta pasos de golpe */
+  if (dt > PASO_TOPE) dt = PASO_TOPE;
+  acum += dt;
+
+  entradaPaso();
+
+  let n = 0;
+  while (acum >= PASO && n < PASOS_MAX){ paso(PASO); acum -= PASO; n++; }
+  /* si el aparato no llega, va en camara lenta pero no se cuelga
+     persiguiendo el reloj */
+  if (n >= PASOS_MAX) acum = 0;
+
+  demoPaso();          /* la demo del menu no se puede morir: vuelve a empezar */
+
+  hudPinta();
+  dibuja();
+}
+
+/* ---------- el audio despierta con el primer gesto ---------- */
+/* ningun navegador deja sonar nada antes de un gesto de verdad, y
+   en captura sobre el documento: en cada boton habria que acordarse
+   en los que hay y en el proximo que se agregue. */
+let AUDIO_LISTO = false;
+function despierta(){
+  if (AUDIO_LISTO) return;
+  AUDIO_LISTO = true;
+  audioArma();
+  audioDespierta();
+  camaArranca();
+  const enJuego = JU.modo === 'juega';
+  musNivel(enJuego ? .55 : .26, enJuego ? MUS_JUEGO : MUS_MENU);
+  musica(enJuego ? 'm_pelea' : 'm_menu');
+}
+for (const ev of ['pointerdown','click','keydown'])
+  document.addEventListener(ev, despierta, {capture:true});
+
+/* ---------- arranque ---------- */
+guardaLee();
+IDIOMA = GUARDA.idioma || (navigator.language || 'en').slice(0,2).toLowerCase();
+if (!LANG[IDIOMA]) IDIOMA = 'en';
+
+armaIdiomas();
+armaBotones();
+armaDedo();
+armaTeclas();
+
+medir();
+addEventListener('resize', () => { medir(); });
+addEventListener('orientationchange', () => { setTimeout(medir, 120); });
+
+pintaIdioma();
+/* el idioma se pregunta la primera vez y despues se entra derecho
+   al menu: elegirlo adentro de un menu ya escrito en un idioma que
+   no se entiende no sirve para nada. */
+if (GUARDA.idioma) alMenu(); else verPan('#pIdioma');
+
+requestAnimationFrame(cuadro);
+
+/* ============================================================
+   LAS SONDAS. Una afirmacion sin numero no vale: de aca salen el
+   costo del cuadro, el auto-jugador y las cajas del HUD.
+   ============================================================ */
+window.__pozo = {
+  est(){
+    const P = JU.P;
+    return {
+      modo:JU.modo, piso:JU.piso, salaIx:JU.salaIx,
+      salas:JU.pisoObj ? JU.pisoObj.salas.length : 0,
+      limpias:JU.pisoObj ? JU.pisoObj.salas.filter(s => s.limpia).length : 0,
+      limpia:JU.sala ? !!JU.sala.limpia : false,
+      tipo:JU.sala ? JU.sala.tipo : '',
+      vivos:JU.enemV.filter(e => e.vivo).length,
+      bajas:JU.bajas, monedas:JU.monedas, seg:+JU.seg.toFixed(2),
+      vida:P ? P.vida : 0, vidaMax:P ? P.vidaMax : 0,
+      ener:P ? +P.ener.toFixed(1) : 0, arma:P ? ARMAS[P.arma].id : '',
+      x:P ? +P.x.toFixed(1) : 0, y:P ? +P.y.toFixed(1) : 0,
+      bal:JU.bal.length, eba:JU.eba.length, par:JU.par.length,
+      tut:TUT.on ? TUT.p : -1, idioma:IDIOMA,
+    };
+  },
+
+  /* el cuadro entero, dibujo incluido */
+  costo(n = 120){
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++){ paso(PASO); dibuja(); }
+    return {ms:+((performance.now()-t0)/n).toFixed(3), n};
+  },
+
+  /* mueve al jugador POR EL MISMO SITIO que el dedo */
+  anda(n, x, y, fuego){
+    if (BOT.on) return 'bot';
+    const a = {x:JU.P.x, y:JU.P.y};
+    for (let i = 0; i < n; i++){
+      ENT.x = x; ENT.y = y; ENT.fuego = !!fuego;
+      paso(PASO);
+    }
+    ENT.x = 0; ENT.y = 0; ENT.fuego = false;
+    return {rec:+hip(JU.P.x-a.x, JU.P.y-a.y).toFixed(1),
+            x:+JU.P.x.toFixed(1), y:+JU.P.y.toFixed(1)};
+  },
+
+  /* el auto-jugador. Escribe en ENT, o sea el mismo camino que el
+     dedo: con dos caminos estaria jugando otro juego y que gane no
+     probaria nada. */
+  juega(modo = 'honesto', pasosMax = 60000){
+    BOT.on = true; BOT.modo = modo; BOT.t = 0;
+    arrancaPartida();
+    TUT.on = false;
+    let n = 0;
+    while (n < pasosMax && (JU.modo === 'juega' || JU.modo === 'mejora')){
+      if (JU.modo === 'mejora') eligeMejora(mejorElige(modo));
+      else { paso(PASO); n++; }
+    }
+    const r = {modo, gano:JU.gano, piso:JU.piso, bajas:JU.bajas,
+               monedas:JU.monedas, seg:+JU.seg.toFixed(1), pasos:n,
+               vida:JU.P.vida, arma:ARMAS[JU.P.arma].id,
+               corto:n >= pasosMax};
+    BOT.on = false;
+    return r;
+  },
+
+  bot(v){ BOT.on = !!v; return BOT.on; },
+
+  /* HASTA DONDE LLEGA LA PELEA DEL JEFE. `mata` dice QUIEN mata; esto dice
+     POR CUANTO. Un bot que muere con el jefe al 10 % pide mover un numero;
+     uno que muere con el jefe al 55 % tiene el problema en otra parte, y los
+     dos se leen igual en la tabla de clases. Corre el bot honesto y, cada vez
+     que entra a una sala de jefe, anota con cuanta barra entro; al terminar
+     lee la vida que le quedaba al jefe. */
+  /* `barr` enciende y apaga el barrido de rumbos del bot (BOT.barr) para
+     poder medir el A/B con el MISMO binario. Y el valor vuelve en el
+     resultado a proposito: la primera vez que se probo esto el parametro
+     no existia, los dos lados corrieron con el barrido encendido, y el
+     60 contra 40 que salio era ruido puro. Con el eco en el JSON, un lado
+     que no cambio se ve de una. */
+  jefeMide(n = 40, pasosMax = 60000, barr = true){
+    const R = [];
+    for (let i = 0; i < n; i++){
+      BOT.on = true; BOT.modo = 'honesto'; BOT.t = 0; BOT.barr = !!barr;
+      arrancaPartida(); TUT.on = false;
+      let k = 0, ent = null, seg0 = 0, dentro = false;
+      const J = {pasos:0, sale:0, pega:0, conB:0, enCd:0, ener:0};
+      BALA_N.sale = 0; BALA_N.pega = 0;
+      while (k < pasosMax && (JU.modo === 'juega' || JU.modo === 'mejora')){
+        if (JU.modo === 'mejora'){ eligeMejora(mejorElige('honesto')); continue; }
+        const bs0 = BALA_N.sale, bp0 = BALA_N.pega;
+        paso(PASO); k++;
+        const es = !!(JU.sala && JU.sala.tipo === 'jefe');
+        /* LO QUE PASA ADENTRO DE LA SALA DEL JEFE, y no en la corrida entera.
+           `jf` dice cuanto le quedo al jefe; esto dice POR QUE: si las balas
+           no salen es energia o cadencia, si salen y no pegan es punteria, y
+           si pegan es que el jefe tiene demasiada vida. Los tres se leen igual
+           en un solo numero. */
+        if (es){ J.pasos++; J.sale += BALA_N.sale - bs0; J.pega += BALA_N.pega - bp0;
+          if (JU.P.blanco) J.conB++;
+          if (JU.P.cd > 0) J.enCd++;
+          J.ener += JU.P.ener; }
+        if (es && !dentro){ dentro = true; seg0 = JU.seg;
+          ent = {piso:JU.piso, vida:JU.P.vida, max:JU.P.vidaMax,
+                 arma:ARMAS[JU.P.arma].id, md:+JU.P.mDano.toFixed(2), cad:+JU.P.mCad.toFixed(2)}; }
+        if (!es) dentro = false;
+      }
+      const vv = JU.enemV.filter(e => e.vivo);
+      const j = vv.find(e => ENEM[e.cl].jefe);
+      R.push({piso:JU.piso, gano:JU.gano?1:0, vida:JU.P.vida,
+              ent, seg:+(JU.seg - seg0).toFixed(1),
+              jf: j ? +(j.vida/ENEM[j.cl].v).toFixed(3) : (ent && !JU.gano ? 0 : -1),
+              cl: j ? j.cl : '', esc: vv.length - (j ? 1 : 0), J});
+    }
+    BOT.on = false; BOT.barr = true;
+    const n10 = R.filter(x => x.piso === 10 && x.ent && x.ent.piso === 10);
+    const g10 = n10.filter(x => x.gano);
+    const m10 = n10.filter(x => !x.gano);
+    const med = a => { if (!a.length) return null;
+      const b = a.slice().sort((x,y)=>x-y); return +b[b.length>>1].toFixed(3); };
+    return {n, barr:!!barr, llegan10:n10.length, gana10:g10.length,
+            jfMed: med(m10.map(x => x.jf)),
+            jfDist: m10.map(x => x.jf).sort((a,b)=>a-b),
+            entVida: med(n10.map(x => x.ent.vida)),
+            entMax:  med(n10.map(x => x.ent.max)),
+            segMed:  med(m10.map(x => x.seg)),
+            armas: n10.reduce((o,x)=>(o[x.ent.arma]=(o[x.ent.arma]||0)+1,o),{}),
+            esc: m10.reduce((o,x)=>(o[x.esc]=(o[x.esc]||0)+1,o),{}),
+            sala: (()=>{ const A = n10.map(x=>x.J).filter(x=>x.pasos>10);
+              if (!A.length) return null;
+              const S = k => A.reduce((t,x)=>t+x[k],0), pa = S('pasos');
+              return {pasos: Math.round(pa/A.length),
+                      balEnemSeg: +(S('sale')/(pa/60)).toFixed(2),
+                      /* BALA_N es de balas ENEMIGAS: esto es cuantas del jefe
+                         le pegan al bot, o sea lo BIEN que esquiva. No es punteria. */
+                      meEmbocan: +(S('pega')/Math.max(1,S('sale'))).toFixed(3),
+                      pctBlanco: +(S('conB')/pa).toFixed(3),
+                      pctCd: +(S('enCd')/pa).toFixed(3),
+                      enerMed: Math.round(S('ener')/pa)}; })(),
+            pisos: R.reduce((o,x)=>(o[x.piso]=(o[x.piso]||0)+1,o),{})};
+  },
+
+  /* DE QUE SE MUERE UNO. juega() dice hasta que piso llega; esto dice por que
+     no llega mas lejos: cuantos corazones cuesta cada piso y QUIEN los cobra.
+     Sin esto, tocar un numero de la economia es adivinar. */
+  dano(n = 8){
+    const porPiso = {}, porCl = {}, porPC = {}, vidaP = {}, dists = [], fin = [];
+    const curaP = {};   /* lo que se curo por piso: el otro lado de la cuenta */
+    const cofP = {};   /* cofres que HABIA y cuantos se abrieron, por piso */
+  const comoCl = {};  /* como pego cada clase: cuerpo o bala, y con que esquiva */
+    /* LA TASA SE ACUMULA, como `dists`. Reseteada por corrida y leida al
+       final informa SOLO la ultima, y eso se ve porque `dist.n` y `pega` no
+       pueden describir la misma muestra (215 contra 13). */
+    let tSale = 0, tPega = 0;
+    /* Y EN QUE ESTADO ESTABA LA ESQUIVA: no se puede arreglar sin saber si
+       el problema es que no se podia esquivar o que esquivar no alcanzo. */
+    const esq = {cd:0, tarde:0, libre:0};
+    const mata = {}, rafaga = [], entraFatal = [];
+    for (let i = 0; i < n; i++){
+      DANO_LOG.length = 0; VIDA_LOG.length = 0; CURA_LOG.length = 0; COF_LOG.length = 0;
+      BALA_N.sale = 0; BALA_N.pega = 0;
+      const r = this.juega('honesto');
+      fin.push({p:r.piso, gano:r.gano?1:0, b:r.bajas, corto:r.corto?1:0});
+      for (const g of DANO_LOG){
+        porPiso[g.p] = (porPiso[g.p]||0) + g.c;
+        porCl[g.de]  = (porCl[g.de] ||0) + g.c;
+        const k = g.p + '|' + g.de;
+        porPC[k] = (porPC[k]||0) + g.c;
+        /* COMO PEGO, y no solo cuanto. Un jefe que cobra por CUERPO se arregla
+           con la distancia de pelea; uno que cobra por BALA, con el abanico o
+           con la cadencia. Con una sola columna los dos se leen igual. */
+        const dd = (comoCl[g.de] ||= {golpes:0, cor:0, cuerpo:0, bala:0, cd:0, tarde:0, libre:0});
+        dd.golpes++; dd.cor += g.c;
+        if (g.dist >= 0){
+          dd.bala++;
+          dists.push(Math.round(g.dist));
+          if (g.cd > 0){        esq.cd++;    dd.cd++;    }  // no se podia esquivar
+          else if (g.esqT > 0){ esq.tarde++; dd.tarde++; }  // se esquivo y la invencibilidad ya se vencio
+          else {                esq.libre++; dd.libre++; }  // la esquiva estaba lista y no se uso
+        } else dd.cuerpo++;
+      }
+      /* CON QUE ARMA SE PELEA CADA PISO. El dano que cobra una sala es una
+         funcion del TIEMPO que se pasa adentro, y el tiempo lo pone el arma:
+         con la pistola pelada (34,6 de dano por segundo) contra la cruz (95,7)
+         la misma sala dura tres veces mas y ataca tres veces mas. Sin esta
+         columna, "el piso 6 cobra mucho" no distingue un piso duro de un arma
+         que se quedo corta. */
+      /* CON CUANTA VIDA SE LLEGA. Si al piso que cobra se entra con la barra
+         llena, el problema es ese piso; si se entra herido, el problema esta
+         antes y ese piso solo es donde termina de cobrar. */
+      for (const e of VIDA_LOG){
+        if (!vidaP[e.p]) vidaP[e.p] = {s:0, n:0, dps:0, arm:{}};
+        vidaP[e.p].s += e.v; vidaP[e.p].n++;
+        /* POR LA MISMA PUERTA QUE `cofreVale`: con la cuenta escrita aca y
+           alla, la sonda informa un dps y el bot elige con otro. */
+        vidaP[e.p].dps += dps(ARMA_ID[e.a], {mDano:e.md});
+        vidaP[e.p].arm[e.a] = (vidaP[e.p].arm[e.a]||0) + 1;
+      }
+      for (const g of CURA_LOG) curaP[g.p] = (curaP[g.p]||0) + g.c;
+      for (const g of COF_LOG){
+        const c = (cofP[g.p] ||= {hay:0, abrio:0, n:0});
+        c.hay += g.hay; c.abrio += g.abrio; c.n++;
+      }
+      tSale += BALA_N.sale; tPega += BALA_N.pega;
+      /* EL GOLPE FATAL, que es lo unico que dice DE QUE se muere uno. Todo lo
+         de arriba mide lo que cuesta cada clase REPARTIDO en la corrida, y eso
+         no distingue morir de a un rozon a lo largo de diez minutos de morir de
+         un abrazo con la barra casi llena. Y la ventana de los ultimos cinco
+         segundos separa las dos: si la mitad de la barra se fue en cinco
+         segundos, lo que mata es una RAFAGA y se arregla con la sala; si se fue
+         de a poco, lo que mata es la economia y se arregla con la cura. */
+      if (DANO_LOG.length){
+        const u = DANO_LOG[DANO_LOG.length-1];
+        if (u.v <= 0){
+          mata[u.de] = (mata[u.de]||0) + 1;
+          let raf = 0; for (const g of DANO_LOG) if (u.t - g.t <= 5) raf += g.c;
+          rafaga.push(raf);
+          /* Y CON CUANTA VIDA SE ENTRO AL PISO QUE MATO. `vidaAlEntrar` no lo
+             puede decir: solo mide las corridas que SOBREVIVIERON ese piso, asi
+             que informa la barra de los que zafaron. Esto mide la de los que no.
+             Si se entra sano, el problema es la sala; si se entra herido, el
+             problema esta antes y esa sala solo es donde termina de cobrar. */
+          const pri = DANO_LOG.find(g => g.p === u.p);
+          if (pri) entraFatal.push(pri.v + pri.c);
+        }
+      }
+    }
+    const pp = {}; for (const k in porPiso) pp[k] = +(porPiso[k]/n).toFixed(2);
+    const pc = {}; for (const k in porCl)  pc[k]  = +(porCl[k] /n).toFixed(2);
+    /* EL CRUCE, que es lo unico que dice QUE ARREGLAR. "el piso 3 cobra 4,8" y
+       "el tirador cobra 8,3" son dos hechos que no se tocan: puede ser que el
+       tirador cobre eso repartido en seis pisos y el 3 lo cobre otro. */
+    const pxc = {};
+    for (const k in porPC){ const [p,c] = k.split('|');
+      (pxc[p] = pxc[p] || {})[c] = +(porPC[k]/n).toFixed(2); }
+    const vp = {}; for (const k in vidaP)
+      vp[k] = {ent:+(vidaP[k].s/vidaP[k].n).toFixed(2), n:vidaP[k].n,
+               dps:+(vidaP[k].dps/vidaP[k].n).toFixed(0), arm:vidaP[k].arm};
+    return {n, pisoMedio:+(fin.reduce((a,b)=>a+b.p,0)/n).toFixed(2),
+            gana:fin.filter(f=>f.gano).length, cortos:fin.filter(f=>f.corto).length,
+            corPorPiso:pp, corPorClase:pc, pisoXclase:pxc, vidaAlEntrar:vp,
+            cofres:(()=>{ const o={}; for(const k in cofP){ const c=cofP[k];
+              o[k]={hay:+(c.hay/c.n).toFixed(2), abrio:+(c.abrio/c.n).toFixed(2), n:c.n}; }
+              return o; })(),
+            curaPorPiso:(()=>{ const o={}; for(const k in curaP) o[k]=+(curaP[k]/n).toFixed(2);
+              /* NETO: lo que el piso le saca de verdad a la barra. Un piso que cobra 6
+                 y devuelve 4 no es el mismo problema que uno que cobra 6 y no devuelve
+                 nada, y con las dos columnas sueltas los dos se leen igual. */
+              const net={}; for(const k in pp) net[k]=+(pp[k]-(o[k]||0)).toFixed(2);
+              return {cura:o, neto:net}; })(),
+            balaDist:(()=>{ if(!dists.length) return null; const d=dists.slice().sort((a,b)=>a-b);
+              const q=f=>d[Math.min(d.length-1, Math.floor(d.length*f))];
+              return {n:d.length, med:+(d.reduce((a,b)=>a+b,0)/d.length).toFixed(0),
+                      p10:q(.10), p25:q(.25), p50:q(.50), p75:q(.75), p90:q(.90)}; })(),
+            balaTasa:{sale:tSale, pega:tPega,
+              pct:tSale ? +(tPega/tSale*100).toFixed(1) : 0},
+            comoPega:(()=>{ const o={};
+              for (const k in comoCl){ const d=comoCl[k];
+                o[k]={gol:+(d.golpes/n).toFixed(2), cor:+(d.cor/n).toFixed(2),
+                      cuerpoPct:+(d.cuerpo/d.golpes*100).toFixed(0),
+                      cd:d.cd, tarde:d.tarde, libre:d.libre}; }
+              return o; })(),
+            balaEsq:esq,
+            mata,
+            rafaga:(()=>{ if(!rafaga.length) return null;
+              const d=rafaga.slice().sort((a,b)=>a-b);
+              return {n:d.length, med:+(d.reduce((a,b)=>a+b,0)/d.length).toFixed(2),
+                      p50:d[Math.floor(d.length*.5)], p90:d[Math.floor(d.length*.9)]}; })(),
+            entraFatal:(()=>{ if(!entraFatal.length) return null;
+              const d=entraFatal.slice().sort((a,b)=>a-b);
+              return {n:d.length, med:+(d.reduce((a,b)=>a+b,0)/d.length).toFixed(2),
+                      p10:d[Math.floor(d.length*.1)], p50:d[Math.floor(d.length*.5)],
+                      p90:d[Math.floor(d.length*.9)]}; })(),
+            fin};
+  },
+
+  /* POR QUE NO SALE DE LA SALA. Todo lo de arriba mide el resultado; esto mide
+     la DECISION: que celda pidio el bot, si hay campo hasta ahi, y que le salio
+     por ENT. Sin esto, "se queda quieto" es un sintoma sin causa. */
+  porque(pasosMax = 40000){
+    BOT.on = true; BOT.modo = 'honesto'; BOT.t = 0;
+    arrancaPartida(); TUT.on = false;
+    let n = 0, claveAnt = -1, quieto = 0;
+    while (n < pasosMax && (JU.modo === 'juega' || JU.modo === 'mejora')){
+      if (JU.modo === 'mejora'){ eligeMejora(mejorElige('honesto')); continue; }
+      /* NO SE MIDE "no se movio": el cuerpo tirita, orbita y esquiva sin avanzar
+         un metro de progreso. Se mide NO CAMBIA DE SALA durante medio minuto, y
+         esa es la definicion ancha a proposito: cubre las dos trabas — la sala
+         limpia de la que no encuentra la puerta Y la sala sucia que no limpia. */
+      const clave = JU.piso*100 + JU.salaIx;
+      quieto = clave === claveAnt ? quieto+1 : 0;
+      claveAnt = clave;
+      if (quieto > 1800) break;
+      paso(PASO); n++;
+    }
+    const P = JU.P, s = JU.sala;
+    const cx = Math.floor(P.x/CELDA), cy = Math.floor(P.y/CELDA);
+    const destino = JU.pisoObj.salas.findIndex(q => q.esc);
+    const r = rutaSalas(JU.salaIx, destino < 0 ? 0 : destino);
+    const sig = r.length ? r[0] : -1;
+    let kk = null;
+    for (const k in s.vec) if (s.vec[k] === sig) kk = k;
+    if (!kk) for (const k in s.vec){ kk = k; break; }
+    const pc = kk ? PUERTA_C[kk] : null;
+    const campo = pc ? botCampo(s, pc.x, pc.y) : null;
+    BOT.on = false;
+    return {pasos:n, trab:quieto > 1800, piso:JU.piso, sala:JU.salaIx,
+            lim:s.limpia?1:0, tipo:s.tipo, esc:!!s.esc,
+            cofre: s.cofre ? (s.cofre.abierto?'abierto':'cerrado') : 'no',
+            x:Math.round(P.x), y:Math.round(P.y), cel:[cx,cy],
+            vec:Object.keys(s.vec), destino, ruta:r, sig, kk,
+            puerta: pc, dPuerta: campo ? campo[(pc.y)*SALA_W + pc.x] : null,
+            dAqui: campo ? campo[cy*SALA_W + cx] : null,
+            bloqPuerta: pc ? bloq(s, pc.x, pc.y) : null,
+            ent:{x:+ENT.x.toFixed(3), y:+ENT.y.toFixed(3)},
+            vivos: JU.enemV.filter(e => e.vivo).length};
+  },
+
+  /* CUANTO PEGA POR MINUTO. Lo unico que explica que el bot honesto mate MENOS
+     que el que se mueve al azar es una de tres: tira menos, apunta peor, o se
+     come mas golpes. Se miden las tres por mil pasos, que es lo unico que se
+     puede comparar entre dos corridas de largo distinto. */
+  tasa(modo = 'honesto', pasosMax = 60000){
+    BOT.on = true; BOT.modo = modo; BOT.t = 0;
+    arrancaPartida(); TUT.on = false;
+    let n = 0, tiros = 0, balas = 0, dano = 0, recib = 0, sumE = 0, mE = 0;
+    let vidAnt = JU.P.vida;
+    /* la vida de los bichos se mide sala por sala: al entrar a una nueva la
+       referencia se rehace, si no un cambio de sala cuenta como dano */
+    let ref = new Map(), salaAnt = -1, pisoAnt = -1;
+    while (n < pasosMax && (JU.modo === 'juega' || JU.modo === 'mejora')){
+      if (JU.modo === 'mejora'){ eligeMejora(mejorElige('honesto')); continue; }
+      const b0 = JU.bal.length;
+      paso(PASO); n++;
+      if (JU.bal.length > b0){ tiros++; balas += JU.bal.length - b0; }
+      if (JU.salaIx !== salaAnt || JU.piso !== pisoAnt){
+        salaAnt = JU.salaIx; pisoAnt = JU.piso; ref = new Map();
+      }
+      for (const e of JU.enemV){
+        const v = e.vivo ? e.vida : 0;
+        if (ref.has(e)){ const a = ref.get(e); if (v < a) dano += a - v; }
+        ref.set(e, v);
+      }
+      if (JU.P.vida < vidAnt) recib += vidAnt - JU.P.vida;
+      vidAnt = JU.P.vida;
+      sumE += JU.P.ener; mE = Math.max(mE, JU.P.ener);
+    }
+    const k = 1000 / Math.max(1, n);
+    const r = {modo, pasos:n, piso:JU.piso, bajas:JU.bajas,
+               tiros:+(tiros*k).toFixed(1), balas:+(balas*k).toFixed(1),
+               dano:+(dano*k).toFixed(1), recib:+(recib*k).toFixed(2),
+               matas:+(JU.bajas*k).toFixed(2),
+               enerMed:+(sumE/Math.max(1,n)).toFixed(1), enerMax:Math.round(mE),
+               arma:ARMAS[JU.P.arma].id};
+    BOT.on = false;
+    return r;
+  },
+
+  /* POR QUE NO MATA. El bot navega bien y la sala no se limpia: hay que ver
+     si las balas SALEN, si hay BLANCO, y si el blanco esta a la vista. */
+  pelea(pasosMax = 12000, cada = 600){
+    BOT.on = true; BOT.modo = 'honesto'; BOT.t = 0;
+    arrancaPartida(); TUT.on = false;
+    const tz = []; let n = 0, tiros = 0;
+    const balAnt = () => JU.bal.length;
+    let ultBal = 0;
+    while (n < pasosMax && (JU.modo === 'juega' || JU.modo === 'mejora')){
+      if (JU.modo === 'mejora'){ eligeMejora(mejorElige('honesto')); continue; }
+      const b0 = JU.bal.length;
+      paso(PASO); n++;
+      if (JU.bal.length > b0) tiros++;
+      if (n % cada === 0){
+        const P = JU.P, s = JU.sala;
+        const vv = JU.enemV.filter(e => e.vivo);
+        const b = P.blanco;
+        tz.push({n, sala:JU.salaIx, lim:s.limpia?1:0,
+                 x:Math.round(P.x), y:Math.round(P.y),
+                 ener:Math.round(P.ener), cd:+P.cd.toFixed(2),
+                 mira:+P.mira.toFixed(2), tiros,
+                 bal:JU.bal.length, blanco: b ? Math.round(hip(b.x-P.x,b.y-P.y)) : -1,
+                 en: vv.map(e => ({t:e.tipo, v:Math.round(e.vida),
+                                   d:Math.round(hip(e.x-P.x,e.y-P.y))}))});
+      }
+    }
+    BOT.on = false;
+    return {pasos:n, tiros, piso:JU.piso, tz};
+  },
+
+  /* POR QUE SE TRABA. Corre hasta que el bot deja de avanzar y devuelve
+     la decision entera: a que sala va, que ruta salio, que puerta eligio
+     y que le escribio a ENT. */
+  atasco(pasosMax = 40000){
+    BOT.on = true; BOT.modo = 'honesto'; BOT.t = 0;
+    arrancaPartida(); TUT.on = false;
+    let n = 0, quieto = 0, ax = 0, ay = 0;
+    while (n < pasosMax && (JU.modo === 'juega' || JU.modo === 'mejora')){
+      if (JU.modo === 'mejora'){ eligeMejora(mejorElige('honesto')); continue; }
+      paso(PASO); n++;
+      const d = Math.abs(JU.P.x-ax) + Math.abs(JU.P.y-ay);
+      ax = JU.P.x; ay = JU.P.y;
+      quieto = d < .05 ? quieto+1 : 0;
+      if (quieto > 200) break;
+    }
+    const s = JU.sala, P = JU.P;
+    const dest = JU.pisoObj.salas.findIndex(x => x.esc);
+    const ru = rutaSalas(JU.salaIx, dest < 0 ? 0 : dest);
+    const sig = ru.length ? ru[0] : -1;
+    let kk = null;
+    for (const k in s.vec) if (s.vec[k] === sig) kk = k;
+    const fb = kk; if (!kk) for (const k in s.vec){ kk = k; break; }
+    const pc = kk ? PUERTA_C[kk] : null;
+    BOT.on = false;
+    return {n, quieto, trab: quieto > 200,
+            modo:JU.modo, piso:JU.piso, sala:JU.salaIx, tipo:s.tipo,
+            lim:!!s.limpia, esc:!!s.esc, cofre:s.cofre ? !s.cofre.abierto : false,
+            vivos:JU.enemV.filter(e => e.vivo).length,
+            x:+P.x.toFixed(1), y:+P.y.toFixed(1),
+            vec:s.vec, dest, ruta:ru, sig, kk, porRuta:!!fb,
+            meta: pc ? [(pc.x+.5)*CELDA, (pc.y+.5)*CELDA] : null,
+            ent:{x:+ENT.x.toFixed(3), y:+ENT.y.toFixed(3)},
+            mapa: JU.pisoObj.salas.map((z,i) => ({i, esc:!!z.esc, vec:z.vec}))};
+  },
+
+  /* LA TRAZA. "El bot se traba" no es un diagnostico: hay que ver DONDE.
+     Corre una partida y saca una foto cada `cada` pasos. */
+  traza(modo = 'honesto', pasosMax = 40000, cada = 900){
+    BOT.on = true; BOT.modo = modo; BOT.t = 0;
+    arrancaPartida();
+    TUT.on = false;
+    const tz = [];
+    let n = 0;
+    while (n < pasosMax && (JU.modo === 'juega' || JU.modo === 'mejora')){
+      if (JU.modo === 'mejora'){ eligeMejora(mejorElige('honesto')); continue; }
+      paso(PASO); n++;
+      if (n % cada === 0){
+        const P = JU.P, s = JU.sala;
+        tz.push({n, piso:JU.piso, sala:JU.salaIx,
+                 lim:s ? (s.limpia?1:0) : -1,
+                 tipo:s ? s.tipo : '',
+                 esc:s && s.esc ? 1 : 0,
+                 viv:JU.enemV.filter(e => e.vivo).length,
+                 x:Math.round(P.x), y:Math.round(P.y), vida:P.vida});
+      }
+    }
+    BOT.on = false;
+    return {modo, gano:JU.gano, piso:JU.piso, pasos:n, corto:n >= pasosMax, tz};
+  },
+
+  /* salta a un piso para poder fotografiarlo */
+  piso(n, sem){
+    if (JU.modo === 'menu') { arrancaPartida(); TUT.on = false; }
+    entraPiso(n, sem === undefined ? ((Math.random()*1e9)|0) : sem);
+    verPan(null);
+    return this.est();
+  },
+
+  /* el mapa del piso, para ver que las salas encadenan */
+  mapa(){
+    if (!JU.pisoObj) return null;
+    return JU.pisoObj.salas.map((s,i) => ({
+      i, gx:s.gx, gy:s.gy, tipo:s.tipo, limpia:!!s.limpia,
+      enem:s.enem.length, vec:Object.keys(s.vec).join(''),
+      esc:!!s.esc, cofre:!!s.cofre,
+    }));
+  },
+
+  /* CAJAS DEL HUD. Un elemento nuevo que ninguna prueba mira es un
+     solapamiento esperando. Se mide con offsetLeft/offsetTop porque
+     getBoundingClientRect devuelve la caja alineada a los ejes y
+     el marco puede estar transformado. */
+  cajas(){
+    const ids = ['#vidas','#barE','#piso','#salas','#arma','#monN',
+                 '#joy','#bTira','#bEsq','#bUsa','#bPau','#pista','#aviso'];
+    const c = [];
+    for (const id of ids){
+      const e = $(id); if (!e) continue;
+      const cs = getComputedStyle(e);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity < .05) continue;
+      let x = 0, y = 0, n = e;
+      while (n && n.id !== 'marco'){ x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+      const w = e.offsetWidth, h = e.offsetHeight;
+      if (!w || !h) continue;
+      c.push({id, x, y, w, h});
+    }
+    const ch = [], fuera = [];
+    for (let i = 0; i < c.length; i++){
+      if (c[i].x < -1 || c[i].y < -1 || c[i].x + c[i].w > AN + 1 || c[i].y + c[i].h > AL + 1)
+        fuera.push(c[i].id);
+      for (let j = i+1; j < c.length; j++){
+        const a = c[i], b = c[j];
+        if (a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h)
+          ch.push(a.id + '×' + b.id);
+      }
+    }
+    return {n:c.length, choques:ch, fuera, marco:[AN, AL]};
+  },
+
+  /* lo que se ve de verdad: lee el buffer del lienzo */
+  brillo(){
+    const d = CX.getImageData(0, 0, CV.width, CV.height).data;
+    let s = 0, mx = 0, n = 0;
+    for (let i = 0; i < d.length; i += 16){
+      const l = (d[i]*.299 + d[i+1]*.587 + d[i+2]*.114);
+      s += l; if (l > mx) mx = l; n++;
+    }
+    return {medio:+(s/n).toFixed(1), max:+mx.toFixed(0)};
+  },
+
+  /* el audio pasa por el maestro, asi que esto prueba que SONO */
+  son(k, ms = 320){
+    if (!ANA) return Promise.resolve({error:'sin audio'});
+    if (k) son(k);
+    return new Promise(res => {
+      const b = new Uint8Array(ANA.fftSize);
+      let pico = 0, sum = 0, n = 0;
+      const t0 = performance.now();
+      const paso2 = () => {
+        ANA.getByteTimeDomainData(b);
+        for (let i = 0; i < b.length; i++){
+          const v = Math.abs(b[i] - 128) / 128;
+          if (v > pico) pico = v; sum += v*v; n++;
+        }
+        if (performance.now() - t0 < ms) requestAnimationFrame(paso2);
+        else res({k:k||'(fondo)', pico:+pico.toFixed(4), rms:+Math.sqrt(sum/n).toFixed(4)});
+      };
+      paso2();
+    });
+  },
+
+  /* cuantas muestras decodificaron de verdad y que pista esta puesta. Sin esto,
+     "el audio anda" solo quiere decir que la llamada no tiro. */
+  audio(){ return mueEst(); },
+  /* los sprites. `falta` es la lista de los que ni llegaron ni fallaron
+     todavia: llamar a esto antes de que decodifiquen devuelve una lista
+     larga y eso NO es un defecto, es que la sonda pregunto temprano. */
+  /* EL ESPEJO DEL CUERPO. Dibuja el sprite de una clase con la transformacion
+     de cada lado y devuelve el centroide horizontal de la tinta, en fraccion
+     de su propio ancho. Si el sprite es de PERFIL los dos numeros tienen que
+     ser simetricos respecto de .5; si es de FRENTE quedan los dos en .5 y
+     espejarlo no cambia un pixel — que es justo lo que hace que la regla se
+     pueda aplicar a los siete sin una segunda lista. */
+  espejo(cl){
+    const k = 'en_' + cl, im = IMG[k];
+    if (!im) return {error:'sin sprite', k};
+    const W = 128, H = 128, out = {};
+    for (const lado of ['der', 'izq']){
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const x = c.getContext('2d');
+      x.translate(W/2, H/2);
+      if (lado === 'izq') x.scale(-1, 1);
+      x.drawImage(im, -W/2, -H/2, W, H);
+      const d = x.getImageData(0, 0, W, H).data;
+      let sx = 0, sa = 0;
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++){
+        const a = d[(j*W+i)*4+3]; sx += a*i; sa += a;
+      }
+      out[lado] = sa ? +((sx/sa)/(W-1)).toFixed(4) : null;
+    }
+    out.perfil = out.der !== null && Math.abs(out.der - .5) > .01;
+    return out;
+  },
+  /* y el otro medio: que la CONDICION elija el lado correcto, y que la banda
+     muerta aguante un enemigo pasando por la vertical del jugador. `parpadeos`
+     cuenta cuantas veces cambia de lado a lo largo del cruce: sin banda son
+     tantos como cuadros con dx del otro signo, con banda tiene que ser 1. */
+  espejoCond(){
+    const e = {};
+    const pon = (dx, dy) => {
+      const cs = Math.cos(Math.atan2(dy, dx));
+      if (cs < -ESP_BANDA) e.esp = true; else if (cs > ESP_BANDA) e.esp = false;
+      return !!e.esp;
+    };
+    const lados = {jugADerecha:pon(1,0), jugAIzquierda:pon(-1,0),
+                   vuelveDerecha:pon(1,0)};
+    /* cruce de verdad: el enemigo pasa por debajo del jugador de izquierda a
+       derecha con el ruido del propio paso encima. */
+    e.esp = false; let par = 0, ant = false, sinB = 0, antS = false;
+    for (let i = 0; i <= 200; i++){
+      const dx = (i - 100) * 0.004 + Math.sin(i * 2.1) * 0.006, dy = -1;
+      const v = pon(dx, dy); if (i && v !== ant) par++; ant = v;
+      const w = Math.cos(Math.atan2(dy, dx)) < 0;
+      if (i && w !== antS) sinB++; antS = w;
+    }
+    return Object.assign(lados, {banda:ESP_BANDA, parpadeos:par, sinBanda:sinB});
+  },
+  assets(){
+    const hay = (typeof IMGB === 'object' && IMGB) ? Object.keys(IMGB) : [];
+    return {n:IMG_N, tot:IMG_TOT, mal:IMG_MAL.slice(),
+            falta:hay.filter(k => !IMG[k] && IMG_MAL.indexOf(k) < 0)};
+  },
+  idioma(l){ ponIdioma(l); return IDIOMA; },
+  pan(id){ verPan(id); return JU.modo; },
+  auditar(n = 60){ return auditaPisos(n); },
+};
+</script>
+</body>
+</html>

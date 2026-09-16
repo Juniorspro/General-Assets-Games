@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>POZO</title>
+<style>
+:root{
+  --mw:412px; --mh:892px;
+  --tinta:#f2eee6; --tinta2:#9aa0ad; --fondo:#0d1017; --piedra:#1a1f2b;
+  --acento:#ffc857; --rojo:#ef4b5c; --azul:#4fc3f7; --verde:#69db7c;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#05070b;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  touch-action:none;user-select:none;-webkit-user-select:none}
+#marco{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:var(--mw);height:var(--mh);overflow:hidden;background:var(--fondo)}
+canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block;image-rendering:auto}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;left:0;top:0;width:100%;pointer-events:none;z-index:3;
+  padding:calc(8px + env(safe-area-inset-top,0px)) 10px 0}
+#vidas{display:flex;gap:4px;align-items:center;width:fit-content}
+.cor{width:17px;height:17px;position:relative}
+.cor i{position:absolute;inset:0;background:var(--rojo);
+  clip-path:polygon(50% 100%,8% 44%,8% 22%,28% 8%,50% 22%,72% 8%,92% 22%,92% 44%);
+  opacity:.16}
+.cor.on i{opacity:1}
+#barE{margin-top:6px;height:7px;width:128px;background:#1b2030;border-radius:4px;overflow:hidden}
+#barE b{display:block;height:100%;width:100%;background:linear-gradient(90deg,#2f7fd8,var(--azul));
+  border-radius:4px;transition:width .06s linear}
+#dcha{position:absolute;right:10px;top:calc(8px + env(safe-area-inset-top,0px));text-align:right}
+#piso{font:800 15px/1 system-ui;color:var(--tinta);letter-spacing:.06em}
+#salas{font:700 10px/1.5 system-ui;color:var(--tinta2);letter-spacing:.08em}
+#arma{font:800 11px/1 system-ui;color:var(--acento);letter-spacing:.09em;margin-top:5px}
+#monN{font:700 11px/1 system-ui;color:#e8c06a;margin-top:4px}
+
+#aviso{position:absolute;left:0;right:0;top:36%;text-align:center;pointer-events:none;z-index:6;
+  font:900 20px/1.2 system-ui;color:var(--tinta);letter-spacing:.05em;opacity:0;
+  text-shadow:0 2px 12px #000,0 0 3px #000;transition:opacity .18s}
+#aviso.on{opacity:1}
+#pista{position:absolute;left:14px;right:56px;bottom:194px;text-align:center;pointer-events:none;z-index:5;
+  font:700 12px/1.4 system-ui;color:var(--tinta2);letter-spacing:.04em;opacity:0;
+  text-shadow:0 1px 6px #000;transition:opacity .2s;padding:0 10px}
+#pista.on{opacity:1}
+
+/* ---------- dedo ---------- */
+#dedo{position:absolute;left:0;top:0;width:100%;height:100%;z-index:4;pointer-events:none}
+body.jugando #dedo{pointer-events:auto}
+#hud,#dedo{opacity:0;transition:opacity .22s}
+body.jugando #hud,body.jugando #dedo{opacity:1}
+#joy{position:absolute;left:18px;bottom:calc(26px + env(safe-area-inset-bottom,0px));
+  width:132px;height:132px;border-radius:50%;
+  background:rgba(255,255,255,.045);border:2px solid rgba(255,255,255,.13)}
+#joyP{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;
+  border-radius:50%;background:rgba(242,238,230,.30);border:2px solid rgba(242,238,230,.5)}
+.bt{position:absolute;border-radius:50%;display:grid;place-items:center;
+  font:900 11px/1 system-ui;letter-spacing:.06em;color:var(--tinta);
+  background:rgba(255,255,255,.055);border:2px solid rgba(255,255,255,.16)}
+.bt.on{background:rgba(255,255,255,.2)}
+.bt.no{opacity:.32}
+#bTira{right:16px;bottom:calc(30px + env(safe-area-inset-bottom,0px));width:104px;height:104px;
+  border-color:rgba(255,200,87,.45);background:rgba(255,200,87,.11)}
+#bEsq{right:126px;bottom:calc(96px + env(safe-area-inset-bottom,0px));width:64px;height:64px;
+  border-color:rgba(79,195,247,.45);background:rgba(79,195,247,.10)}
+#bUsa{right:130px;bottom:calc(20px + env(safe-area-inset-bottom,0px));width:60px;height:60px;
+  border-color:rgba(105,219,124,.5);background:rgba(105,219,124,.12);display:none}
+#bUsa.ver{display:grid}
+#bPau{position:absolute;right:10px;bottom:calc(178px + env(safe-area-inset-bottom,0px));
+  width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+  font:800 13px/1 system-ui;color:var(--tinta2)}
+
+/* ---------- pantallas ---------- */
+.pan{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;padding:26px 22px;text-align:center;
+  background:rgba(5,7,11,.93)}
+/* EL MENU DEJA VER LA DEMO. El velo no es una opacidad pareja: se cierra en la
+   franja donde va el texto y se abre arriba y abajo, que es donde se juega.
+   Los porcentajes estan MEDIDOS: el titulo arranca en 36,4% y el record
+   termina en 63,6%, asi que la banda cerrada va de 33 a 68. */
+#pMenu{background:linear-gradient(180deg,
+  rgba(5,7,11,.26)  0%,  rgba(5,7,11,.30) 28%,
+  rgba(5,7,11,.93) 34%,  rgba(5,7,11,.93) 67%,
+  rgba(5,7,11,.30) 73%,  rgba(5,7,11,.26) 100%)}
+#pMenu h1{margin-bottom:2px}
+/* el pie cae en el 96% del alto, o sea sobre el suelo de la sala: su contraste
+   se lo pone el, no el velo */
+#pMenu #pie{text-shadow:0 1px 5px #000,0 0 3px #000}
+.pan.on{display:flex}
+h1{font:900 46px/1 system-ui;letter-spacing:.20em;color:var(--tinta);
+  text-shadow:0 3px 0 #000,0 0 26px rgba(255,200,87,.3)}
+
+/* --- la piel generada del menu -----------------------------------------
+   Las placas y el cartel PISAN al dibujo de CSS cuando llegan, no lo
+   reemplazan: sin ellas el menu es exactamente el de antes, que ya funciona.
+   La clase la pone el JS recien cuando la imagen decodifico, asi que nunca
+   hay un boton vacio ni un titulo invisible esperando bytes. */
+body.pl-b .b{background-image:var(--pl-b);background-size:100% 100%;
+  background-repeat:no-repeat;background-color:transparent;border-color:transparent}
+body.pl-bo .b.p{background-image:var(--pl-bo)}
+/* EL ALTO SALE DE LA PROPORCION DE LA CAJA HORNEADA (300x84), no de un numero
+   elegido: con un alto a ojo el cartel se estira y se nota antes que cualquier
+   otra cosa del menu. El texto se queda debajo de respaldo y se recorta. */
+body.pl-logo #pMenu h1{color:transparent;text-shadow:none;overflow:hidden;
+  width:min(300px,64vw);height:calc(min(300px,64vw)*.28);margin-inline:auto;
+  background:var(--pl-logo) center/contain no-repeat}
+h2{font:900 24px/1.1 system-ui;letter-spacing:.09em;color:var(--tinta)}
+.sub{font:700 12px/1.5 system-ui;color:var(--tinta2);letter-spacing:.07em;max-width:300px}
+.b{padding:13px 30px;border-radius:12px;border:2px solid rgba(255,255,255,.16);
+  background:rgba(255,255,255,.06);color:var(--tinta);
+  font:900 14px/1 system-ui;letter-spacing:.12em;min-width:186px}
+.b.p{background:linear-gradient(180deg,#ffd06a,#e9a92f);color:#221803;border-color:#ffe6a6}
+.b.ch{min-width:0;padding:9px 15px;font-size:11px;letter-spacing:.09em}
+.fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.dat{font:700 12px/1.7 system-ui;color:var(--tinta2);letter-spacing:.05em}
+.dat b{color:var(--tinta)}
+#pie{position:absolute;bottom:16px;left:0;right:0;text-align:center;
+  font:700 9px/1.5 system-ui;color:#4d5666;letter-spacing:.1em;padding:0 20px}
+
+/* mejoras */
+#mejL{display:flex;flex-direction:column;gap:9px;width:100%;max-width:310px}
+.mj{padding:12px 14px;border-radius:12px;text-align:left;
+  border:2px solid rgba(255,255,255,.13);background:rgba(255,255,255,.05);color:var(--tinta)}
+.mj b{display:block;font:900 13px/1.3 system-ui;letter-spacing:.06em;color:var(--acento)}
+.mj i{display:block;font:700 11px/1.4 system-ui;font-style:normal;color:var(--tinta2);margin-top:3px}
+
+#idL .b{min-width:118px}
+#fiT.mal{color:var(--rojo)}
+#fiT.bien{color:var(--acento)}
+</style>
+</head>
+<body>
+<div id="marco">
+  <canvas id="c"></canvas>
+
+  <div id="hud">
+    <div id="vidas"></div>
+    <div id="barE"><b></b></div>
+    <div id="dcha">
+      <div id="piso">1</div>
+      <div id="salas">0/0</div>
+      <div id="arma">PISTOLA</div>
+      <div id="monN">0</div>
+    </div>
+  </div>
+
+  <div id="aviso"></div>
+  <div id="pista"></div>
+
+  <div id="dedo">
+    <div id="joy"><div id="joyP"></div></div>
+    <div class="bt" id="bTira">FUEGO</div>
+    <div class="bt" id="bEsq">ESQ</div>
+    <div class="bt" id="bUsa">USAR</div>
+    <div id="bPau">| |</div>
+  </div>
+
+  <div class="pan on" id="pIdioma">
+    <h1>POZO</h1>
+    <div class="sub" id="idT">Elegí tu idioma</div>
+    <div class="fila" id="idL"></div>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <h1>POZO</h1>
+    <div class="sub" id="mSub"></div>
+    <button class="b p" id="mJugar"></button>
+    <div class="fila">
+      <button class="b ch" id="mTuto"></button>
+      <button class="b ch" id="mIdioma"></button>
+    </div>
+    <div class="dat" id="mRec"></div>
+    <div id="pie"></div>
+  </div>
+
+  <div class="pan" id="pMejora">
+    <h2 id="mjT"></h2>
+    <div class="sub" id="mjS"></div>
+    <div id="mejL"></div>
+  </div>
+
+  <div class="pan" id="pPausa">
+    <h2 id="paT"></h2>
+    <button class="b p" id="paSigue"></button>
+    <button class="b" id="paMenu"></button>
+  </div>
+
+  <div class="pan" id="pFin">
+    <h2 id="fiT"></h2>
+    <div class="sub" id="fiS"></div>
+    <div class="dat" id="fiD"></div>
+    <button class="b p" id="fiOtra"></button>
+    <button class="b" id="fiMenu"></button>
+  </div>
+</div>
+
+<script type="module">

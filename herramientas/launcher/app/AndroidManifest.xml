@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="ai.rezona.aero">
+
+  <!-- ── LO ÚNICO QUE HACE FALTA PARA VER LAS APPS ──
+       Desde Android 11 la lista de paquetes está filtrada. `QUERY_ALL_PACKAGES`
+       es un permiso sensible que Play rechaza salvo excepción; un `<queries>`
+       con el intent de LANZADOR devuelve exactamente lo mismo que un launcher
+       necesita y no pide permiso ninguno. -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.LAUNCHER" />
+    </intent>
+  </queries>
+
+  <!-- ── EL ASISTENTE NECESITA SALIR A LA RED, Y NADIE MÁS ──
+       Es el único pedazo del launcher que habla con afuera: la llamada a
+       api.anthropic.com con la llave del dueño. Sin este permiso la llamada
+       falla con un error de red y el asistente **cae al intérprete local y
+       dice «no se pudo conectar»** — o sea que el defecto no se ve como un
+       permiso que falta, se ve como una llave que no anda. Los iconos no lo
+       necesitan: los sirve el propio cliente del WebView desde el aparato. -->
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+  <!-- ── LA CÁMARA DE LA CASA ──
+       El visor sale de `getUserMedia` adentro del WebView, y para eso hacen
+       falta DOS permisos y no uno: el de Android, que se pide en ejecución, y
+       el del WebView, que llega como `onPermissionRequest` y hay que conceder a
+       mano. Sin el segundo el `getUserMedia` falla con NotAllowedError aunque
+       la app tenga el permiso del sistema — y desde afuera eso se ve como que
+       la cámara está rota. `required="false"` para que un aparato sin cámara
+       trasera pueda instalar el launcher igual: la cámara es una parte, no el
+       launcher. -->
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-feature android:name="android.hardware.camera" android:required="false" />
+  <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+  <uses-feature android:name="android.software.home_screen" android:required="false" />
+
+  <application
+      android:label="@string/app_name"
+      android:icon="@mipmap/ic_launcher"
+      android:hardwareAccelerated="true"
+      android:largeHeap="true"
+      android:supportsRtl="true"
+      android:theme="@style/TemaAero">
+
+    <!-- ── LAS CUATRO BANDERAS QUE HACEN QUE SEA UN LAUNCHER Y NO UNA APP ──
+         `HOME` + `DEFAULT` lo ofrecen como pantalla de inicio.
+         `singleTask` + `stateNotNeeded` hacen que apretar HOME vuelva a la
+         instancia que ya está viva en vez de recrearla: sin eso, cada vuelta al
+         escritorio recarga el WebView entero y se ve el parpadeo.
+         `clearTaskOnLaunch` deja el launcher siempre en su pantalla principal.
+         Y `excludeFromRecents` lo saca de la lista de recientes, donde no va. -->
+    <activity
+        android:name=".Principal"
+        android:exported="true"
+        android:launchMode="singleTask"
+        android:stateNotNeeded="true"
+        android:clearTaskOnLaunch="true"
+        android:excludeFromRecents="true"
+        android:screenOrientation="portrait"
+        android:windowSoftInputMode="adjustResize"
+        android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density">
+      <!-- ── LA ENTRADA NORMAL, QUE NO SE APAGA NUNCA ──
+           Es lo único que garantiza que se pueda VOLVER: si el que se apaga
+           fuera éste, alguien que deja de usar Aero como inicio no tendría
+           forma de abrirlo desde el cajón del otro launcher para volver a
+           ponerlo. `apps()` filtra el propio paquete, así que este icono se ve
+           en el otro launcher y no en el nuestro, que es lo correcto. -->
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+        <category android:name="android.intent.category.DEFAULT" />
+      </intent-filter>
+    </activity>
+
+    <!-- ── SER PANTALLA DE INICIO ES UN COMPONENTE APARTE, Y POR ESO SE PUEDE APAGAR ──
+         Con `HOME` metido en el mismo `intent-filter` que `LAUNCHER` no hay
+         forma de renunciar al puesto sin desaparecer del cajón: son la misma
+         puerta. Separado en un alias, `setComponentEnabledSetting` lo apaga y
+         Android se queda sin más candidato que el otro launcher — y si es el
+         único que queda, va derecho ahí sin preguntar. Eso es «sacarlo
+         automáticamente», y no hace falta ningún permiso: es un componente
+         propio. -->
+    <activity-alias
+        android:name=".Inicio"
+        android:targetActivity=".Principal"
+        android:exported="true"
+        android:enabled="true"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.HOME" />
+        <category android:name="android.intent.category.DEFAULT" />
+      </intent-filter>
+    </activity-alias>
+
+    <!-- ── LAS NOTIFICACIONES DE VERDAD ──
+         Un launcher no puede leerlas desde su actividad: Android sólo se las
+         cuenta a un `NotificationListenerService`, y el dueño tiene que
+         habilitarlo a mano en una pantalla del sistema. El permiso va en el
+         `android:permission` del servicio y no en un `<uses-permission>`: lo
+         que declara es que SÓLO el sistema puede enlazarse a esto, que es lo
+         que impide que cualquier app se cuelgue de nuestro servicio. -->
+    <!-- ── LA ACCESIBILIDAD, QUE NO ES LO MISMO QUE LAS NOTIFICACIONES ──
+         Pedido textual: «que pida accesos a accesibilidad para que sirva la
+         barra de notificaciones». Son dos permisos distintos y hacen dos cosas
+         distintas: `Escucha` LEE las notificaciones y esto BAJA la barra del
+         sistema. Los dos están, y el panel dice cuál falta.
+         El permiso va en el `android:permission` del servicio: declara que
+         sólo el sistema puede enlazarse, que es lo que impide que otra app se
+         cuelgue del nuestro. -->
+    <service
+        android:name=".Acces"
+        android:exported="true"
+        android:label="@string/app_name"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+      </intent-filter>
+      <meta-data android:name="android.accessibilityservice"
+                 android:resource="@xml/acces" />
+    </service>
+
+    <service
+        android:name=".Escucha"
+        android:exported="true"
+        android:label="@string/app_name"
+        android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>

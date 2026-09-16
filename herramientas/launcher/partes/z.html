@@ -1,0 +1,2508 @@
+
+/* ══════════════════════ EL PUENTE DE MENTIRA Y LAS SONDAS ══════════════════════
+   Esto es lo último del módulo. Dos cosas:
+
+   1. `APPS_DEMO` — la lista que usa `cargaApps()` cuando no hay `AND`, o sea en
+      un navegador. Sin ella el escritorio abriría vacío y no habría forma de
+      mirar la reja, el cajón ni el vidrio sin compilar el APK y tener el
+      teléfono en la mano. Los nombres de paquete son los de verdad a propósito:
+      la siembra de la primera vez busca «dialer», «camera», «chrome», así que
+      con nombres inventados ese camino —que es el que ve alguien que acaba de
+      instalar— nunca se probaría.
+
+   2. `window.__A` — las sondas. Como en todos los juegos de este repo: nada de
+      «se ve bien», números. `cajas()` mide solapamientos de verdad, `refr()`
+      dice cuántos filtros de refracción se armaron y `estado()` devuelve el
+      escritorio entero para poder afirmar qué se está mirando. */
+
+const APPS_DEMO = [
+  { p: 'com.android.dialer',        n: 'Teléfono',    s: 1 },
+  { p: 'com.android.messaging',     n: 'Mensajes',    s: 1 },
+  { p: 'com.android.camera2',       n: 'Cámara',      s: 1 },
+  { p: 'com.android.chrome',        n: 'Chrome',      s: 0 },
+  { p: 'com.whatsapp',              n: 'WhatsApp',    s: 0 },
+  { p: 'com.spotify.music',         n: 'Spotify',     s: 0 },
+  { p: 'com.instagram.android',     n: 'Instagram',   s: 0 },
+  { p: 'com.zhiliaoapp.musically',  n: 'TikTok',      s: 0 },
+  { p: 'com.google.android.youtube',n: 'YouTube',     s: 0 },
+  { p: 'com.google.android.gm',     n: 'Gmail',       s: 0 },
+  { p: 'com.google.android.apps.maps', n: 'Maps',     s: 0 },
+  { p: 'com.android.vending',       n: 'Play Store',  s: 1 },
+  { p: 'com.mercadolibre',          n: 'Mercado Libre', s: 0 },
+  { p: 'com.mercadopago.wallet',    n: 'Mercado Pago',s: 0 },
+  { p: 'ar.com.santander.rio.mbanking', n: 'Santander', s: 0 },
+  { p: 'com.netflix.mediaclient',   n: 'Netflix',     s: 0 },
+  { p: 'com.discord',               n: 'Discord',     s: 0 },
+  { p: 'com.twitter.android',       n: 'X',           s: 0 },
+  { p: 'org.telegram.messenger',    n: 'Telegram',    s: 0 },
+  { p: 'com.android.settings',      n: 'Ajustes',     s: 1 },
+  { p: 'com.android.calculator2',   n: 'Calculadora', s: 1 },
+  { p: 'com.google.android.calendar', n: 'Calendario',s: 0 },
+  { p: 'com.google.android.deskclock', n: 'Reloj',    s: 1 },
+  { p: 'com.adobe.lrmobile',        n: 'Lightroom',   s: 0 },
+  { p: 'com.rappi.customer',        n: 'Rappi',       s: 0 },
+  { p: 'com.ubercab',               n: 'Uber',        s: 0 },
+  { p: 'ai.rezona.aero',            n: 'Aero',        s: 0 },
+  { p: 'com.duolingo',              n: 'Duolingo',    s: 0 }
+];
+
+window.__errs = [];
+addEventListener('error', e => { window.__errs.push(String(e.message)); });
+addEventListener('unhandledrejection', e => { window.__errs.push('rej:' + String(e.reason)); });
+
+window.__A = {
+  /* qué hay puesto ahora mismo */
+  estado(){
+    return { apps: APPS.length, inicio: INICIO.length, dock: DOCK.length,
+             pag: PAG, npag: NPAG, filas: FILAS, cols: COLS,
+             cajon: CAJON, menu: MENU_PKG, lang: LANG, puente: HAY_AND,
+             hora: $('#hora') ? $('#hora').textContent : null,
+             fecha: $('#fecha').textContent };
+  },
+  /* ── LOS FILTROS DE REFRACCIÓN SE CUENTAN ──
+     `backdrop-filter:url(#…)` que apunta a un filtro que no se armó no falla:
+     se ignora en silencio y el vidrio queda liso. La única forma de saber que
+     el líquido está puesto es contar los <filter> y sus <feImage> con datos. */
+  refr(){
+    const el = $$('.refr');
+    const f = Array.prototype.slice.call(document.querySelectorAll('#svgdefs filter'));
+    return { elems: el.length, filtros: f.length,
+             ids: f.map(x => x.id),
+             mapas: f.map(x => { const i = x.querySelector('feImage');
+                                 return i ? (i.getAttribute('href') || '').slice(0, 22) : null; }),
+             soporta: CSS.supports('backdrop-filter', 'url(#x)') ||
+                      CSS.supports('-webkit-backdrop-filter', 'url(#x)') };
+  },
+  /* solapamientos entre lo que está visible, medido con las cajas de verdad */
+  cajas(){
+    const sel = ['#reloj', '#buscaCaja', '#hoja', '#puntos', '#dock', '#bat'];
+    const r = [];
+    for (const s of sel){
+      const e = $(s); if (!e) continue;
+      const b = e.getBoundingClientRect();
+      const cs = getComputedStyle(e);
+      if (b.width < 2 || b.height < 2 || cs.display === 'none' || +cs.opacity < 0.05) continue;
+      r.push({ s, x: Math.round(b.left), y: Math.round(b.top),
+               w: Math.round(b.width), h: Math.round(b.height) });
+    }
+    const choques = [];
+    for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++){
+      const a = r[i], b = r[j];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)
+        choques.push(a.s + ' × ' + b.s);
+    }
+    return { n: r.length, cajas: r, choques,
+             fuera: r.filter(z => z.y + z.h > innerHeight + 1 || z.y < -1).map(z => z.s) };
+  },
+  /* ── EL FONDO YA NO CUESTA UN CUADRO, Y ESO SE MIDE ──
+     Con el lienzo procedural había un `costo(n)` que promediaba milisegundos de
+     dibujo. Ahora no hay nada que dibujar: lo que se puede comprobar es que la
+     foto decodificó, que está puesta y que no quedó ni un lienzo vivo. */
+  fondo(){
+    const f = $('#fondo');
+    const bg = getComputedStyle(f).backgroundImage;
+    return { ok: FONDO_OK, puesta: f.classList.contains('ok'),
+             hondo: f.classList.contains('hondo'),
+             tieneFoto: bg.indexOf('data:image') >= 0,
+             lienzos: document.querySelectorAll('canvas').length,
+             bytes: IMG_FONDO.length, w: FONDO_W, h: FONDO_H };
+  },
+  /* el widget entero, que es lo único que hay arriba */
+  widget(){
+    return { hora: $('#hora').textContent, fecha: $('#fecha').textContent,
+             pct: $('#wPct').textContent, saludo: $('#wSaludo').textContent,
+             arco: +getComputedStyle($('#wArco')).strokeDashoffset.replace('px', '').trim(),
+             color: getComputedStyle($('#wArco')).stroke };
+  },
+  bateria(n, c){ ponBateria({ n: n, c: !!c }); return this.widget(); },
+  /* el riel de letras */
+  riel(){
+    const p = $('#rielPomo');
+    return { letras: LETRAS,
+             visto: $('#riel').style.display !== 'none',
+             pomo: [p.style.top, p.style.height],
+             burbuja: $('#burbuja').textContent,
+             mirando: LETRAS.length ? letraVisible() : null,
+             encabezados: $$('#cajLista .let').map(e => e.textContent) };
+  },
+  /* ── UN TELÉFONO DE VERDAD NO TIENE 32 APPS ──
+     El banco trae 32 y una pantalla real tiene entre 60 y 150. Todo lo que
+     cuesta en el cajón escala con ese número —el barrido de `.ap`, las anclas
+     del riel, cuántos nodos cambian de clase— así que medir con 32 contesta que
+     no cuesta nada y no describe el aparato del dueño. */
+  appsFalsas(n){
+    const base = APPS.slice();
+    if (!base.length) return 0;
+    const out = [];
+    for (let i = 0; out.length < n; i++){
+      for (const a of base){
+        if (out.length >= n) break;
+        out.push({ p: a.p + (i ? '.v' + i : ''),
+                   n: (i ? String.fromCharCode(65 + (i * 7) % 26) + ' ' : '') + a.n,
+                   s: a.s });
+      }
+    }
+    /* ── SE ORDENA, PORQUE LA LISTA DE VERDAD VIENE ORDENADA ──
+       Sin esto la letra cambia decenas de veces y `LETRAS` sale con repetidas:
+       el riel mide 21 letras contra 19 anclas y la caché de `midaAnclas` deja
+       de ser monótona, o sea que la búsqueda binaria mediría otra cosa que el
+       juego. Una prueba que no representa lo que se mira no sirve para mirarlo. */
+    out.sort((a, b) => norm(a.n) < norm(b.n) ? -1 : norm(a.n) > norm(b.n) ? 1 : 0);
+    APPS = out;
+    POR_PKG = {}; for (const a of APPS) POR_PKG[a.p] = a;
+    pintaCajon(); rejaRepinta();
+    return APPS.length;
+  },
+
+  /* ── LO QUE CUESTA UN CUADRO DE SCROLL DEL CAJÓN ──
+     Es el número que importa para «va muy lag»: `scroll` dispara docenas de
+     veces por segundo y el manejador mide posiciones, o sea que obliga al
+     navegador a recalcular el layout. Se corre el cuerpo del manejador tal cual
+     lo corre el scroll, con la lista puesta en sitios distintos para que no
+     conteste desde una caché. */
+  cajCosto(n){
+    const l = $('#cajLista');
+    const max = Math.max(1, l.scrollHeight - l.clientHeight);
+    n = n || 120;
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++){
+      l.scrollTop = (i/n)*max;
+      marcaRiel(letraVisible());
+    }
+    const ms = performance.now() - t0;
+    return { pasos: n, msTotal: +ms.toFixed(1), msPorCuadro: +(ms/n).toFixed(3),
+             res: $$('#cajLista .ap.res').length, apps: $$('#cajLista .ap').length };
+  },
+  /* arrastrar la barra por el camino del dedo, no llamando a vaALetra */
+  arrastraRiel(frac){
+    const r = $('#riel'), c = r.getBoundingClientRect();
+    const y = c.top + 10 + frac*(c.height - 20);
+    const o = { bubbles: true, pointerId: 31, isPrimary: true, clientX: c.left + 15, clientY: y };
+    r.dispatchEvent(new PointerEvent('pointerdown', o));
+    r.dispatchEvent(new PointerEvent('pointermove', o));
+    const q = this.riel();
+    r.dispatchEvent(new PointerEvent('pointerup', o));
+    return q;
+  },
+  letra(L){ vaALetra(L); return { marcada: L, top: $('#cajLista').scrollTop,
+                                  mirando: letraVisible() }; },
+  /* ── LA MASCOTA ──
+     Lo que prueba que una animación ANIMA no es su nombre: es cuánto se movió
+     un hueso. `mascHueso` devuelve la posición de mundo de uno, así que una
+     pose que no mueve nada se ve en el número y no en la pantalla. */
+  masc(){
+    const m = $('#mascota'), cv = $('#mLien');
+    return { on: m.classList.contains('on'), zzz: m.classList.contains('zzz'),
+             hoy: MASC_HOY, anim: L3.anim, corre: L3.on, listo: L3.listo,
+             huesos: L3.nH, tri: LEMI.nt, vert: LEMI.nv,
+             lienzo: cv ? [cv.width, cv.height] : null,
+             celda: [MASC_W, MASC_H],
+             pixelado: cv ? getComputedStyle(cv).imageRendering : null,
+             cabe: mascCabe(), zetas: $$('#mZ span').length };
+  },
+  mascVer(n){ mascPone(n); return this.masc(); },
+  /* el teclado por el mismo camino que usa el puente de Android */
+  teclado(h){ window.__teclado(h); return this.mascCaja(); },
+  /* ── SE MIDE EN LAYOUT Y NO EN PANTALLA ──
+     `getBoundingClientRect` devuelve la caja ALINEADA A LOS EJES, o sea que le
+     entra el `rotate(3deg)` del cabeceo: sobre un muñeco de 148x202 eso infla
+     la caja a 158x209 y el borde de abajo baja seis pixeles que no existen.
+     `offsetTop`/`offsetHeight` no pasan por ninguna transformacion. */
+  mascCaja(){
+    const m = $('#mascota'), c = $('#cajBusca').getBoundingClientRect();
+    const b = m.offsetTop + m.offsetHeight;
+    return { on: m.classList.contains('on'), teclado: TECLADO,
+             caja: [m.offsetLeft, m.offsetTop, m.offsetWidth, m.offsetHeight],
+             sobreTeclado: Math.round(innerHeight - TECLADO - b),
+             busca: Math.round(c.bottom), alto: innerHeight };
+  },
+  /* ══════════ ARRASTRAR Y CARPETAS ══════════
+     El gesto va por el camino de verdad: `pointerdown`, la espera del mantener,
+     `pointermove` y `pointerup` sobre lo que haya en ese punto. Llamando a
+     `arrSuelta` directo se saltearía justamente el filtro que decide de dónde
+     salió el icono, que es lo único que puede estar mal. */
+  arr(){
+    return { llevando: !!ARR, desde: ARR && ARR.desde,
+             /* con qué APPS quedó cada carpeta, no sólo cuántas: el defecto de
+                los índices corridos hacía carpetas del tamaño correcto y con la
+                app equivocada adentro, o sea invisible contando */
+             contenido: INICIO.map(x => esCarpeta(x) ? x.c.slice() : x),
+             inicio: INICIO.map(x => esCarpeta(x) ? ('carpeta:' + x.c.length) : x),
+             dock: DOCK.map(x => esCarpeta(x) ? ('carpeta:' + x.c.length) : x),
+             fantasmas: document.querySelectorAll('.fantasma').length,
+             salpicaduras: document.querySelectorAll('.salpi').length,
+             pag: PAG, npag: NPAG, cols: COLS, filas: FILAS };
+  },
+  async arrastra(sel, x, y, ms){
+    const n = $(sel); if (!n) return 'no está: ' + sel;
+    const r = n.getBoundingClientRect();
+    const x0 = Math.round(r.left + r.width/2), y0 = Math.round(r.top + r.height/2);
+    const ev = (t, xx, yy, el) => (el || n).dispatchEvent(new PointerEvent(t,
+      { bubbles: true, clientX: xx, clientY: yy, pointerId: 4, isPrimary: true }));
+    ev('pointerdown', x0, y0);
+    await new Promise(r2 => setTimeout(r2, ms == null ? 520 : ms));
+    if (!ARR){ ev('pointerup', x0, y0); return { levanto: false }; }
+    /* varios pasos: uno solo no ejerce ni el resaltado del destino ni el borde */
+    for (let i = 1; i <= 5; i++)
+      ev('pointermove', Math.round(x0 + (x - x0)*i/5), Math.round(y0 + (y - y0)*i/5), window);
+    await new Promise(r2 => setTimeout(r2, 60));
+    const destinos = document.querySelectorAll('.ap.destino').length;
+    ev('pointerup', x, y, window);
+    await new Promise(r2 => setTimeout(r2, 80));
+    return { levanto: true, destinos: destinos, arr: this.arr() };
+  },
+  /* Deja un arrastre EN VUELO y no lo suelta: es lo que `arrCosto` necesita
+     para medir el camino de verdad. Suelta con `arrSuelto`. */
+  async arrLevanta(sel){
+    const n = $(sel); if (!n) return 'no está: ' + sel;
+    const r = n.getBoundingClientRect();
+    const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+    n.dispatchEvent(new PointerEvent('pointerdown',
+      { bubbles: true, clientX: x, clientY: y, pointerId: 7, isPrimary: true }));
+    await new Promise(r2 => setTimeout(r2, 560));
+    return { levanto: !!ARR, desde: ARR && ARR.desde };
+  },
+  /* ── LA FLUIDEZ NO ES COSTO, ES CUÁNTAS VECES SE PINTA ──
+     El pedido era «que puedas moverlo de lugar pero más fluido». Antes cada
+     `pointermove` pintaba: un teléfono manda entre 60 y 240 por segundo, así
+     que se repintaba la cuadrícula varias veces **dentro del mismo cuadro** —
+     trabajo que nadie llega a ver. Esto dispara N eventos de verdad en la misma
+     tarea y cuenta cuántas pintadas salieron: con la coalescencia, una. */
+  async arrFluido(n){
+    if (!ARR) return { error: 'no hay arrastre en vuelo' };
+    const cu = this.cuadricula();
+    if (!cu.hay || !cu.n) return { error: 'sin cuadrícula' };
+    const cen = cu.celdas.map(c => [c.caja[0] + c.caja[2]/2, c.caja[1] + c.caja[3]/2]);
+    const ev = (x, y) => window.dispatchEvent(new PointerEvent('pointermove',
+      { bubbles: true, clientX: x, clientY: y, pointerId: 7, isPrimary: true }));
+    const cuantos = n || 30;
+    ARR_PINTAS = 0;
+    for (let i = 0; i < cuantos; i++){
+      const [x, y] = cen[i % cen.length];
+      ev(Math.round(x), Math.round(y));
+    }
+    const enLaTarea = ARR_PINTAS;
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return { eventos: cuantos, pintadasEnLaTarea: enLaTarea,
+             pintadasTrasElCuadro: ARR_PINTAS };
+  },
+  async arrSuelto(){
+    if (!ARR) return 'no había arrastre';
+    window.dispatchEvent(new PointerEvent('pointerup',
+      { bubbles: true, clientX: ARR.x, clientY: ARR.y, pointerId: 7, isPrimary: true }));
+    await new Promise(r2 => setTimeout(r2, 120));
+    return this.arr();
+  },
+  async toca(sel){
+    const n = $(sel); if (!n) return 'no está: ' + sel;
+    const r = n.getBoundingClientRect();
+    const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+    const ev = t => n.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, clientY: y,
+                                                          pointerId: 5, isPrimary: true }));
+    ev('pointerdown');
+    await new Promise(r2 => setTimeout(r2, 90));
+    ev('pointerup');
+    await new Promise(r2 => setTimeout(r2, 120));
+    return { menu: MENU_PKG, carpeta: CARP_I, cajon: CAJON };
+  },
+  carpeta(){
+    const x = CARP_I >= 0 ? (CARP_DE === 'dock' ? DOCK : INICIO)[CARP_I] : null;
+    return { abierta: $('#carp').classList.contains('on'), i: CARP_I, de: CARP_DE,
+             nombre: $('#carpNom').value, apps: esCarpeta(x) ? x.c.slice() : [],
+             rejilla: $('#carpRejilla').children.length, pie: $('#carpPie').textContent };
+  },
+  carpAbrir(i, de){ carpAbre(i, de); return this.carpeta(); },
+  carpCerrar(){ carpCierra(); return true; },
+  carpNombre(n){ const e = $('#carpNom'); e.value = n;
+                 e.dispatchEvent(new Event('input', { bubbles: true })); return this.carpeta(); },
+  async carpSacar(k){
+    const n = $('#carpRejilla').children[k]; if (!n) return 'no está';
+    n.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 6, isPrimary: true }));
+    await new Promise(r => setTimeout(r, 560));
+    n.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 6, isPrimary: true }));
+    return { carpeta: this.carpeta(), arr: this.arr() };
+  },
+  wid(){
+    const cs = $$('#wid .wCard');
+    return { puestos: WID.slice(), n: cs.length, ritmo: WID_T,
+             altos: cs.map(c => Math.round(c.getBoundingClientRect().height)),
+             hoja: Math.round($('#hoja').getBoundingClientRect().height),
+             filas: FILAS, catalogo: WID_ORDEN.length,
+             texto: cs.map(c => (c.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 44)) };
+  },
+  widPone(l){ widPone(l); return this.wid(); },
+  luna(f){ LUNA_F = f == null ? -1 : f; widPinta();
+           return { f: LUNA_F, d: $('.wgLunaL') && $('.wgLunaL').getAttribute('d'),
+                    esp: $('.wgLunaG') && $('.wgLunaG').getAttribute('transform'),
+                    txt: $('.wgLuna') && $('#wid .wgFSem').textContent + ' ' + $('#wid .wgFMes').textContent }; },
+  widSolapa(t){ fgSolapa(t); return { wid: $('#fondos').classList.contains('wid'),
+                                      filas: $$('#fgWid .fgW').length,
+                                      sel: $$('#fgWid .fgW.sel').map(n => n.dataset.k),
+                                      nombres: $$('#fgWid .fgWN').map(n => n.textContent) }; },
+  async widToca(k){
+    const n = $('#fgWid .fgW[data-k="' + k + '"]');
+    if (!n) return 'no está: ' + k;
+    n.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 220));
+    return this.wid();
+  },
+  /* el catálogo entero, uno por uno, para poder mirarlos */
+  async widSolo(k){ widPone([k]); await new Promise(r => setTimeout(r, 240)); return this.wid(); },
+  fondos(k){
+    if (k) fondoPone(k);
+    const l = $$('#fgRejilla .fgIt').map(n => n.dataset.k);
+    return { abierta: $('#fondos').classList.contains('on'), n: l.length, claves: l,
+             sel: lee('fondoSel', 'fab'),
+             marcado: ($('#fgRejilla .fgIt.sel') || {}).dataset &&
+                      $('#fgRejilla .fgIt.sel').dataset.k,
+             propio: (lee('fondoPropio', '') || '').length,
+             uri: (FONDO_EL.style.backgroundImage || '').slice(0, 34),
+             img: FONDO_IMG ? [FONDO_IMG.naturalWidth, FONDO_IMG.naturalHeight] : null,
+             alto: Math.round($('#fondos').getBoundingClientRect().height) };
+  },
+  /* ── EL GENERADOR DE FONDOS ──
+     Lo único que se puede medir sin red es lo que de verdad puede estar mal de
+     este lado: la URL que se arma y que lo bajado pase por el mismo achicado a
+     9:16 que la foto propia. Que Pollinations conteste está medido con curl
+     (200, image/jpeg, 45.118 bytes) y no se puede volver a medir desde el
+     navegador del banco, que no tiene salida. */
+  fgGenUrl(txt){
+    const u = fgUrl(txt || '');
+    return { url: u, largo: u.length,
+             tieneReceta: u.indexOf('Frutiger%20Aero') > 0,
+             tieneTexto: !txt || u.indexOf(encodeURIComponent(txt)) > 0,
+             sinLogo: u.indexOf('nologo=true') > 0,
+             vertical: u.indexOf('width=768&height=1376') > 0 };
+  },
+  async fgGenFinge(w, h){
+    /* una imagen de mentira del tamaño que se pida, por el MISMO camino que la
+       que baja el puente: así se prueba el recorte a 9:16 y el achicado */
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#0af'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#fff'; g.fillRect(0, 0, w, 8);
+    const d = await fgDeDataURI(cv.toDataURL('image/png'));
+    if (!d) return null;
+    const im = new Image();
+    await new Promise(r => { im.onload = r; im.onerror = r; im.src = d; });
+    return { pedido: [w, h], salio: [im.naturalWidth, im.naturalHeight],
+             prop: +(im.naturalWidth/im.naturalHeight).toFixed(4),
+             kb: Math.round(d.length/1024), jpeg: d.indexOf('image/jpeg') > 0 };
+  },
+  fgIdeas(){ return $$('#fgIdeas .fgId').map(d => d.textContent); },
+  fgAbrir(){ fgAbre(); return this.fondos(); },
+  fgCerrar(){ fgCierra(); return true; },
+  async fgElegir(k){
+    const n = $('#fgRejilla .fgIt[data-k="' + k + '"]');
+    if (!n) return 'no está: ' + k;
+    n.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 260));
+    return this.fondos();
+  },
+  /* mantener el dedo en un hueco vacío del escritorio */
+  async fgLargo(x, y){
+    const t = $('#tira');
+    const e = n => t.dispatchEvent(new PointerEvent(n, { bubbles: true, clientX: x || 206,
+                                                         clientY: y || 620, pointerId: 7,
+                                                         isPrimary: true }));
+    e('pointerdown');
+    await new Promise(r => setTimeout(r, 520));
+    e('pointerup');
+    await new Promise(r => setTimeout(r, 260));
+    return this.fondos();
+  },
+  /* una imagen propia, sin File: se le pasa el data URI ya achicado */
+  async fgPropia(w, h){
+    const cv = document.createElement('canvas'); cv.width = w || 1200; cv.height = h || 900;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#c33'; c.fillRect(0, 0, cv.width, cv.height);
+    c.fillStyle = '#3c3'; c.fillRect(0, 0, cv.width/2, cv.height);
+    const b = await new Promise(r => cv.toBlob(r, 'image/jpeg', .9));
+    await fgPropia(new File([b], 'x.jpg', { type: 'image/jpeg' }));
+    await new Promise(r => setTimeout(r, 300));
+    return this.fondos();
+  },
+  ponInicio(v){ INICIO = v.slice(); guarda('inicio', INICIO); pintaInicio(); return this.arr(); },
+  ponDock(v){ DOCK = v.slice(); guarda('dock', DOCK); pintaDock(); return this.arr(); },
+
+  /* ── LA HOJA DE CONTACTOS DE LOS ICONOS ──
+     Ochenta glifos no se pueden juzgar de a uno en el cajón: hay que verlos
+     juntos y al tamaño al que se ven. Arma una reja con todos, con su nombre
+     debajo, encima de un velo oscuro. Es una sonda: no la usa el launcher. */
+  glifosHoja(cols){
+    const c = cols || 8;
+    let d = document.getElementById('glfHoja');
+    if (d) d.remove();
+    d = document.createElement('div');
+    d.id = 'glfHoja';
+    d.style.cssText = 'position:fixed;inset:0;z-index:60;background:#0b2440;'
+      + 'display:grid;grid-template-columns:repeat(' + c + ',1fr);gap:6px;'
+      + 'padding:8px;overflow:auto;align-content:start';
+    const ns = Object.keys(GLIFOS);
+    for (const g of ns){
+      const w = document.createElement('div');
+      w.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px';
+      const b = document.createElement('div');
+      b.className = 'baldosa';
+      b.style.cssText = '--ico:' + Math.floor(380/c) + 'px';
+      const fam = ICO_DE_FAM[g] || 'agua';
+      b.classList.add('aero');
+      b.style.backgroundImage = 'url(' + ICONOS[fam] + ')';
+      b.style.backgroundSize = 'cover';
+      const sv = glifoSvg(g); if (sv) b.appendChild(sv);
+      const t = document.createElement('div');
+      t.textContent = g;
+      t.style.cssText = 'color:#fff;font:500 7px system-ui;text-align:center';
+      w.appendChild(b); w.appendChild(t); d.appendChild(w);
+    }
+    document.body.appendChild(d);
+    return { n: ns.length, cols: c };
+  },
+  glifosCierra(){ const d = document.getElementById('glfHoja'); if (d) d.remove(); return true; },
+
+  /* ── EL AGUA ──
+     Lo que hay que poder afirmar es dos cosas: que el anillo se dibuja, y que
+     FUERA del anillo el lienzo es la misma foto que había debajo. Lo segundo es
+     lo que decide si encenderlo se ve como un salto. */
+  agua(){
+    const c = AGUA.el;
+    return { listo: AGUA.listo, roto: AGUA.roto, on: AGUA.on,
+             ondas: AGUA.ondas.length,
+             clase: c ? c.className : null, niv: AGUA.niv,
+             lienzo: c ? [c.width, c.height] : null,
+             fondo: { ok: FONDO_OK, w: FONDO_IMG ? FONDO_IMG.naturalWidth : 0,
+                      h: FONDO_IMG ? FONDO_IMG.naturalHeight : 0 },
+             deriva: FONDO_EL.style.animationPlayState || 'corriendo' };
+  },
+  /* el toque va por el camino de verdad —un PointerEvent sobre lo que haya en
+     ese punto— y no llamando a `aguaToca`: lo que hay que probar es justamente
+     que el filtro de «espacio libre» deja pasar el fondo y no una app */
+  aguaTocar(x, y){
+    const t = document.elementFromPoint(x, y);
+    /* el toque entero: desde la vuelta 126 el agua arranca en el `pointerup`, y
+       un `pointerdown` solo es un dedo que se queda apoyado — a los 400 ms
+       eso abre la galería de fondos, que es lo que le pasó a la sonda vieja */
+    const ev = tipo => t.dispatchEvent(new PointerEvent(tipo, { bubbles: true, clientX: x, clientY: y,
+                                                                  pointerId: 3, isPrimary: true }));
+    ev('pointerdown'); ev('pointerup');
+    return { destino: t ? (t.id || t.className || t.tagName) : null,
+             libre: aguaLibre(t), agua: this.agua(), vidrios: this.vidrios().n };
+  },
+  aguaArrastra(x0, y0, x1, y1, n){
+    const t = document.elementFromPoint(x0, y0);
+    const ev = (tipo, x, y, el) => el.dispatchEvent(new PointerEvent(tipo,
+      { bubbles: true, clientX: x, clientY: y, pointerId: 3, isPrimary: true }));
+    ev('pointerdown', x0, y0, t);
+    for (let i = 1; i <= (n || 6); i++)
+      ev('pointermove', x0 + (x1-x0)*i/n, y0 + (y1-y0)*i/n, t);
+    ev('pointerup', x1, y1, t);
+    return this.agua().ondas;
+  },
+  aguaMapa(){ return AGUA.listo ? aguaMapa() : null; },
+  aguaNivel(n){ if (n != null){ if (!aguaArma()) return 'roto'; aguaNivel(n); } return this.aguaRes(); },
+  aguaRes(){ return { niv: AGUA.niv, enc: AGUA.on, sinRefr: AGUA.sinRefr,
+                      res: AGUA.res, lienzo: AGUA.el ? [AGUA.el.width, AGUA.el.height] : null,
+                      px: AGUA.el ? AGUA.el.width*AGUA.el.height : 0,
+                      guardado: lee('aguaRes2', 0),
+                      bake: AGUA.bake ? [AGUA.bake.width, AGUA.bake.height] : null }; },
+  /* ── EL LIENZO ES TRANSPARENTE DONDE NO HAY ONDA ──
+     Antes esto era una copia de la foto entera y había que medir si era fiel.
+     Ahora el alfa es cero fuera de la franja, así que lo que hay que comprobar
+     es otra cosa y es exacta: cuántos píxeles del lienzo tienen alfa. Con el
+     lienzo encendido y sin una sola onda tiene que dar CERO — y ése es el
+     número que dice que encenderlo no puede verse. */
+  aguaAlfa(x, y, edad){
+    if (!aguaArma()) return 'roto';
+    FONDO_EL.style.animationPlayState = 'paused';
+    AGUA.on = false; AGUA.ondas = [];
+    aguaMide(); aguaMapa();
+    const gl = AGUA.gl, b = AGUA.onda;
+    b.fill(0);
+    const n = (x == null) ? 0 : 1;
+    if (n){ b[0] = x; b[1] = y; b[2] = 0; b[3] = 1; }
+    gl.uniform4fv(AGUA.u.onda, b);
+    gl.uniform1i(AGUA.u.n, n);
+    gl.uniform1f(AGUA.u.t, edad || 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const w = AGUA.el.width, h = AGUA.el.height;
+    const px = new Uint8Array(w*h*4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let con = 0, opaco = 0, max = 0;
+    for (let i = 3; i < px.length; i += 4){
+      const a = px[i];
+      if (a > 2) con++;
+      if (a > 250) opaco++;
+      if (a > max) max = a;
+    }
+    return { total: w*h, conAlfa: con, opacos: opaco, alfaMax: max,
+             pct: +(100*con/(w*h)).toFixed(2) };
+  },
+  /* ── UNA ONDA CONGELADA EN EL INSTANTE QUE SE PIDA ──
+     El bucle sigue corriendo entre la sonda y la captura, así que una foto
+     sacada «justo después de tocar» es de cualquier instante menos ése. Acá se
+     dibuja a mano con la edad pedida y no se agenda otro cuadro. */
+  aguaFoto(x, y, edad){
+    if (!aguaArma()) return 'roto';
+    FONDO_EL.style.animationPlayState = 'paused';
+    AGUA.on = false; AGUA.ondas = [];
+    aguaMide(); aguaMapa();
+    const gl = AGUA.gl, b = AGUA.onda;
+    b.fill(0);
+    b[0] = x; b[1] = y; b[2] = 0; b[3] = 1;
+    gl.uniform4fv(AGUA.u.onda, b);
+    gl.uniform1i(AGUA.u.n, 1);
+    gl.uniform1f(AGUA.u.t, edad);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return { x: x, y: y, edad: edad, frente: Math.round(edad*900),
+             res: AGUA.res, px: AGUA.el.width*AGUA.el.height };
+  },
+  /* cuánto cuesta el DIBUJO del lienzo, con las ondas que se le pidan.
+     ── NO SE LLAMA `aguaCosto` Y ÉSA ES LA CORRECCIÓN ──
+     Se llamaba así, y doscientas líneas más abajo hay otra `aguaCosto` que mide
+     el manejador del dedo. En un objeto literal gana la última: ésta no existía
+     y la otra contestaba con campos que no eran los que se le pedían. Es el
+     mismo defecto que ya costó la sonda de la cuadrícula. */
+  aguaCuadro(n, cuadros){
+    if (!aguaArma()) return 'roto';
+    const gl = AGUA.gl;
+    FONDO_EL.style.animationPlayState = 'paused';
+    AGUA.on = false; AGUA.ondas = [];
+    aguaMide(); aguaMapa();
+    const b = AGUA.onda; b.fill(0);
+    for (let i = 0; i < n; i++){ b[i*4] = 100 + i*30; b[i*4+1] = 300 + i*40; b[i*4+2] = -i*0.05; b[i*4+3] = 1; }
+    gl.uniform4fv(AGUA.u.onda, b);
+    gl.uniform1i(AGUA.u.n, n);
+    const c = cuadros || 60, t0 = performance.now();
+    for (let i = 0; i < c; i++){
+      gl.uniform1f(AGUA.u.t, 0.3 + i*0.001);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    /* `finish()` no sincroniza nada acá: con el render por software la cola se
+       traga las llamadas y el reloj devuelve cero. `readPixels` sí obliga a que
+       el cuadro esté terminado, porque hay que devolver el píxel. */
+    const px1 = new Uint8Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
+    const ms = (performance.now() - t0)/c;
+    return { ondas: n, cuadros: c, ms: +ms.toFixed(3), res: AGUA.res,
+             px: AGUA.el.width*AGUA.el.height };
+  },
+  /* ── CUÁNTO CUESTA UN CUADRO DE VERDAD ──
+     No el `drawArrays` solo: el cuadro ENTERO, con el compositor haciendo lo
+     suyo. `niv` fija el escalón de calidad y CONGELA el ajuste automático — sin
+     eso la propia medición baja el escalón a mitad de la corrida y las cuatro
+     filas terminan midiendo lo mismo. Con `niv` en −1 se apaga todo el vidrio,
+     que es el control: sin él, «el agua cuesta X» no dice de quién es el costo. */
+  /* ── QUIÉN ESTÁ FILTRANDO AHORA MISMO ──
+     Cada `backdrop-filter` vivo es una pasada que el compositor rehace cada vez
+     que algo de abajo se mueve. Enumerarlos es la única forma de saber cuáles
+     quedaron encendidos: leyendo el CSS no se ve, porque lo que manda es la
+     regla que ganó y el estado de las clases. */
+  /* prende y apaga el pack de iconos y repinta: es lo que decide cuántas
+     baldosas quedan filtrando, y ése es el número de la fluidez del cajón */
+  /* ── TAMPOCO SE LLAMA `pack`: LA OTRA GANA ──
+     Ésta cuenta cuántas baldosas quedan filtrando, que es el número de la
+     fluidez del cajón; la de abajo mira UNA baldosa y dice qué pack se aplicó.
+     Son dos preguntas distintas y hacen falta las dos. */
+  /* ── EL PACK ES UN ID Y NO UNA BANDERA, Y LA SONDA LO DECÍA MAL ──
+     Esto arrancó como `icoPack` 0/1 —«tratamiento Aero sí o no»— y desde que
+     hay siete packs es una cadena. El `+lee(...)` devolvía **NaN**, que
+     `JSON.stringify` escribe como `null`: la sonda contestaba que no había
+     pack puesto con el pack puesto. Es la misma familia que las dos claves
+     repetidas de este mismo objeto — no falla, contesta. */
+  packBaldosas(v){
+    if (v != null){ guarda('icoPack', v); ICO_CACHE_LIMPIA(); rejaRepinta(); }
+    const b = $$('.baldosa'), a = $$('.baldosa.aero');
+    return { pack: packHoy().id, baldosas: b.length, aero: a.length,
+             gen: $$('.baldosa.gen').length,
+             cajon: $$('#cajLista .baldosa').length,
+             cajonAero: $$('#cajLista .baldosa.aero').length };
+  },
+  vidrios(){
+    const v = [];
+    for (const e of document.querySelectorAll('*')){
+      const c = getComputedStyle(e);
+      const f = c.backdropFilter || c.webkitBackdropFilter;
+      if (!f || f === 'none') continue;
+      /* ── LO ESCONDIDO NO SE PINTA, ASÍ QUE NO FILTRA ──
+         `getComputedStyle` informa el `backdrop-filter` igual de un elemento
+         con `visibility:hidden`, y `getBoundingClientRect` le devuelve su caja:
+         sin esta guarda la sonda contaba las tres piezas del escritorio con el
+         cajón asentado, o sea que no podía ver el ahorro que venía a medir. */
+      if (c.visibility === 'hidden' || c.display === 'none' || c.opacity === '0') continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      v.push({ q: (e.id ? '#'+e.id : '') + (e.className && typeof e.className === 'string'
+                 ? '.'+e.className.trim().split(/\s+/).join('.') : ''),
+               px: Math.round(r.width*r.height), f: f.slice(0, 46) });
+    }
+    v.sort((a,b) => b.px - a.px);
+    return { n: v.length, px: v.reduce((a,b) => a+b.px, 0), top: v.slice(0, 8) };
+  },
+  aguaFps(ms, niv){
+    return new Promise(res => {
+      if (!aguaArma()){ res('roto'); return; }
+      document.body.classList.remove('sinVidrio');
+      AGUA.fijo = true;
+      if (niv === -1) document.body.classList.add('sinVidrio');
+      else aguaNivel(niv | 0);
+      const dur = ms || 900, t0 = performance.now();
+      const dts = []; let ult = t0;
+      /* una onda nueva cada 200 ms: es lo que pasa arrastrando el dedo */
+      const sem = setInterval(() => aguaToca(120 + Math.random()*160,
+                                             300 + Math.random()*260, 1), 200);
+      aguaToca(200, 440, 1);
+      const paso = () => {
+        const n = performance.now();
+        dts.push(n - ult); ult = n;
+        if (n - t0 < dur) requestAnimationFrame(paso);
+        else {
+          clearInterval(sem);
+          const v = dts.slice(2).sort((a,b) => a-b);
+          const med = v.length ? v[v.length>>1] : 0;
+          const prom = v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0;
+          const px = AGUA.el.width*AGUA.el.height, nv = AGUA.niv;
+          document.body.classList.remove('sinVidrio');
+          AGUA.fijo = false;
+          const vid = this.vidrios().n;
+          res({ niv: (niv === -1 ? 'sin vidrio' : nv), cuadros: dts.length, vidrios: vid,
+                mediana: +med.toFixed(2), promedio: +prom.toFixed(2),
+                p90: +(v[Math.floor(v.length*0.9)] || 0).toFixed(2),
+                fps: +(1000/Math.max(med, 0.01)).toFixed(1),
+                res: AGUA.res, px: px });
+        }
+      };
+      requestAnimationFrame(paso);
+    });
+  },
+  /* apaga de verdad: `aguaPaso` sale en la primera línea si `AGUA.on` es falso,
+     así que después de una foto congelada no limpiaba nada */
+  /* ── EL PEOR CASO QUE ESTE LAUNCHER PUEDE ARMAR ──
+     Una gota corriendo y el cajón abriéndose encima. Devuelve si el agua
+     seguía repintando y cuántas pasadas de filtro había en ese instante. */
+  aguaConCajon(sinCorte){ return this.aguaCon('cajon', sinCorte); },
+  /* `quien` es la pieza que se abre encima: el cajón o la cámara. Son las dos
+     que tapan la pantalla entera, así que son las dos que tienen que cortar. */
+  aguaCon(quien, sinCorte){
+    AGUA.sinCorte = !!sinCorte;
+    aguaToca(206, 520, 1);
+    const antes = { on: AGUA.on, ondas: AGUA.ondas.length, vid: this.vidrios().n };
+    const abre = quien === 'cam' ? (v => v ? camAbre() : camCierra())
+                                 : (v => verCajon(v));
+    abre(true);
+    /* un cuadro de bucle: es lo que tarda `aguaPaso` en enterarse */
+    aguaPaso();
+    const dur = { on: AGUA.on, ondas: AGUA.ondas.length, tapada: aguaTapada(),
+                  clase: AGUA.el.className, agua: AGUA.on,
+                  deriva: FONDO_EL.style.animationPlayState || 'corriendo' };
+    const v = this.vidrios();
+    /* cuántos cuadros más habría repintado el lienzo a pantalla completa con
+       el cajón encima: la ráfaga vive AGUA_VIDA segundos */
+    const cuadros = dur.on ? Math.round(AGUA_VIDA * 60) : 0;
+    abre(false); AGUA.sinCorte = false; aguaCorta();
+    return { quien: quien, antes: antes, durante: dur, vidrios: v.n, px: v.px,
+             cuadrosDeMas: cuadros, pxDeMas: cuadros * v.px };
+  },
+  /* ── LA CUADRÍCULA ──
+     Devuelve las celdas que se dibujaron y, al lado, dónde dice `arrCelda` que
+     caería un punto: las dos tienen que coincidir o la cuadrícula miente. */
+  cuadricula(){
+    const d = $('#reja');
+    if (!d) return { hay: false };
+    const h = $('#hoja').getBoundingClientRect();
+    const ce = [...d.children].map(x => ({
+      i: +x.dataset.i,
+      caja: [Math.round(x.offsetLeft + h.left), Math.round(x.offsetTop + h.top),
+             Math.round(x.offsetWidth), Math.round(x.offsetHeight)],
+      aqui: x.classList.contains('aqui') }));
+    return { hay: true, on: d.classList.contains('on'), n: ce.length,
+             cols: COLS, filas: FILAS, celdas: ce,
+             marcada: (ce.find(c => c.aqui) || {}).i };
+  },
+  /* la prueba de que la cuadrícula NO miente: por cada casilla dibujada se
+     pregunta en su centro dónde caería el icono. Tienen que dar el mismo índice
+     las veinte. */
+  cuadriculaHonesta(){
+    const r = this.cuadricula();
+    if (!r.hay) return { hay: false };
+    const mal = [];
+    for (const c of r.celdas){
+      const q = arrCelda(c.caja[0] + c.caja[2]/2, c.caja[1] + c.caja[3]/2);
+      if (!q || q.i !== c.i) mal.push([c.i, q ? q.i : null]);
+    }
+    return { n: r.celdas.length, mal: mal, ok: mal.length === 0 };
+  },
+  /* levanta de verdad por el camino del dedo: `pointerdown`, el plazo, y el
+     movimiento. Sin el plazo no hay arrastre y la cuadrícula no se arma. */
+  async levanta(sel, x, y){
+    const n = $(sel); if (!n) return 'no está: ' + sel;
+    const r = n.getBoundingClientRect();
+    const px = x == null ? r.left + r.width/2 : x;
+    const py = y == null ? r.top + r.height/2 : y;
+    n.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: px, clientY: py, pointerId: 1 }));
+    await new Promise(r2 => setTimeout(r2, ARR_LARGO + 90));
+    return { llevando: !!ARR, reja: this.cuadricula().n };
+  },
+  /* el movimiento se despacha sobre lo que hay DEBAJO del dedo y no sobre la
+     ventana: un evento disparado en `window` no baja a sus descendientes, así
+     que los gestos que escuchan en `#hoja` o en `#dock` —el de subir, por
+     ejemplo— no se enterarían nunca y la prueba aprobaría siempre. */
+  /* ── CUÁNTO TRABAJO CUESTA ARRASTRAR ──
+     El número del reporte «al mantener una app puedas moverlo de lugar pero más
+     fluido» no es una sensación: es cuántas veces se recalcula estilo por cada
+     movimiento del dedo. Se cuenta arrastrando de punta a punta. */
+  /* ── LA MEDICIÓN BARRE LAS CELDAS DE LA CUADRÍCULA, NO UNA DIAGONAL ──
+     Dos versiones anteriores midieron mal y las dos daban un número plausible:
+     · la primera iba de esquina a esquina en línea recta, y una diagonal sobre
+       una reja de cuatro columnas pasa casi siempre **entre** dos celdas:
+       medido, 60 pasos daban **un solo** cambio de destino, o sea que las dos
+       ramas no hacían nada y la sin caché salía **más rápida** que la con
+       caché —imposible si el atajo sirve—;
+     · la segunda barría los iconos del escritorio, y desde la vuelta 122 el
+       escritorio arranca **vacío**: cero celdas y cero medición.
+     Lo que hay que ejercer es lo que de verdad cuesta: `rejaMarca`, que apaga y
+     prende las veinte casillas de la cuadrícula. Así que se barren los centros
+     de las CELDAS —que existen siempre— y el resaltado cambia en cada paso.
+     Y exige un arrastre en vuelo: sin `ARR` se estaría midiendo `arrPinta` por
+     un camino que el dedo no recorre. */
+  /* `porCelda` es cuántos cuadros pasa el dedo dentro de la misma celda, y de
+     eso depende TODO el resultado. Una celda mide 93 px; un dedo que cruza la
+     pantalla en un segundo hace 890 px en 60 cuadros, o sea **seis cuadros por
+     celda** — ése es el régimen de verdad y es el de por omisión. Con 1 se mide
+     el peor caso imaginable, donde el atajo casi no puede acertar. Un solo
+     número sin decir en qué régimen se tomó no dice nada. */
+  arrCosto(n, sinCache, porCelda){
+    if (!ARR) return { error: 'no hay arrastre en vuelo; llamá arrLevanta primero' };
+    const cu = this.cuadricula();
+    if (!cu.hay || !cu.n) return { error: 'sin cuadrícula' };
+    const cen = cu.celdas.map(c => [c.caja[0] + c.caja[2]/2, c.caja[1] + c.caja[3]/2]);
+    const pasos = n || 40, pc = Math.max(1, porCelda || 6);
+    let cambios = 0, ultDest = null, ultCel = -2;
+    ARR_SIN_CACHE = !!sinCache;
+    const t0 = performance.now();
+    for (let i = 0; i < pasos; i++){
+      const [x, y] = cen[Math.floor(i/pc) % cen.length];
+      ARR.x = x; ARR.y = y;
+      arrPinta(x, y);
+      const d = $('.ap.destino'), c = REJA_AQUI;
+      if (d !== ultDest || c !== ultCel){ cambios++; ultDest = d; ultCel = c; }
+    }
+    const ms = performance.now() - t0;
+    ARR_SIN_CACHE = false;
+    return { pasos: pasos, celdas: cen.length, porCelda: pc, sinCache: !!sinCache,
+             cambiosDeDestino: cambios, ms: +ms.toFixed(2),
+             porPaso: +(ms/pasos).toFixed(3) };
+  },
+  arrastraA(x, y){
+    const t = document.elementFromPoint(x, y) || $('#hoja') || document.body;
+    t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
+    return { llevando: !!ARR, marcada: this.cuadricula().marcada, cajon: CAJON };
+  },
+  subirSinGuarda(v){ SUBIR_SIN_GUARDA = !!v; return SUBIR_SIN_GUARDA; },
+  sueltaEn(x, y){
+    const t = document.elementFromPoint(x, y) || document.body;
+    t.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
+    return { llevando: !!ARR, reja: this.cuadricula().hay,
+             inicio: INICIO.map(i => esCarpeta(i) ? '[' + i.c.join('+') + ']' : i) };
+  },
+  /* ── CUÁNTO CUESTA EL PRIMER TOQUE ──
+     Es el número del reporte: «al cambiar de fondo se laguea el click del
+     agua». Se mide el manejador entero, que es lo que el dedo espera. */
+  aguaCosto(){
+    const t = performance.now();
+    aguaToca(206, 520, 1);
+    const ms = performance.now() - t;
+    aguaCorta();
+    return { ms: +ms.toFixed(2), tibia: AGUA_TIBIA, listo: AGUA.listo };
+  },
+  aguaFria(){ AGUA_TIBIA = false; AGUA.listo = false; AGUA.el = null; return true; },
+  aguaTibia(){ return AGUA_TIBIA; },
+  aguaVigilando(){ return !!AGUA_OBS; },
+  /* el control negativo del tirón: el mismo binario con el observador apagado.
+     Con él, `body.agua` se va en la MICROTAREA que sigue al cambio de clase, o
+     sea antes de que el navegador calcule estilo; sin él hay que esperar al
+     rAF, y para entonces la hoja ya empezó a animarse. */
+  aguaVigilar(v){ aguaVigila(!!v); return !!AGUA_OBS; },
+  /* ── EL GESTO DE SUBIR NO PUEDE TOCAR EL AGUA ──
+     Recorre el gesto por el camino de verdad —`pointerdown` sobre lo que hay
+     debajo del dedo, unos cuantos `pointermove` y el `pointerup`— y devuelve si
+     el agua se encendió en algún momento. Ésa es la pregunta del reporte: no
+     «cuánto tarda» sino «se encendió o no». */
+  async gesto(x0, y0, x1, y1, pasos){
+    aguaCorta(); verCajon(false);
+    await new Promise(r => setTimeout(r, 60));
+    const n = pasos || 8;
+    let encendio = false, ondas = 0;
+    const t0 = document.elementFromPoint(x0, y0) || document.body;
+    t0.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x0, clientY: y0, pointerId: 3 }));
+    if (AGUA.on){ encendio = true; ondas = Math.max(ondas, AGUA.ondas.length); }
+    for (let i = 1; i <= n; i++){
+      const x = x0 + (x1 - x0)*i/n, y = y0 + (y1 - y0)*i/n;
+      const t = document.elementFromPoint(x, y) || document.body;
+      t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y, pointerId: 3 }));
+      if (AGUA.on){ encendio = true; ondas = Math.max(ondas, AGUA.ondas.length); }
+      await new Promise(r => requestAnimationFrame(r));
+    }
+    const tf = document.elementFromPoint(x1, y1) || document.body;
+    tf.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x1, clientY: y1, pointerId: 3 }));
+    await new Promise(r => requestAnimationFrame(r));
+    if (AGUA.on){ encendio = true; ondas = Math.max(ondas, AGUA.ondas.length); }
+    const r2 = { aguaEncendio: encendio, ondas: ondas, cajon: CAJON, agua: AGUA.on };
+    aguaCorta(); verCajon(false);
+    return r2;
+  },
+  /* ── EL CORTE AL ABRIR EL CAJÓN, MEDIDO ──
+     Ya no hay clase del `body` que devolver: lo que se mide es CUÁNDO se apaga
+     el agua. En la microtarea que sigue al cambio de clase del cajón (o sea en
+     el mismo cuadro en que la hoja empieza a abrirse) o recién en el rAF
+     siguiente, que es en el medio de la animación. */
+  async aguaTiron(vigilar){
+    aguaCorta();
+    aguaToca(206, 520, 1);
+    aguaVigila(!!vigilar);
+    const on0 = AGUA.on;
+    verCajon(true);
+    const antes = AGUA.on;
+    await Promise.resolve(); await Promise.resolve();
+    const micro = AGUA.on;
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const raf = AGUA.on;
+    verCajon(false); aguaCorta(); aguaVigila(false);
+    return { vigilando: !!vigilar, aguaEncendida: on0,
+             enElCambio: antes, trasLaMicrotarea: micro, trasElRaf: raf,
+             seApagaEn: micro ? 'el rAF (en medio de la animación)'
+                              : 'la microtarea (mismo cuadro)' };
+  },
+  aguaApaga(){
+    AGUA.ondas = []; AGUA.on = false; aguaRefr(false);
+    if (AGUA.gl) AGUA.gl.clear(AGUA.gl.COLOR_BUFFER_BIT);
+    FONDO_EL.style.animationPlayState = '';
+    return this.agua();
+  },
+  /* ── LA REFRACCIÓN SE VA Y VUELVE SIN TOCAR EL BODY ──
+     Con la ráfaga encendida y el nivel forzado a 1, las piezas refractadas del
+     escritorio tienen que quedar con el filtro plano EN LÍNEA —y el `body` sin
+     una sola clase nueva—; al apagar la ráfaga, vuelven a la regla. */
+  aguaRefr(){
+    if (!aguaArma()) return 'roto';
+    aguaCorta();
+    const cls0 = document.body.className;
+    const lee = () => [...document.querySelectorAll('#capa .vid.refr')]
+      .map(e => ({ id: e.id, inline: e.style.backdropFilter || '',
+                   fil: getComputedStyle(e).backdropFilter.slice(0, 30) }));
+    AGUA.fijo = true;
+    aguaNivel(0); aguaToca(206, 520, 1);
+    const n0 = lee();
+    aguaNivel(1);
+    const n1 = lee();
+    const cls1 = document.body.className;
+    aguaCorta(); AGUA.fijo = false; aguaNivel(0);
+    const fin = lee();
+    return { nivel0: n0, nivel1: n1, alApagar: fin,
+             bodyIgual: cls0 === cls1, body: cls1 };
+  },
+  /* ── LA DERIVA Y EL ACERCAMIENTO ──
+     Lo que el compositor paga por la foto de fondo: con qué curva se mueve y
+     si se pausa debajo del cajón. Y que `.hondo` de verdad cambie la escala,
+     que antes no cambiaba nada porque la animación le pisaba el `transform`. */
+  async aguaDeriva(){
+    const cs = () => getComputedStyle(FONDO_EL);
+    const esp = ms => new Promise(r => setTimeout(r, ms));
+    const r = { timing: cs().animationTimingFunction, dur: cs().animationDuration,
+                estado: cs().animationPlayState, transform: cs().transform.slice(0, 40) };
+    const caj = CAJON;
+    document.body.classList.add('caj');
+    r.estadoConCajon = cs().animationPlayState;
+    document.body.classList.toggle('caj', caj);
+    /* `scale` tiene una transición de 420 ms: leído en el acto vale 1 */
+    fondoProfundo(true); await esp(1100);
+    r.escalaHondo = cs().scale; r.filtroHondo = cs().filter;
+    fondoProfundo(CAJON); await esp(1100);
+    r.escalaNormal = cs().scale;
+    /* cuántas veces cambia el transform de la foto en un segundo: con la deriva
+       continua eran sesenta, o sea sesenta refiltrados de todo el vidrio */
+    let ult = cs().transform, cambios = 0; const t0 = performance.now();
+    while (performance.now() - t0 < 1100){
+      await new Promise(f => requestAnimationFrame(f));
+      const t = cs().transform; if (t !== ult){ cambios++; ult = t; }
+    }
+    r.cambiosPorSegundo = cambios;
+    return r;
+  },
+  /* ── EL CAJÓN YA ESTÁ ARMADO ANTES DE ABRIRLO ──
+     Cuántos nodos hay en la lista con el cajón todavía cerrado, cuántos iconos
+     decodificados dejó `cajPrepara`, y cuántas baldosas llevan la animación de
+     entrada (tiene que ser como mucho `CAJ_ENTRA_MAX`: las demás no se ven). */
+  cajPreparar(){ cajPrepara(); return true; },
+  cajListo(){
+    return { cajon: CAJON, ultimoFiltro: CAJ_ULT_Q,
+             nodos: $('#cajLista').querySelectorAll('.ap').length,
+             decodificados: CAJ_PREP,
+             entran: $('#cajLista').querySelectorAll('.ap.entra').length,
+             tope: CAJ_ENTRA_MAX };
+  },
+  /* ── ABRIR EL CAJÓN: CUÁNTO CUESTA LA SEGUNDA VEZ ──
+     La primera apertura pinta la lista; la segunda ya la tiene y sólo la
+     escalona. Se mide cuánto tarda `verCajon(true)` en cada caso y si `.abre`
+     está puesto durante la transición y sacado después. */
+  /* ── CUÁNTO CUESTA EL DESLIZAMIENTO, CUADRO POR CUADRO ──
+     `cajAbre` mide el JAVASCRIPT de la apertura; esto mide lo otro, que es lo
+     que el jugador siente: los 340 ms en los que la hoja se está moviendo. Un
+     `backdrop-filter` sobre algo que SE MUEVE se rehace en cada cuadro por
+     construcción —su fondo cambia porque el elemento cambió de sitio— así que
+     acá lo que interesa no es el pico de JS sino cuántos cuadros perdidos hay
+     y cuántas pasadas de filtro siguen vivas a mitad de camino. */
+  /* prende y apaga el horneado sobre EL MISMO binario: sin esto la comparación
+     sería contra otro archivo y mediría dos cosas a la vez */
+  cajFrost(v){
+    const caj = $('#cajon');
+    if (v === true || typeof v === 'number') cajFrostHornea(typeof v === 'number' ? v : null);
+    else if (v === false) caj.classList.remove('hor');
+    const cs = getComputedStyle(caj);
+    /* la variable vive en la RAÍZ desde que la comparten las dos hojas: leída
+       del estilo en línea de `#cajon` devolvía 0 y el número no describía nada */
+    const raiz = document.documentElement.style;
+    const uri = raiz.getPropertyValue('--cajFrost') || '';
+    return { hor: caj.classList.contains('hor'), bytes: uri.length,
+             bytesVid: (raiz.getPropertyValue('--vidFrost') || '').length,
+             filtro: (cs.backdropFilter || cs.webkitBackdropFilter || 'none').slice(0, 44),
+             capas: (cs.backgroundImage || '').split('url(').length - 1 };
+  },
+  /* planta la hoja a media subida y SIN transición: es la única forma honesta
+     de fotografiar un instante del deslizamiento, porque la transición la
+     interpola el navegador y no se puede congelar desde acá */
+  cajPon(y){
+    const c = $('#cajon');
+    verCajon(true);
+    if (y == null){ c.classList.remove('tira'); c.style.removeProperty('--caj-y'); }
+    else { c.classList.add('tira'); c.style.setProperty('--caj-y', y + 'px'); }
+    return { y: c.style.getPropertyValue('--caj-y') || '0px',
+             hor: c.classList.contains('hor') };
+  },
+  /* el interruptor de la medición en el teléfono: encenderlo, apagarlo y leer
+     lo que el aviso terminó diciendo */
+  medir(v){
+    if (v !== undefined){ MED_ON = v ? 1 : 0; guarda('medir', MED_ON); }
+    const fila = PERS.filter(x => x.tit === 'pMedir');
+    return { on: MED_ON, fila: fila.length, rot: T('pMedir'),
+             marcada: fila.length ? fila[0].lee() : null,
+             aviso: $('#aviso').textContent,
+             visible: $('#aviso').classList.contains('on') };
+  },
+  /* ── EL CIERRE POR ARRASTRE, QUE ES EL QUE NADIE MEDÍA ──
+     El reclamo señaló la asimetría exacta: «al tocar botón hacia atrás ahí no
+     hay lag y baja fluido». O sea que el cierre tiene DOS caminos y sólo uno
+     laguea, y el que laguea es el único que escribe `--caj-y` por evento.
+     `n` es cuántos `pointermove` se mandan por cuadro: un teléfono manda de 1 a
+     4, y con la coalescencia puesta el número no tiene que cambiar nada. */
+  async cajArrastra(n){
+    const man = $('#cajManija');
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 1400));
+    const dts = []; let ult = performance.now(), corre = true;
+    const paso = () => { const t = performance.now(); dts.push(t - ult); ult = t;
+      if (corre) requestAnimationFrame(paso); };
+    requestAnimationFrame(paso);
+    const r = man.getBoundingClientRect();
+    const x = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2);
+    const ev = (t, y) => man.dispatchEvent(new PointerEvent(t,
+      { clientX: x, clientY: y, bubbles: true, pointerId: 9 }));
+    ev('pointerdown', y0);
+    const CU = 24, por = n || 4; let y = y0; let medio = null;
+    for (let c = 0; c < CU; c++){
+      for (let k = 0; k < por; k++){ y += Math.round(700 / (CU * por)); ev('pointermove', y); }
+      await new Promise(rr => requestAnimationFrame(rr));
+      /* a mitad del arrastre: es donde hay que preguntar cuánta textura se está
+         sosteniendo, no al final — al final el gesto ya terminó */
+      if (c === CU >> 1) medio = { mb: this.capas().mb, n: this.capas().n,
+                                   vid: this.vidrios().n, px: this.vidrios().px };
+    }
+    ev('pointerup', y);
+    await new Promise(rr => setTimeout(rr, 700));
+    corre = false;
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    const o = dts.slice().sort((a, b) => a - b);
+    return { porCuadro: por, cuadros: dts.length,
+             mediana: +o[o.length >> 1].toFixed(1),
+             p90: +o[Math.min(o.length - 1, Math.floor(o.length * 0.9))].toFixed(1),
+             peor: +o[o.length - 1].toFixed(1), perdidos: perdidos,
+             cerro: !CAJON, medio: medio, mbFin: this.capas().mb };
+  },
+  /* planta el arrastre a mitad de camino y lo DEJA ahí, sin soltar: es la única
+     forma de fotografiar el estado del gesto, porque soltarlo lo termina */
+  cajTira(y){
+    const man = $('#cajManija'), caj = $('#cajon');
+    verCajon(true);
+    const r = man.getBoundingClientRect();
+    const x = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2);
+    const ev = (t, yy) => man.dispatchEvent(new PointerEvent(t,
+      { clientX: x, clientY: yy, bubbles: true, pointerId: 9 }));
+    ev('pointerdown', y0); ev('pointermove', y0 + (y == null ? 40 : y));
+    /* ── Y HAY QUE MATAR EL TEMPORIZADOR DE `cajAsienta` ──
+       `verCajon(true)` agenda el timeout que pone `cajQ` a los 420 ms. Un
+       arrastre de verdad lo pisa con el suyo en cada `pone`; una foto plantada
+       espera quieta, así que a los 600 ms `cajQ` ya volvió y TAPA justo lo que
+       esta sonda viene a medir — medido, daba 13,4 MB con la clase puesta y
+       13,4 con la clase sacada, o sea que el A/B no movía nada. */
+    clearTimeout(CAJ_ABRE_T); document.body.classList.remove('cajQ');
+    return { y: caj.style.getPropertyValue('--caj-y'),
+             cajTira: document.body.classList.contains('cajTira'),
+             mb: this.capas().mb, capas: this.capas().n,
+             wcFondo: getComputedStyle($('#fondo')).willChange,
+             wcTira: getComputedStyle($('#tira')).willChange,
+             agua: getComputedStyle($('#agua')).visibility };
+  },
+  /* el mismo cierre por el otro camino: es el CONTROL del de arriba, y es lo
+     que el dueño describe como fluido */
+  async cajBoton(){
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 1400));
+    const dts = []; let ult = performance.now(), corre = true;
+    const paso = () => { const t = performance.now(); dts.push(t - ult); ult = t;
+      if (corre) requestAnimationFrame(paso); };
+    requestAnimationFrame(paso);
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 1260));
+    corre = false;
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    const o = dts.slice().sort((a, b) => a - b);
+    return { cuadros: dts.length, mediana: +o[o.length >> 1].toFixed(1),
+             p90: +o[Math.min(o.length - 1, Math.floor(o.length * 0.9))].toFixed(1),
+             peor: +o[o.length - 1].toFixed(1), perdidos: perdidos, cerro: !CAJON };
+  },
+  /* cuánto cuesta UNA escritura de la variable del arrastre con el flush
+     forzado, contra un `transform` inline en el mismo elemento. Es el número
+     que explica la asimetría: la variable hereda, así que invalida el subárbol
+     entero del cajón. */
+  cajVarCosto(){
+    const c = $('#cajon'), N = 80;
+    const med = f => { const t0 = performance.now();
+      for (let i = 0; i < N; i++){ f(i); document.body.offsetHeight; }
+      return +((performance.now() - t0) / N).toFixed(3); };
+    med(i => c.style.setProperty('--caj-y', (i % 7) + 'px'));
+    const a = med(i => c.style.setProperty('--caj-y', (i % 97) + 'px'));
+    c.style.removeProperty('--caj-y');
+    const b = med(i => { c.style.transform = 'translateY(' + (i % 97) + 'px)'; });
+    c.style.removeProperty('transform');
+    return { variable: a, transformInline: b, nodosCajon: c.querySelectorAll('*').length,
+             registrada: (CSS.supports && CSS.supports('--caj-y', '1px')) || null };
+  },
+  async cajDesliza(){
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 420));
+    const dts = []; let ult = performance.now(); let vidMedio = null;
+    let corre = true;
+    const paso = () => {
+      const t = performance.now(); dts.push(t - ult); ult = t;
+      if (corre) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 170));
+    vidMedio = this.vidrios();
+    await new Promise(r => setTimeout(r, 400));
+    corre = false;
+    const vidFin = this.vidrios();
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    dts.sort((a, b) => a - b);
+    const med = dts.length ? dts[dts.length >> 1] : 0;
+    const p90 = dts.length ? dts[Math.min(dts.length - 1, Math.floor(dts.length * 0.9))] : 0;
+    return { cuadros: dts.length, mediana: +med.toFixed(1), p90: +p90.toFixed(1),
+             peor: +(dts[dts.length - 1] || 0).toFixed(1), perdidos: perdidos,
+             vidMedio: vidMedio.n, pxMedio: vidMedio.px,
+             vidFin: vidFin.n, pxFin: vidFin.px,
+             topMedio: vidMedio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
+  /* ── EL VIAJE DEL CENTRO DE CONTROL, QUE ES LO QUE SE REPORTÓ ──
+     Cuenta los huecos entre cuadros mientras la hoja BAJA, igual que
+     `cajDesliza` con el cajón. `dir` es 'abajo' (por omisión) o 'arriba'.
+     OJO: el banco dibuja por software y sus huecos de `requestAnimationFrame`
+     van a vsync pase lo que pase, así que de acá NO sale la tasa de cuadros de
+     un teléfono. Lo que sí sale —y no depende del aparato— es cuántas pasadas
+     de filtro y cuántas animaciones caras hay vivas a mitad del viaje. */
+  async ccDesliza(dir){
+    const baja = dir !== 'arriba';
+    if (baja) { ccCierra(); } else { ccAbre(); }
+    await new Promise(r => setTimeout(r, 700));
+    const dts = []; let ult = performance.now(); let corre = true;
+    const paso = () => {
+      const t = performance.now(); dts.push(t - ult); ult = t;
+      if (corre) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+    if (baja) { ccAbre(); } else { ccCierra(); }
+    await new Promise(r => setTimeout(r, 170));
+    const medio = this.vidrios(), aMedio = this.anims();
+    await new Promise(r => setTimeout(r, 420));
+    corre = false;
+    const fin = this.vidrios();
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    dts.sort((a, b) => a - b);
+    const med = dts.length ? dts[dts.length >> 1] : 0;
+    const p90 = dts.length ? dts[Math.min(dts.length - 1, Math.floor(dts.length * 0.9))] : 0;
+    return { dir: baja ? 'abajo' : 'arriba',
+             cuadros: dts.length, mediana: +med.toFixed(1), p90: +p90.toFixed(1),
+             peor: +(dts[dts.length - 1] || 0).toFixed(1), perdidos: perdidos,
+             animMedio: aMedio.n, carasMedio: aMedio.caras,
+             vidMedio: medio.n, pxMedio: medio.px,
+             vidFin: fin.n, pxFin: fin.px,
+             topMedio: medio.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
+  /* ── Y EL CIERRE, QUE ES LA MITAD QUE NADIE HABÍA MEDIDO ──
+     Las vueltas 130 a 133 midieron SUBIR. El cierre no es el mismo viaje al
+     revés: en su primer cuadro `verCajon(false)` saca `body.cajQ`, o sea que
+     `#capa` pasa de `visibility:hidden` a visible y el escritorio ENTERO —el
+     reloj, el dock, las treinta baldosas, la búsqueda— vuelve a la vista justo
+     en el cuadro en que la hoja arranca. Eso es exactamente lo que la vuelta
+     130 encontró con las 150 animaciones de entrada, con otro disfraz. */
+  /* el A/B del cierre, sobre el MISMO binario: `true` devuelve la regla vieja
+     —`#capa` escondido— para que la medición pueda detectar el defecto además
+     de aprobar el arreglo */
+  /* cambiar de idioma tiene que repintar la fecha aunque el minuto no haya
+     cambiado: `pintaReloj` se sale por el atajo si el reloj dice lo mismo */
+  idioma(v){
+    const f = PERS.filter(x => x.tit === 'pIdioma')[0];
+    if (v) f.pon(v);
+    return { lang: LANG, hora: ($('#hora') || {}).textContent,
+             fecha: ($('#fecha') || {}).textContent,
+             saludo: ($('#wSaludo') || {}).textContent };
+  },
+  /* ── EL VIDRIO DURANTE EL ARRASTRE ──
+     El dedo baja la hoja sin transición, así que cada cuadro es el dedo. Lo que
+     se mide es si en el cuadro en que el dedo empieza a tirar cambia algo:
+     `#capa` de escondido a visible, o los tres vidrios de apagados a
+     encendidos. Las dos cosas son un escalón en el peor cuadro posible.
+     SE LLAMABA `cajArrastra` Y ESO SE LLEVÓ PUESTA A LA SONDA DE CUADROS: en un
+     objeto literal gana la última clave, así que la de arriba no existía y
+     contestaba ésta, con campos que nadie le había pedido. Van cinco veces en
+     este repo (`reja`, `pack`, `aguaCosto`, `anim` y ésta). */
+  async cajArrVidrio(){
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 620));
+    const capa = $('#capa');
+    const antes = { capa: getComputedStyle(capa).visibility,
+                    vid: this.vidrios().n, px: this.vidrios().px };
+    const man = $('#cajManija');
+    const r = man.getBoundingClientRect();
+    const x = Math.round(r.left + r.width / 2), y0 = Math.round(r.top + r.height / 2);
+    man.dispatchEvent(new PointerEvent('pointerdown', { clientX: x, clientY: y0, bubbles: true, pointerId: 9 }));
+    man.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y0 + 12, bubbles: true, pointerId: 9 }));
+    const p1 = { capa: getComputedStyle(capa).visibility,
+                 vid: this.vidrios().n, px: this.vidrios().px,
+                 cajMueve: document.body.classList.contains('cajMueve'),
+                 y: getComputedStyle($('#cajon')).getPropertyValue('--caj-y').trim() };
+    for (let i = 2; i <= 8; i++)
+      man.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y0 + i * 24, bubbles: true, pointerId: 9 }));
+    const medio = { vid: this.vidrios().n, px: this.vidrios().px };
+    man.dispatchEvent(new PointerEvent('pointerup', { clientX: x, clientY: y0 + 200, bubbles: true, pointerId: 9 }));
+    await new Promise(r2 => setTimeout(r2, 620));
+    const fin = this.vidrios();
+    return { antes: antes, primerCuadro: p1, medio: medio,
+             cerro: !CAJON, vidFin: fin.n, pxFin: fin.px };
+  },
+  cajQModo(v){
+    document.body.classList.toggle('cajQvis', !!v);
+    return { escondeCapa: !!v };
+  },
+  /* Devuelve el velo de `background-color` y el vidrio sin apagar del centro de
+     control. SE LLAMA `ccVieja` Y NO `cc` PORQUE `cc()` YA EXISTE seiscientas
+     líneas más abajo: en un objeto literal gana la última, así que la mía no
+     existiría y el A/B contestaría con los datos de otra sonda SIN FALLAR. Van
+     cinco veces en este repo (`reja`, `pack`, `aguaCosto`, `anim`, y ésta). */
+  ccVieja(v){
+    document.body.classList.toggle('ccViejaV', !!v);
+    return !document.body.classList.contains('ccViejaV');
+  },
+  /* El A/B del vidrio horneado del escritorio: `true` devuelve el estado de la
+     vuelta 138 —las tres piezas sin filtro Y sin horneado, o sea sin vidrio— que
+     es lo que el dueño reportó. Sin esto la medición sólo podría aprobar el
+     arreglo y no detectar el defecto. */
+  vidFrost(v){
+    document.body.classList.toggle('vidFrostV', !!v);
+    const el = $('#reloj'), cs = getComputedStyle(el);
+    return { horneado: !document.body.classList.contains('vidFrostV'),
+             frost: document.body.classList.contains('frost'),
+             img: cs.backgroundImage.slice(0, 42),
+             largoCaj: (getComputedStyle(document.documentElement)
+               .getPropertyValue('--cajFrost') || '').length,
+             largoVid: (getComputedStyle(document.documentElement)
+               .getPropertyValue('--vidFrost') || '').length,
+             hondo: getComputedStyle(document.documentElement)
+               .getPropertyValue('--hondo').trim(),
+             filtro: cs.backdropFilter };
+  },
+  async cajCierra(){
+    verCajon(true);
+    await new Promise(r => setTimeout(r, 620));
+    const capa = $('#capa');
+    const antes = { capa: getComputedStyle(capa).visibility,
+                    cajQ: document.body.classList.contains('cajQ'),
+                    vidAbierto: this.vidrios().n, pxAbierto: this.vidrios().px };
+    /* el bucle sólo cronometra: llamar a `vidrios()` por cuadro es barrer el
+       DOM entero sesenta veces por segundo y medir la sonda en vez del juego
+       —medido, dejaba la ventana en dos cuadros—. Lo que cuesta se muestrea en
+       instantes fijos. */
+    const dts = []; let ult = performance.now(); let corre = true;
+    let primerCapa = null;
+    const paso = () => {
+      const t = performance.now(); dts.push(t - ult); ult = t;
+      if (primerCapa === null) primerCapa = getComputedStyle(capa).visibility;
+      if (corre) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+    const fondoEstado = () => {
+      const f = $('#fondo');
+      const co = document.getAnimations().filter(x => x.playState === 'running' &&
+                   x.effect && x.effect.target === f);
+      return { corriendo: co.length,
+               escala: getComputedStyle(f).scale };
+    };
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 60));
+    const anim = document.getAnimations().filter(x => x.playState === 'running')
+                   .map(x => (x.effect && x.effect.target ? (x.effect.target.id || x.effect.target.className || '?') : '?'));
+    const vid90 = this.vidrios();
+    const fondo90 = fondoEstado();
+    /* el instante que importa: 10 ms después de que se acaba `CAJ_ABRE_MS`, o
+       sea donde antes las tres piezas encendían sus 96.401 px de golpe */
+    await new Promise(r => setTimeout(r, 370));
+    const vid430 = this.vidrios();
+    const fondo430 = fondoEstado();
+    await new Promise(r => setTimeout(r, 270));
+    corre = false;
+    const vidFin = this.vidrios();
+    dts.shift();
+    const perdidos = dts.filter(d => d > 26).length;
+    const o = dts.slice().sort((a2, b2) => a2 - b2);
+    const med = o.length ? o[o.length >> 1] : 0;
+    return { antes: antes, capaPrimerCuadro: primerCapa,
+             cuadros: o.length, mediana: +med.toFixed(1),
+             peor: +(o[o.length - 1] || 0).toFixed(1), perdidos: perdidos,
+             animando: anim.length, quienes: anim.slice(0, 6),
+             vidDurante: vid90.n, pxDurante: vid90.px,
+             fondo90: fondo90, fondo430: fondo430,
+             vid430: vid430.n, px430: vid430.px,
+             vidFin: vidFin.n, pxFin: vidFin.px,
+             topFin: vidFin.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
+  /* la mascota se va CON el cajón: buscando y cerrando, antes se quedaba 2,4 s
+     encima del escritorio con su bucle de WebGL corriendo */
+  async mascCierre(q){
+    verCajon(true);
+    /* la mascota sólo cabe con la lista corta: sin filtro, con 150 apps
+       `mascCabe()` es falso y la prueba mediría un camino que no existe */
+    if (q !== undefined){ $('#busca2').value = q; pintaCajon(q);
+      /* la pintada va una por cuadro (vuelta 129): pidiendo la mascota en el
+         mismo instante, `mascCabe()` mide todavía la lista de 150 */
+      await new Promise(r => setTimeout(r, 260)); }
+    mascotaBaila(true);
+    await new Promise(r => setTimeout(r, 700));
+    const dentro = this.masc();
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 420));
+    const a420 = this.masc();
+    await new Promise(r => setTimeout(r, 900));
+    const a1300 = this.masc();
+    return { cabe: dentro.cabe,
+             dentro: { on: dentro.on, corre: dentro.corre },
+             a420: { on: a420.on, corre: a420.corre },
+             a1300: { on: a1300.on, corre: a1300.corre } };
+  },
+  mascSinCaj(v){ MASC_SIN_CAJ = !!v; return MASC_SIN_CAJ; },
+  /* el A/B del cierre: con 0 el vidrio del escritorio vuelve en el mismo cuadro
+     en que se acaba la animación, que es como estaba antes de la vuelta 135 */
+  cajTarde(v){ CAJ_VUELVE_MS = +v; return CAJ_VUELVE_MS; },
+  /* el A/B de la vuelta 136: con `true` vuelven las capas que la hoja tapa */
+  cajCapas(v){ document.body.classList.toggle('cajCapasV', !!v);
+               return !document.body.classList.contains('cajCapasV'); },
+  /* ── LO QUE EL COMPOSITOR TIENE QUE SOSTENER EN ESTE INSTANTE ──
+     No mide milisegundos: mide MEMORIA. Un `will-change` reserva una superficie
+     de render y un `<canvas>` visible es una capa, se dibuje algo en él o no —
+     y las dos cosas se pagan aunque estén tapadas por una hoja opaca. Los megas
+     salen de suponer densidad 3 y cuatro bytes por píxel, que es lo que cuesta
+     una textura en un teléfono. */
+  capas(){
+    const l = [];
+    const anota = (e, por) => {
+      const c = getComputedStyle(e);
+      if (c.visibility === 'hidden' || c.display === 'none') return;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return;
+      l.push({ q: (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className
+                   ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : ''),
+               por, px: Math.round(r.width * r.height) });
+    };
+    for (const e of document.querySelectorAll('*')){
+      const c = getComputedStyle(e);
+      if (c.willChange && c.willChange !== 'auto') anota(e, 'will-change:' + c.willChange);
+    }
+    for (const e of document.querySelectorAll('canvas')) anota(e, 'canvas');
+    const px = l.reduce((a, b) => a + b.px, 0);
+    l.sort((a, b) => b.px - a.px);
+    return { n: l.length, px, mb: +(px * 9 * 4 / 1048576).toFixed(1), lista: l };
+  },
+  /* cuánto trabajo esconde `body.cajQ`: cuántos elementos vuelven a la vista
+     en el primer cuadro del cierre */
+  /* Devuelve las tres capas viejas del zoom de abrir app y la deriva sin
+     pausar. SE LLAMA `animVieja` Y NO `anim` PORQUE `anim()` YA EXISTÍA
+     doscientas líneas más abajo: en un objeto literal gana la última, así que
+     la mía no existía y el A/B contestaba con los datos de otra sonda sin
+     fallar. Van tres veces en este repo (`reja`, `pack`, `aguaCosto`). */
+  animVieja(v){ document.body.classList.toggle('animViejaV', !!v);
+           return !document.body.classList.contains('animViejaV'); },
+  /* ── EL INVENTARIO DE ANIMACIONES ──
+     `capas()` cuenta lo que el compositor SOSTIENE; esto cuenta lo que
+     RECALCULA. Devuelve cada animación viva con su objetivo, qué propiedades
+     toca y si esas propiedades se pueden componer en la GPU: todo lo que no
+     sea `transform`, `opacity`, `filter` o `scale`/`rotate`/`translate` obliga
+     a rehacer estilo, layout o pintado en cada cuadro, y ésas son las caras.
+     `px` es cuánto mide su objetivo, que es lo que decide si una animación
+     compuesta también cuesta una textura. */
+  anims(){
+    const COMP = new Set(['transform','opacity','filter','scale','rotate',
+                          'translate','backdrop-filter','offset-distance']);
+    const l = [];
+    for (const a of document.getAnimations()){
+      if (a.playState !== 'running') continue;
+      const e = a.effect && a.effect.target; if (!e) continue;
+      const props = new Set();
+      try { for (const k of a.effect.getKeyframes())
+              for (const p of Object.keys(k))
+                if (!['offset','computedOffset','easing','composite'].includes(p))
+                  props.add(p.replace(/[A-Z]/g, c => '-' + c.toLowerCase())); } catch(_){}
+      const r = e.getBoundingClientRect();
+      const t = a.effect.getTiming();
+      l.push({ q: (e.id ? '#' + e.id : '') + (e.className && typeof e.className === 'string'
+                 ? '.' + e.className.trim().split(/\s+/).join('.') : ''),
+               k: a.animationName || (a.transitionProperty ? 'tr:' + a.transitionProperty : '?'),
+               p: [...props].join(','),
+               dur: t.duration, inf: t.iterations === Infinity,
+               px: Math.round(r.width * r.height),
+               caro: [...props].some(p => !COMP.has(p)) });
+    }
+    l.sort((a, b) => b.px - a.px);
+    const inf = l.filter(x => x.inf), caras = l.filter(x => x.caro);
+    return { n: l.length, infinitas: inf.length, caras: caras.length,
+             pxInf: inf.reduce((a, b) => a + b.px, 0), lista: l };
+  },
+  capaPeso(){
+    const capa = $('#capa');
+    const todos = capa.querySelectorAll('*');
+    let vid = 0, img = 0;
+    todos.forEach(e => {
+      const c = getComputedStyle(e);
+      if ((c.backdropFilter && c.backdropFilter !== 'none') ||
+          (c.webkitBackdropFilter && c.webkitBackdropFilter !== 'none')) vid++;
+      if (e.tagName === 'IMG' || (c.backgroundImage && c.backgroundImage !== 'none')) img++;
+    });
+    const r = capa.getBoundingClientRect();
+    return { nodos: todos.length, conVidrio: vid, conImagen: img,
+             px: Math.round(r.width * r.height),
+             visibilidad: getComputedStyle(capa).visibility };
+  },
+  /* ── QUÉ LE PIDE AL COMPOSITOR EL CUADRO EN QUE LA HOJA ARRANCA ──
+     El banco dibuja por software, así que sus milisegundos no son los del
+     teléfono. Lo que sí no depende del aparato es CUÁNTAS cosas se le piden:
+     cada `.ap.entra` es una capa que hay que reservar, rasterizar y subir a la
+     GPU justo en el cuadro en que la hoja empieza a moverse, y cada cambio del
+     `transform` del fondo obliga a rehacer todos los `backdrop-filter` que
+     tenga encima. */
+  async cajCarga(){
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 520));
+    const f = $('#fondo');
+    const vistos = new Set(); let cuadros = 0; let corre = true;
+    const mira = () => {
+      const c = getComputedStyle(f);
+      vistos.add((c.scale || '') + '|' + (c.transform || ''));
+      cuadros++;
+      if (corre) requestAnimationFrame(mira);
+    };
+    requestAnimationFrame(mira);
+    verCajon(true);
+    /* la CLASE puede estar puesta de una pintada vieja y su animación ya
+       terminada: lo que cuesta una capa es la que está CORRIENDO */
+    const clase = $$('#cajLista .ap.entra').length;
+    await new Promise(r => setTimeout(r, 60));
+    const anim = document.getAnimations().filter(a => a.playState === 'running').length;
+    const vid = this.vidrios();
+    await new Promise(r => setTimeout(r, 440));
+    corre = false;
+    return { claseEntra: clase, animando: anim,
+             cambiosFondo: vistos.size, cuadros: cuadros,
+             vidDurante: vid.n, pxDurante: vid.px,
+             topDurante: vid.top.slice(0, 4).map(x => x.q + ' ' + x.px) };
+  },
+  async cajAbre(){
+    verCajon(false); cajCacheLimpia();
+    await new Promise(r => setTimeout(r, 60));
+    const caj = $('#cajon');
+    let t = performance.now(); verCajon(true); const primera = performance.now() - t;
+    const abre1 = caj.classList.contains('abre');
+    await new Promise(r => setTimeout(r, 520));
+    const abreTarde = caj.classList.contains('abre');
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 520));
+    t = performance.now(); verCajon(true); const segunda = performance.now() - t;
+    const ult = CAJ_ULT_Q;
+    await new Promise(r => setTimeout(r, 520));
+    verCajon(false);
+    await new Promise(r => setTimeout(r, 520));
+    /* el control: la caché de baldosas caliente pero obligando a repintar, que
+       es exactamente lo que hacía cada apertura hasta esta vuelta */
+    CAJ_ULT_Q = null;
+    t = performance.now(); verCajon(true); const antes = performance.now() - t;
+    await new Promise(r => setTimeout(r, 520));
+    verCajon(false);
+    return { primeraMs: +primera.toFixed(2), segundaMs: +segunda.toFixed(2),
+             comoAntesMs: +antes.toFixed(2),
+             abreDurante: abre1, abreDespues: abreTarde, ultimoFiltro: ult,
+             apps: $('#cajLista').querySelectorAll('.ap').length };
+  },
+
+  /* ── LA PANTALLA DE INICIO ──
+     Sin puente no hay rol que pedir: lo que se puede medir en el banco es que
+     la hoja se arma, dice lo que corresponde y ofrece los dos botones con el
+     apagado puesto donde va. */
+  ini(){
+    const e = iniEstado(), c = $('#iniCuerpo');
+    return { abierto: $('#ini').classList.contains('on'), estado: e,
+             pkg: INI_PKG, enLista: !!POR_PKG[INI_PKG],
+             tit: $('#iniTit').textContent,
+             lineas: [...c.querySelectorAll('.iEst,.iNota')].map(x => x.textContent),
+             botones: [...c.querySelectorAll('.iBtn')]
+                        .map(x => [x.textContent, x.classList.contains('no') ? 'off' : 'on']) };
+  },
+  iniAbrir(){ iniAbre(); return true; },
+  iniCerrar(){ iniCierra(); return true; },
+  iniToca(txt){
+    const b = [...$('#iniCuerpo').querySelectorAll('.iBtn')]
+                .find(x => x.textContent === txt);
+    if (!b) return 'no está: ' + txt;
+    b.click(); return this.ini();
+  },
+  /* ── PARA DÓNDE MUEVE UN EJE ──
+     Los ejes de un hueso no se adivinan: se gira uno y se mira dónde quedó la
+     punta. Devuelve el desplazamiento de `mira` al girar `nom` un radián sobre
+     cada eje de MUNDO, en centímetros del muñeco. */
+  mascEje(nom, mira){
+    const E = { adelante: EJE_AD, arriba: EJE_AR, derecha: EJE_DE };
+    const i = L3.hueso[mira];
+    const base = (() => { l3Reposo(); l3Componer();
+      return [L3.mundo[i*16+12], L3.mundo[i*16+13], L3.mundo[i*16+14]]; })();
+    const out = { reposo: base.map(v => +v.toFixed(3)) };
+    for (const k in E){
+      for (const sg of [1, -1]){
+        l3Reposo(); l3Gira(nom, E[k], sg); l3Componer();
+        out[k + (sg > 0 ? '+' : '-')] = [
+          +(L3.mundo[i*16+12]-base[0]).toFixed(3),
+          +(L3.mundo[i*16+13]-base[1]).toFixed(3),
+          +(L3.mundo[i*16+14]-base[2]).toFixed(3)];
+      }
+    }
+    l3Reposo(); l3Componer();
+    return out;
+  },
+  /* la posición de mundo de un hueso en el instante `t` de una animación */
+  mascHueso(nom, an, t){
+    const i = L3.hueso[nom];
+    if (i === undefined) return { error: 'no existe ' + nom, hay: Object.keys(L3.hueso) };
+    L3.anim = an || L3.anim; L3.t = t === undefined ? L3.t : t;
+    l3Reposo(); (L3_ANIM[L3.anim] || L3_ANIM.quieto)(L3.t); l3Componer();
+    const M = L3.mundo, b = L3_BAJA[L3.anim] || 0;
+    return { x:+M[i*16+12].toFixed(4), y:+(M[i*16+13]+b).toFixed(4), z:+M[i*16+14].toFixed(4) };
+  },
+  /* cuánto recorre un hueso a lo largo de una animación: si da cero, esa
+     animación no anima, por más que tenga nombre */
+  mascRecorre(nom, an, n){
+    n = n || 40;
+    let mn = [1e9,1e9,1e9], mx = [-1e9,-1e9,-1e9];
+    for (let k = 0; k < n; k++){
+      const p = this.mascHueso(nom, an, k*(an === 'duerme' ? 6 : 1.4)/n);
+      const v = [p.x, p.y, p.z];
+      for (let a = 0; a < 3; a++){ mn[a] = Math.min(mn[a], v[a]); mx[a] = Math.max(mx[a], v[a]); }
+    }
+    return { rango: mx.map((v, a) => +(v - mn[a]).toFixed(4)),
+             total: +Math.hypot(mx[0]-mn[0], mx[1]-mn[1], mx[2]-mn[2]).toFixed(4) };
+  },
+  /* el cuadro del muñeco, leído del búfer: un lienzo WebGL sin
+     `preserveDrawingBuffer` sale en cero con `toDataURL`, así que se lee con
+     `readPixels` y se cuenta cuántos píxeles tienen algo */
+  mascPixeles(){
+    const gl = L3.gl; if (!gl) return null;
+    const w = gl.canvas.width, h = gl.canvas.height;
+    const px = new Uint8Array(w*h*4);
+    l3Pinta(0);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let n = 0, x0 = w, x1 = -1, y0 = h, y1 = -1, sr = 0, sg = 0, sb = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+      const i = (y*w + x)*4;
+      if (px[i+3] > 8){ n++; sr += px[i]; sg += px[i+1]; sb += px[i+2];
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    return { lienzo: [w, h], pintados: n, pct: +(100*n/(w*h)).toFixed(1),
+             caja: n ? [x0, y0, x1, y1] : null,
+             alto: n ? +((y1-y0+1)/h).toFixed(3) : 0,
+             ancho: n ? +((x1-x0+1)/w).toFixed(3) : 0,
+             medio: n ? [Math.round(sr/n), Math.round(sg/n), Math.round(sb/n)] : null };
+  },
+  /* ── LA HOJA DE CONTACTO ──
+     Cinco poses una al lado de la otra, en una sola imagen. La mascota se
+     dibuja en 64 px de ancho y en la pantalla mide 132: mirarla en la captura
+     del launcher no alcanza para juzgar si un brazo sube o baja. Se lee el
+     búfer con `readPixels` —un lienzo WebGL sin `preserveDrawingBuffer` sale en
+     cero con `toDataURL`—, se da vuelta en vertical (GL devuelve las filas de
+     abajo hacia arriba) y se estira con NEAREST, que es como se ve de verdad. */
+  mascHoja(esc){
+    const gl = L3.gl; if (!gl) return null;
+    esc = esc || 4;
+    const P = ['quieto','baila','saluda','mando','duerme'];
+    const w = gl.canvas.width, h = gl.canvas.height;
+    const cv = document.createElement('canvas');
+    cv.width = w*esc*P.length; cv.height = h*esc;
+    const cx = cv.getContext('2d');
+    cx.imageSmoothingEnabled = false;
+    cx.fillStyle = '#20304a'; cx.fillRect(0, 0, cv.width, cv.height);
+    const uno = document.createElement('canvas');
+    uno.width = w; uno.height = h;
+    const ux = uno.getContext('2d');
+    const px = new Uint8Array(w*h*4);
+    const guardo = [L3.anim, L3.t];
+    P.forEach((n, k) => {
+      L3.anim = n; L3.t = n === 'duerme' ? 3.0 : 0.9;
+      l3Pinta(0);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      const im = ux.createImageData(w, h);
+      for (let y = 0; y < h; y++)
+        im.data.set(px.subarray((h-1-y)*w*4, (h-y)*w*4), y*w*4);
+      ux.putImageData(im, 0, 0);
+      cx.drawImage(uno, k*w*esc, 0, w*esc, h*esc);
+      cx.fillStyle = '#fff'; cx.font = '16px system-ui';
+      cx.fillText(n, k*w*esc + 8, 20);
+    });
+    L3.anim = guardo[0]; L3.t = guardo[1];
+    return cv.toDataURL('image/png');
+  },
+  /* ── LO QUE CUESTA LA MASCOTA ──
+     Con el fondo procedural había un `costo(n)` que promediaba milisegundos de
+     lienzo por cuadro; el fondo pasó a foto y esa sonda se fue con él. Ahora lo
+     único que dibuja por cuadro es el muñeco, así que la pregunta vuelve: un
+     bucle de render en la pantalla de inicio de un teléfono es batería. */
+  mascCosto(n){
+    n = n || 60;
+    if (!L3.gl) return null;
+    l3Pinta(0.016); L3.gl.finish();
+    const t0 = performance.now();
+    for (let k = 0; k < n; k++) l3Pinta(0.016);
+    L3.gl.finish();
+    return { ms: +((performance.now()-t0)/n).toFixed(3), cuadros: n,
+             tri: LEMI.nt, px: L3.gl.canvas.width*L3.gl.canvas.height,
+             corre: L3.on };
+  },
+  /* el ocio: se le corre el reloj hacia atrás para no esperar siete segundos */
+  mascDormir(){ MASC_ULT = Date.now() - 9000; mascOcio(); return this.masc(); },
+  mascAburrir(){ MASC_ULT = Date.now(); mascOcio(); return this.masc(); },
+  /* abrir el cajón / una página / el menú por el mismo camino que el dedo */
+  /* ── SIN ARGUMENTO LEE, NO ESCRIBE ──
+     Decía `verCajon(v !== false)`, o sea que preguntar por el estado lo ABRÍA.
+     Costó dos mediciones de la vuelta 136: una lectura después de un arrastre
+     devolvía «abierto» porque la propia sonda lo había abierto un milisegundo
+     antes. Es la misma familia que `cajModo(v)` en la vuelta 129 — una sonda
+     que escribe el estado que viene a medir no está midiendo el juego. */
+  cajon(v){ if (v !== undefined) verCajon(!!v); return CAJON; },
+  /* La animación de arranque, ejercida por el mismo camino que el dedo. Va por
+     `zoomArranca` y no por `abreZoom` porque en el banco no hay puente y esa
+     guarda saldría por el atajo — o sea que la sonda no mediría nada. */
+  zoom(pkg, i){
+    const n = $$('#tira .ap')[i || 0] || $$('#cajLista .ap')[i || 0];
+    if (!n) return { hay: false };
+    zoomArranca(pkg || n.dataset.p || 'x', n);
+    return this.anim();
+  },
+  /* El estado de las animaciones en este instante: cuántas corriendo, cuánto
+     llevan, y dónde está lo que se está moviendo. Una animación sin número no
+     se puede afirmar. */
+  anim(){
+    const cs = getComputedStyle(document.body);
+    const vivas = [];
+    for (const e of $$('.ap.entra,.wCard.entra,.ap.saliendo,.ap.late,#carp')){
+      const st = getComputedStyle(e);
+      const an = st.animationName, dur = st.animationDuration, dl = st.animationDelay;
+      const r = e.getBoundingClientRect();
+      if (an !== 'none' || e.id === 'carp')
+        vivas.push({ q: e.id || e.className.split(' ').slice(0,2).join('.'),
+                     an, dur, dl, op: +(+st.opacity).toFixed(3),
+                     tr: st.transform === 'none' ? 'none' : st.transform.slice(0,44),
+                     x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width) });
+    }
+    return { abriendo: document.body.classList.contains('abriendo'),
+             zx: cs.getPropertyValue('--zx').trim(), zy: cs.getPropertyValue('--zy').trim(),
+             capa: +(+getComputedStyle($('#capa')).opacity).toFixed(3),
+             n: vivas.length, vivas: vivas.slice(0, 8) };
+  },
+  pagina(i){ ponPagina(i); return { pag: PAG, npag: NPAG }; },
+  menu(p){ abreMenu(p, innerHeight*0.5); return MENU_PKG; },
+  cierra(){ cierraMenu(); return MENU_PKG; },
+  /* ── LA SONDA ESCRIBE POR EL CAMINO DEL DEDO ──
+     Llamando a `pintaCajon` directo se saltea el escucha de `input`, que es
+     quien hace bailar a la mascota: medido, `masc().on` daba false después de
+     buscar y parecía que la mascota no andaba. Se despacha un `input` de
+     verdad, que es lo que dispara el teclado. */
+  buscar(q){
+    verCajon(true);
+    const i = $('#busca2');
+    i.value = q;
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+    return { n: $$('#cajLista .ap').length,
+             nombres: $$('#cajLista .nom').map(e => e.textContent),
+             web: $$('#cajLista .web').length,
+             textoWeb: ($('#cajLista .web span:last-child') || {}).textContent || null };
+  },
+  insets(t, b){ window.__insets(t, b); return { filas: FILAS }; },
+
+  /* ══════════ LA REJA ══════════ */
+  reja(){
+    const c = getComputedStyle(document.documentElement);
+    const b = $('#dock .baldosa') || $('#tira .baldosa') || $('#cajLista .baldosa');
+    return { ico: ICO, cols: COLS, alto: ALTO_AP, filas: FILAS,
+             cssIco: c.getPropertyValue('--ico').trim(),
+             cssCols: c.getPropertyValue('--cols').trim(),
+             baldosaPx: b ? Math.round(b.getBoundingClientRect().width) : null,
+             colsCajon: getComputedStyle($('#cajLista')).gridTemplateColumns.split(' ').length };
+  },
+
+  /* ══════════ PERSONALIZACIÓN ══════════ */
+  pers(){
+    const c = getComputedStyle(document.documentElement);
+    return { abierto: $('#pers').classList.contains('on'),
+             grupos: $$('#persCuerpo .pTit').map(t => t.textContent),
+             acento: c.getPropertyValue('--acento').trim(),
+             oscuro: +getComputedStyle($('#oscuro')).opacity,
+             mascOn: !!lee('mascOn', 1), mascTam: lee('mascTam', 'media'),
+             mascW: c.getPropertyValue('--masc-w').trim(),
+             mascH: c.getPropertyValue('--masc-h').trim(),
+             visible: $('#mascota').classList.contains('on'), pose: MASC_HOY };
+  },
+  /* qué glifo y qué familia le toca a un paquete. Con emparejamiento por
+     subcadena, agregar una app puede robarle el icono a otra sin que nada
+     falle: esto es lo único que lo detecta. */
+  /* ══════════ LA CÁMARA ══════════ */
+  cam(){
+    const d = document.getElementById('cam');
+    if (!d) return { armada: false };
+    const v = $('#camVid'), vi = $('#camVisor'), r = vi.getBoundingClientRect();
+    const m = camModo();
+    return { armada: true, on: CAM.on, eligiendo: CAM.panel,
+             ajustes: CAM.ajustes, tab: CAM.tab,
+             modo: m.id, modos: CAM_MODOS.length,
+             asp: CAM_ASPECTOS[CAM.asp].id, zoom: CAM.zoom, cara: CAM.cara,
+             flujo: !!CAM.flujo, err: CAM.err, permiso: CAM.permiso,
+             video: v ? [v.videoWidth, v.videoHeight, v.readyState] : null,
+             espejo: v ? v.classList.contains('espejo') : null,
+             /* cuánto del fondo Frutiger queda a la vista: es la mitad del
+                pedido y no se puede afirmar sin medirlo */
+             visor: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
+             pantalla: [innerWidth, innerHeight],
+             fondoVisible: +(100 * (1 - (r.width*r.height)/(innerWidth*innerHeight))).toFixed(1),
+             tomas: CAM.tomas, hayFoto: !!CAM.ultima, grabando: CAM.grabando,
+             filtro: CAM.filtro, reja: $('#camReja').className || 'sin' };
+  },
+  camAbrir(){ camAbre(); return this.cam(); },
+  camCerrar(){ camCierra(); return true; },
+  async camAero(){ camPanel(false); await camArranca(); return this.cam(); },
+  camModo(i){ camPonModo(i); return this.cam(); },
+  camAsp(i){ CAM.asp = i % CAM_ASPECTOS.length; camPinta(); return this.cam(); },
+  camZoom(z){ CAM.zoom = z; camAplicaZoom(); camPinta(); return this.cam(); },
+  camFoto(){ const r = camDispara(); return { corte: r, cam: this.cam() }; },
+  camVuelta(){ camDaVuelta(); return this.cam(); },
+  camAjustes(t){
+    CAM.ajustes = true; if (t) CAM.tab = t;
+    $('#cam').classList.add('conAjustes'); camAjPinta();
+    const f = $$('#camAj .cajF');
+    /* ── `$` NO TOMA RAÍZ ──
+       Es `document.querySelector(s)` y nada más, así que `$('.cajN', x)`
+       ignora la fila y devuelve SIEMPRE la primera: las once filas salían con
+       el mismo rótulo y el mismo valor. Y eso no falla: contesta. */
+    return { tab: CAM.tab, filas: f.length,
+             textos: [].map.call(f, x => x.querySelector('.cajN').textContent),
+             valores: [].map.call(f, x => { const v = x.querySelector('.cajV');
+               const w = x.querySelector('.cajSw');
+               return w ? (w.classList.contains('on') ? 'ON' : 'off') : (v ? v.textContent : '—'); }) };
+  },
+  camOps(){ return Object.assign({}, CAM.ops); },
+  /* que ningún control se pise con otro: es la comprobación que este launcher
+     ya le hace al escritorio, y una cámara tiene más piezas que el escritorio */
+  camChoques(){
+    const q = ['#camTop','#camVisorC','#camZoom','#camModos','#camBarra','#camThumb','#camDisp','#camFlip'];
+    const c = [];
+    for (const sel of q){ const e = $(sel); if (!e) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) c.push({ q: sel, x: r.left, y: r.top, w: r.width, h: r.height }); }
+    /* ── UN PADRE NO CHOCA CON SU HIJO, Y ESO SE PREGUNTA, NO SE ENUMERA ──
+       Acá había una lista a mano con `#camBarra` y sus tres hijos. Desde la
+       vuelta 124 los chips de zoom viven ADENTRO del visor a propósito, y esa
+       pareja no estaba en la lista: la sonda venía informando
+       `#camVisorC×#camZoom` como choque desde entonces. Una prueba que nunca
+       puede dar limpio deja de detectar el choque de verdad, que es todo su
+       trabajo. `contains` lo contesta para cualquier anidado, también el que se
+       agregue mañana. */
+    const ch = [];
+    for (let i = 0; i < c.length; i++) for (let j = i+1; j < c.length; j++){
+      const a = c[i], b = c[j];
+      const ea = $(a.q), eb = $(b.q);
+      if (ea.contains(eb) || eb.contains(ea)) continue;
+      if (a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h) ch.push(a.q+'×'+b.q);
+    }
+    const fuera = c.filter(e => e.x < -1 || e.y < -1 || e.x+e.w > innerWidth+1 || e.y+e.h > innerHeight+1)
+                   .map(e => e.q);
+    return { n: c.length, choques: ch, fuera: fuera };
+  },
+  glifo(pkg, nombre){
+    const g = glifoDe(pkg, nombre);
+    return g ? (g + ':' + (ICO_DE_FAM[g] || '?')) : null;
+  },
+  /* ── LO QUE CUESTA REPINTAR LA LISTA ──
+     Es el otro número de «va muy lag»: la lista entera se rehace en CADA letra
+     que se escribe en el buscador, así que con 150 apps eso son 150 nodos
+     nuevos más la animación de entrada. Medirlo con las 32 del banco contesta
+     que no cuesta nada. */
+  cajParte(n){
+    n = n || 5;
+    const l = $('#cajLista');
+    let t = performance.now(); for (let i=0;i<n;i++){ const f=document.createDocumentFragment();
+      for (const a of APPS) f.appendChild(nodoApp(a)); }
+    const nodos = (performance.now()-t)/n;
+    t = performance.now(); for (let i=0;i<n;i++) entraLista(l);
+    const entra = (performance.now()-t)/n;
+    t = performance.now(); for (let i=0;i<n;i++){ l.scrollTop; l.scrollHeight; }
+    const layout = (performance.now()-t)/n;
+    return { apps: APPS.length, msNodos: Math.round(nodos*100)/100,
+             msEntra: Math.round(entra*100)/100, msLayout: Math.round(layout*100)/100 };
+  },
+  cajPinta(n){
+    n = n || 20;
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++) pintaCajon();
+    const ms = performance.now() - t0;
+    return { vueltas: n, msTotal: Math.round(ms*10)/10,
+             msPorPintada: Math.round(ms/n*100)/100,
+             apps: $$('#cajLista .ap').length };
+  },
+  /* ── LAS DOS FORMAS DEL CAJÓN ──
+     Devuelve lo único que las distingue: si hay encabezados, cuántas anclas
+     tiene el riel y cuántas apps quedaron resaltadas. Un cajón «todo junto» sin
+     anclas sería un riel muerto, y eso no se ve en una foto. */
+  cajModo(v){
+    if (v != null){ guarda('cajLetras', v ? 1 : 0); pintaCajon($('#busca2').value); }
+    const l = $('#cajLista');
+    return { porLetras: !!lee('cajLetras', 1), junto: l.classList.contains('junto'),
+             encabezados: $$('#cajLista .let').length, apps: $$('#cajLista .ap').length,
+             anclas: Object.keys(ANCLA).length, letras: LETRAS.length,
+             res: $$('#cajLista .ap.res').length, hayRes: l.classList.contains('hayRes') };
+  },
+  /* ── EL CENTRO DE CONTROL ──
+     Lo que importa medir no es que se vea: es cuántos interruptores son LLAVES
+     y cuántos son ATAJOS, porque un atajo dibujado como llave miente. */
+  cc(){
+    const h = $('#ccHoja');
+    return { on: CC.on,
+             botones: $$('#cc .ccB').length,
+             llaves: $$('#cc .ccB.llave').length,
+             atajos: $$('#cc .ccB.atajo').length,
+             /* los cuatro de accesibilidad: `falta` es la marca de que el
+                permiso no está, o sea que la prueba distingue «hace la cosa» de
+                «te lleva a darlo» y no sólo que el botón exista */
+             acces: $$('#cc .ccB.acc').length,
+             accesFalta: $$('#cc .ccB.acc.falta').length,
+             accesEstado: accEstado(),
+             encendidos: $$('#cc .ccB.on').length,
+             brillo: +CC.brillo.toFixed(3), vol: +CC.vol.toFixed(3),
+             /* lo que costó la ÚLTIMA apertura, paso por paso: es el número
+                que dice si la hoja se armó en el ocio o adentro del gesto */
+             ms: CC.ms ? { arma: +CC.ms.arma.toFixed(1), lee: +CC.ms.lee.toFixed(1),
+                           pinta: +CC.ms.pinta.toFixed(1), total: +CC.ms.total.toFixed(1) } : null,
+             alto: h ? Math.round(h.getBoundingClientRect().height) : 0,
+             visible: h ? Math.round(h.getBoundingClientRect().bottom) : 0 };
+  },
+  ccAbrir(){ ccAbre(); return true; },
+  /* ── DÓNDE SE VA EL PICO DE ABRIR, PASO POR PASO ──
+     Las vueltas 138 y 139 midieron el viaje entero y dejaron un pico de 108 a
+     183 ms sin explicar, presente en los dos lados de sus A/B. Un número solo
+     no dice cuál de los cuatro pasos lo paga, así que `ccAbre` cronometra los
+     tres suyos y esto los devuelve. `frio` es la PRIMERA apertura —la única en
+     la que `ccArma` tiene algo que hacer— y `caliente` la segunda. */
+  /* el A/B de armar en el ocio: `true` deja la hoja sin armar y la apertura
+     vuelve a pagar los 27-93 ms de `ccArma`, o sea que la medición detecta el
+     defecto además de aprobar el arreglo */
+  ccArmaVieja(v){
+    document.body.classList.toggle('ccArmaV', !!v);
+    return !document.body.classList.contains('ccArmaV');
+  },
+  /* y el del alivio de capas del centro, igual que `cajCapas` con el cajón */
+  ccCapas(v){
+    document.body.classList.toggle('ccCapasV', !!v);
+    return !document.body.classList.contains('ccCapasV');
+  },
+  async ccCosto(){
+    const cc = $('#cc'); if (cc) cc.remove();
+    CC.on = false; document.body.classList.remove('cc','ccMueve','ccQ');
+    await new Promise(r => setTimeout(r, 60));
+    ccAbre(); const frio = Object.assign({}, CC.ms);
+    await new Promise(r => setTimeout(r, 700));
+    ccCierra();
+    await new Promise(r => setTimeout(r, 700));
+    ccAbre(); const cal = Object.assign({}, CC.ms);
+    await new Promise(r => setTimeout(r, 700));
+    ccCierra();
+    const r3 = x => ({ arma: +x.arma.toFixed(1), lee: +x.lee.toFixed(1),
+                       pinta: +x.pinta.toFixed(1), total: +x.total.toFixed(1) });
+    return { frio: r3(frio), caliente: r3(cal),
+             armada: !!$('#cc'), botones: $$('#cc .ccB').length };
+  },
+  /* ── LA ACCESIBILIDAD, CON UN PUENTE DE MENTIRA ──
+     El banco no tiene servicio de accesibilidad, así que lo que se puede medir
+     es que los cuatro estados se distingan y que tocar un botón llame a la
+     acción correcta cuando el permiso está y a la pantalla del permiso cuando
+     no. Sin esto, «bajé la barra» y «no pasó nada» se ven iguales. */
+  accFinge(est){
+    const A = window.AND = window.AND || {};
+    window.__accUlt = null; window.__accPidio = 0;
+    guarda('restrA', 0); delete A.restringido; delete A.restringidoAbrir;
+    A.accesAccion = q => { window.__accUlt = q; return est === 'ok'; };
+    A.accesPedir = () => { window.__accPidio++; return true; };
+    if (est === 'sinPuente'){ delete A.accesAccion; delete A.accesPedir; }
+    else {
+      A.accesHabilitado = () => est !== 'sinPermiso';
+      A.accesOk = () => est === 'ok';
+    }
+    ccPinta();
+    return { est: accEstado(), acces: $$('#cc .ccB.acc').length,
+             falta: $$('#cc .ccB.acc.falta').length,
+             aviso: ($('#ccNotis .ccAviso span') || {}).textContent || null };
+  },
+  accToca(id){
+    window.__accUlt = null; window.__accPidio = 0;
+    const b = CC_BOT.filter(x => x.id === id)[0];
+    if (!b) return { hay: false };
+    ccToca(b);
+    return { hay: true, accion: window.__accUlt, pidio: window.__accPidio };
+  },
+  /* ── LAS NOTIFICACIONES, CON UN PUENTE DE MENTIRA ──
+     El banco no tiene servicio de escucha, así que lo único que se puede medir
+     de verdad es que los TRES estados se distingan y que una lista inyectada se
+     dibuje fila por fila. Sin esto, «no hay notificaciones» y «falta el
+     permiso» se verían iguales en la prueba, que es justo el defecto que este
+     código existe para no tener. */
+  notis(){
+    return { estado: ccNotisEstado(),
+             filas: $$('#ccNotis .ccN').length,
+             aviso: $$('#ccNotis .ccAviso').length ? $('#ccNotis .ccAviso span').textContent.slice(0, 60) : null,
+             vacio: $$('#ccNotis .ccVacio').length,
+             boton: $$('#ccNotis .ccAviso .ccBt').length,
+             textos: $$('#ccNotis .ccN').map(f => f.querySelector('.ccNT').textContent) };
+  },
+  /* ── EL MODO RESTRINGIDO DE ANDROID 13, QUE ES LO QUE EL BANCO NO TIENE ──
+     Acá no hay app-op ni pantalla de Ajustes, así que lo medible es lo único
+     que puede estar mal de este lado: que las DOS señales lleven al estado
+     'trabado', que la del sistema le gane a la medida, que el botón cambie de
+     rótulo y de destino, y que dar el permiso borre la marca. `pista` es
+     1 trabado · 0 libre · null sin puente (o sea el −1 de «no sé»). */
+  restrFinge(cual, pista, sinPermiso){
+    const A = window.AND = window.AND || {}; A.__f = true;
+    window.__restrAbrio = 0;
+    guarda('restrA', 0); guarda('restrN', 0);
+    if (pista === null) delete A.restringido; else A.restringido = () => pista;
+    A.restringidoAbrir = () => { window.__restrAbrio++; return true; };
+    if (cual === 'acces'){
+      window.__accPidio = 0;
+      A.accesAccion = () => true;
+      A.accesPedir = () => { window.__accPidio++; return true; };
+      A.accesHabilitado = () => !sinPermiso;
+      A.accesOk = () => !sinPermiso;
+    } else {
+      window.__notiPidio = 0;
+      A.notis = () => '[]';
+      A.notiPedir = () => { window.__notiPidio++; return true; };
+      A.notiHabilitado = () => !sinPermiso;
+      A.notiOk = () => !sinPermiso;
+    }
+    ccPinta();
+    return __A.restrVer(cual);
+  },
+  restrVer(cual){
+    ccPinta();                     /* el panel se repinta acá: desde el banco no
+                                      se alcanza una función del módulo */
+    const f = $$('#ccNotis .ccAviso');
+    /* el de accesibilidad va primero y el de notificaciones después: con los
+       dos avisos puestos hay que mirar el que se pidió y no el primero */
+    const i = cual === 'acces' ? 0 : (accEstado() === 'ok' ? 0 : 1);
+    const n = f[i] || null;
+    return { est: cual === 'acces' ? accEstado() : ccNotisEstado(),
+             avisos: f.length,
+             texto: n ? (n.querySelector('span') || {}).textContent || null : null,
+             boton: n ? ((n.querySelector('.ccBt') || {}).textContent || null) : null,
+             marca: lee(cual === 'acces' ? 'restrA' : 'restrN', 0) };
+  },
+  restrDa(cual){                    /* le damos el permiso: la marca tiene que irse */
+    if (cual === 'acces'){ AND.accesHabilitado = () => true; AND.accesOk = () => true; }
+    else { AND.notiHabilitado = () => true; AND.notiOk = () => true; }
+    return __A.restrVer(cual);
+  },
+  restrPista(v){ if (v === null) delete AND.restringido; else AND.restringido = () => v;
+                 return __A.restrVer('acces'); },
+  restrToca(cual){
+    window.__restrAbrio = 0; window.__accPidio = 0; window.__notiPidio = 0;
+    const f = $$('#ccNotis .ccAviso');
+    const i = cual === 'acces' ? 0 : (accEstado() === 'ok' ? 0 : 1);
+    const b = f[i] && f[i].querySelector('.ccBt');
+    if (!b) return { hay: false };
+    b.click();
+    return { hay: true, abrioFicha: window.__restrAbrio,
+             pidioPermiso: cual === 'acces' ? window.__accPidio : window.__notiPidio,
+             marca: lee(cual === 'acces' ? 'restrA' : 'restrN', 0) };
+  },
+  notiFinge(lista){
+    if (lista === null){ if (window.AND && AND.__f) delete window.AND; ccNotis(); return ccNotisEstado(); }
+    window.AND = window.AND || {};
+    AND.__f = true;
+    AND.notis = () => JSON.stringify(lista || []);
+    AND.notiHabilitado = () => true;
+    AND.notiOk = () => true;
+    AND.notiQuitar = k => { lista = lista.filter(n => n.k !== k); AND.notis = () => JSON.stringify(lista); return true; };
+    AND.notiLimpiar = () => { lista = []; AND.notis = () => JSON.stringify(lista); return true; };
+    AND.notiAbrir = () => true;
+    AND.abrir = () => true;
+    ccNotis();
+    return { estado: ccNotisEstado(), filas: $$('#ccNotis .ccN').length };
+  },
+  notiSinPermiso(){
+    window.AND = window.AND || {}; AND.__f = true;
+    guarda('restrN', 0); delete AND.restringido; delete AND.restringidoAbrir;
+    AND.notis = () => '[]';
+    AND.notiHabilitado = () => false;
+    AND.notiOk = () => false;
+    AND.notiPedir = () => true;
+    ccNotis();
+    return { estado: ccNotisEstado(), aviso: $$('#ccNotis .ccAviso').length,
+             boton: $$('#ccNotis .ccAviso .ccBt').length };
+  },
+  /* ══════════ LO NUEVO DE LA VUELTA 142 ══════════ */
+
+  /* ── LOS ATAJOS, CON EL PUENTE FINGIDO ──
+     El banco no es la pantalla de inicio de ningún Android, así que
+     `hasShortcutHostPermission` sería false de verdad y no habría nada que
+     medir. Lo que se prueba acá es lo único que puede estar mal de este lado:
+     que las filas se armen, que abran el atajo que dicen, y —el control— que
+     sin permiso el menú se quede con sus tres opciones de siempre. */
+  atajoFinge(lista){
+    window.AND = window.AND || {}; AND.__f = true;
+    ATAJOS_OK = null;
+    AND.atajosOk = () => lista !== null;
+    AND.atajos = () => JSON.stringify(lista || []);
+    AND.__at = null;
+    AND.atajoAbrir = (p, i) => { AND.__at = p + '|' + i; return true; };
+    return { ok: atajosHay() };
+  },
+  atajosVer(pkg){
+    abreMenu(pkg || (APPS[0] && APPS[0].p), 300);
+    const m = $('#menu');
+    return { filas: $$('#menuAt .mat').length,
+             on: $('#menuAt').classList.contains('on'),
+             textos: $$('#menuAt .mat').map(f => f.lastElementChild.textContent),
+             mops: $$('#menu .mop').length,
+             top: parseInt(m.style.top, 10),
+             alto: m.offsetHeight,
+             entra: parseInt(m.style.top, 10) + m.offsetHeight <= innerHeight };
+  },
+  atajoToca(i){
+    const f = $$('#menuAt .mat')[i || 0];
+    if (!f) return null;
+    f.click();
+    return { llamo: window.AND && AND.__at, menu: $('#menu').classList.contains('on') };
+  },
+  atajosCosto(pkg, n){
+    /* cuánto cuesta la consulta sincrónica: es una llamada Binder al servicio
+       del sistema, no la red de la vuelta 128 */
+    const p = pkg || (APPS[0] && APPS[0].p), v = n || 40;
+    const t0 = performance.now();
+    for (let k = 0; k < v; k++) atajosDe(p);
+    return { ms: +((performance.now() - t0) / v).toFixed(4), n: v };
+  },
+
+  /* ── LOS PUNTOS ──
+     `cuenta` es el objeto que devolvería `Escucha.cuenta()`. */
+  insigFinge(cuenta){
+    window.AND = window.AND || {}; AND.__f = true;
+    AND.notiCuenta = () => cuenta === null ? 'null' : JSON.stringify(cuenta);
+    NOTI_T = 0;
+    insigniasLee();
+    return __A.insig();
+  },
+  insig(){
+    const v = $$('.ap').filter(n => n.querySelector('.insig'));
+    return { mapa: NOTI_N,
+             conPunto: v.length,
+             pkgs: v.map(n => n.dataset.p).slice(0, 12),
+             textos: v.map(n => n.querySelector('.insig').textContent).slice(0, 12),
+             ptos: v.filter(n => n.querySelector('.insig').classList.contains('pto')).length,
+             encendido: !!lee('insig', 1) };
+  },
+  /* la prueba de que el repintado es SELECTIVO: se cuentan cuántos nodos se
+     tocan de verdad, no cuántos hay */
+  insigCosto(cuenta){
+    const t0 = performance.now();
+    __A.insigFinge(cuenta);
+    return { ms: +(performance.now() - t0).toFixed(3), apsEnDom: $$('.ap').length };
+  },
+  /* `APPS` es un `let` del módulo, o sea que no está en `window`: las pruebas
+     nombran las apps por su índice y la sonda traduce */
+  insigFingeIdx(pares){
+    const q = {};
+    for (const [i, n] of pares) if (APPS[i]) q[APPS[i].p] = n;
+    return __A.insigFinge(q);
+  },
+  pkgs(n){ return APPS.slice(0, n || 5).map(a => a.p); },
+  /* el A/B del repintado selectivo, en el mismo binario: mismo mapa de
+     cuentas, una vez tocando sólo lo que cambió y otra tocando los 154 */
+  /* la puerta: cuántos latidos tocan el DOM cuando nada cambió. Es lo único
+     que la diferencia contra repintar siempre, y es lo que se midió. */
+  insigPuerta(pares, n){
+    __A.insigFingeIdx(pares);
+    let toco = 0;
+    const orig = window.__insigCnt = 0;
+    const t0 = performance.now();
+    for (let k = 0; k < (n || 30); k++) insigniasLee();
+    const ms = performance.now() - t0;
+    return { latidos: n || 30, ms: +ms.toFixed(3), porLatido: +(ms / (n || 30)).toFixed(4),
+             conPunto: $$('.ap').filter(x => x.querySelector('.insig')).length,
+             aps: $$('.ap').length };
+  },
+  insigPintaTodos(n){
+    const t0 = performance.now();
+    for (let k = 0; k < (n || 30); k++) insigniasTodas();
+    const ms = performance.now() - t0;
+    return { n: n || 30, porPintada: +(ms / (n || 30)).toFixed(4), aps: $$('.ap').length };
+  },
+  /* el A/B de lo que la vuelta le agregó a la pintada del cajón, en el mismo
+     binario: la fila de sugeridas y el punto por app */
+  cajPintaAB(n){
+    const v = n || 20, l = $('#cajLista');
+    const mide = () => { const t = performance.now();
+      for (let k = 0; k < v; k++) pintaCajon('');
+      return +((performance.now() - t) / v).toFixed(2); };
+    const gI = lee('insig', 1), gS = lee('sug', 1);
+    guarda('insig', 1); guarda('sug', 1);  const con = mide();
+    guarda('insig', 0); guarda('sug', 0);  const sin = mide();
+    guarda('insig', gI); guarda('sug', gS);
+    return { con: con, sin: sin, apps: $$('#cajLista .ap').length, notis: Object.keys(NOTI_N).length };
+  },
+  insigApaga(){ guarda('insig', 0); insigniasApaga(); return __A.insig(); },
+  insigPrende(){ guarda('insig', 1); NOTI_T = 0; insigniasLatido(); return __A.insig(); },
+
+  /* ── LAS OCULTAS ── */
+  ocultas(){
+    return { lista: OCULTAS.slice(),
+             enCajon: $$('#cajLista .ap').length,
+             enApps: APPS.length,
+             fijadas: INICIO.slice(), dock: DOCK.slice() };
+  },
+  ocultaToca(pkg){ ocultaAlterna(pkg); return __A.ocultas(); },
+  ocultaBusca(q){
+    pintaCajon(q);
+    const r = { n: $$('#cajLista .ap').length, pkgs: $$('#cajLista .ap').map(n => n.dataset.p) };
+    pintaCajon('');
+    return r;
+  },
+
+  /* ── LAS SUGERIDAS ── */
+  sug(){
+    const c = $('#cajSug');
+    return { on: c.classList.contains('on'),
+             n: $$('#cajSugR .ap').length,
+             pkgs: $$('#cajSugR .ap').map(n => n.dataset.p),
+             usos: Object.assign({}, USOS), usosN: USOS_N,
+             rot: $('#cajSugT').textContent };
+  },
+  sugUsa(pkg, n){
+    for (let i = 0; i < (n || 1); i++) usoAnota(pkg);
+    sugPinta('');
+    return __A.sug();
+  },
+  /* el olvido: se abre A muchas veces, después B, y se mira si A cae */
+  sugOlvido(a, b, na, nb){
+    USOS = {}; USOS_N = 0;
+    for (let i = 0; i < na; i++) usoAnota(a);
+    const antes = USOS[a];
+    for (let i = 0; i < nb; i++) usoAnota(b);
+    return { antes: +antes.toFixed(2), despues: +(USOS[a] || 0).toFixed(2),
+             b: +(USOS[b] || 0).toFixed(2), cayo: (USOS[a] || 0) < antes };
+  },
+  sugLimpia(){ USOS = {}; USOS_N = 0; guarda('usos', {}); guarda('usosN', 0); sugPinta(''); return __A.sug(); },
+
+  /* ── EL DOBLE TOQUE ──
+     Se disparan dos `pointerdown` de verdad sobre `#hoja` separados por `ms`,
+     que es el mismo camino que usa el dedo. */
+  async dtap(ms){
+    window.AND = window.AND || {}; AND.__f = true;
+    AND.__bloq = 0;
+    AND.accesOk = () => true;
+    AND.accesAccion = q => { if (q === 'bloquear') AND.__bloq++; return true; };
+    DTAP_T = 0;
+    const h = $('#hoja');
+    const tira = () => h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    /* ── Y SE MIRA QUE NO QUEDE UN PLAZO LARGO VIVO ──
+       El aviso es lo que delata al selector de launcher abriéndose detrás del
+       bloqueo: sin puente, `elegirInicio` cae a `avisa(T('inicio'))`. */
+    $('#aviso').textContent = '';
+    tira();
+    await new Promise(r => setTimeout(r, ms));
+    tira();
+    h.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 900));
+    return { bloqueos: AND.__bloq, ms: ms, encendido: !!lee('dtap', 1),
+             avisoDespues: $('#aviso').textContent };
+  },
+  dtapSinPermiso(){
+    window.AND = window.AND || {}; AND.__f = true;
+    AND.__bloq = 0;
+    AND.accesOk = () => false;
+    AND.accesAccion = () => { AND.__bloq++; return true; };
+    DTAP_T = Date.now();
+    dobleToque();
+    return { bloqueos: AND.__bloq, aviso: $('#aviso').textContent };
+  },
+
+  /* ── LA COPIA ── */
+  copiaSaca(){
+    const t = copiaArma();
+    let d = null; try { d = JSON.parse(t); } catch (e){}
+    return { bytes: t.length, claves: d ? Object.keys(d.d).length : 0,
+             tieneFondo: !!(d && d.d && d.d.fondoPropio),
+             v: d && d.v };
+  },
+  /* la ida y vuelta: se cambia un ajuste, se restaura la copia vieja, y se
+     mira si volvió al valor de antes */
+  copiaVuelta(){
+    guarda('acento', '#00ff88'); guarda('cajLetras', 1);
+    const col = lee('acento', ''), letras = lee('cajLetras', -1);
+    const antes = copiaArma();
+    /* se cambia uno que estaba y se AGREGA uno que no: la copia tiene que
+       devolver el primero y borrar el segundo */
+    guarda('acento', '#ff0000'); guarda('cajLetras', 0); guarda('zzTest', 7);
+    const ok = copiaPone(antes);
+    return { ok: ok, colAntes: col, colDespues: lee('acento', ''),
+             letrasAntes: letras, letrasDespues: lee('cajLetras', -1),
+             sobrante: lee('zzTest', null),
+             volvio: lee('acento', '') === col && lee('cajLetras', -1) === letras };
+  },
+  copiaMala(){
+    return { texto: copiaPone('esto no es json'),
+             vacio: copiaPone(''),
+             otroV: copiaPone('{"v":9,"d":{"a":"1"}}'),
+             claveMala: (() => { copiaPone('{"v":1,"d":{"../evil":"1","acento":"\"#123456\""}}');
+                                 return localStorage.getItem('aero_../evil'); })() };
+  },
+
+  ccCerrar(){ ccCierra(); return true; },
+  ccToca(id){ const b = CC_BOT.filter(x => x.id === id)[0]; if (!b) return null; ccToca(b); return true; },
+  ccSl(k, v){
+    const el = $('#cc .ccSl[data-k="' + k + '"]'); if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width*cl(v, 0, 1), y = r.top + r.height/2;
+    for (const t of ['pointerdown', 'pointermove', 'pointerup'])
+      el.dispatchEvent(new PointerEvent(t, { clientX: x, clientY: y, bubbles: true, pointerId: 7 }));
+    return { k: k, valor: +CC[k].toFixed(3), relleno: el.querySelector('.ccSlF').style.width };
+  },
+  /* ── EL GESTO DE VERDAD, NO LA FUNCIÓN ──
+     Abrir el centro llamando a `ccAbre()` prueba que el panel existe; lo que
+     hay que probar es que BAJAR lo abre, que es lo que se pidió. */
+  gestoY(sel, dy, pasos){
+    const el = $(sel) || $('#hoja');
+    const r = el.getBoundingClientRect();
+    const x = Math.round(r.left + r.width/2), y0 = Math.round(r.top + r.height*0.35);
+    const n = pasos || 8;
+    const dis = t => { const d = document.elementFromPoint(x, Math.round(y0 + dy*t)) || el;
+      d.dispatchEvent(new PointerEvent(t === 0 ? 'pointerdown' : 'pointermove',
+        { clientX: x, clientY: Math.round(y0 + dy*t), bubbles: true, pointerId: 9 })); };
+    dis(0);
+    for (let i = 1; i <= n; i++) dis(i/n);
+    const d = document.elementFromPoint(x, Math.round(y0 + dy)) || el;
+    d.dispatchEvent(new PointerEvent('pointerup',
+      { clientX: x, clientY: Math.round(y0 + dy), bubbles: true, pointerId: 9 }));
+    return { cc: CC.on, cajon: CAJON, ondas: AGUA.ondas.length };
+  },
+  /* ── LA BIENVENIDA ──
+     Lo que hay que medir no es que aparezca: es que cada opción dibuje SU
+     muestra. Con una sola función de dibujo mal llamada, las cuatro filas
+     salen iguales y desde afuera eso se ve como un diseño, no como un error. */
+  bv(){
+    const c = $('#bienv');
+    if (!c) return { on: false };
+    const ops = $$('#bvOps .bvOp');
+    return { on: c.classList.contains('on'), paso: BV_PASO, pasos: BIENV.length,
+             tit: $('#bvTit').textContent, ops: ops.length,
+             sel: ops.map(o => o.classList.contains('sel')).indexOf(true),
+             muestras: ops.map(o => o.querySelectorAll('.baldosa').length),
+             /* la firma de cada muestra: si dos filas dan lo mismo, están
+                dibujando el mismo pack */
+             firmas: ops.map(o => Array.prototype.slice.call(o.querySelectorAll('.baldosa'))
+               .map(b => b.className + '|' + (b.style.backgroundImage || '').slice(22, 34)).join('/')),
+             sig: $('#bvSig').textContent };
+  },
+  bvAbrir(){ guarda('bienvVisto', 0); bvAbre(); return true; },
+  bvOp(i){ const o = $$('#bvOps .bvOp')[i]; if (!o) return null; o.click(); return true; },
+  bvSig(){ $('#bvSig').click(); return BV_PASO; },
+  bvCerrar(){ bvCierra(); return true; },
+  packs(){ return { hoy: packHoy().id, todos: PACKS.map(p => p.id) }; },
+
+  /* ── LA BAJADA: LO QUE HAY QUE PODER MEDIR ES QUE NO BLOQUEA ──
+     Devuelve cuántos milisegundos se quedó el hilo de JS adentro de la llamada
+     y cuántas veces late un `setInterval` mientras la red trabaja. Con el
+     puente síncrono lo primero era el tiempo entero de la descarga —hasta 45,7
+     segundos medidos contra el generador de verdad— y lo segundo, cero. */
+  async bajada(){
+    const t0 = performance.now();
+    const p = fgGenera('acuario');
+    const bloqueo = performance.now() - t0;
+    let late = 0;
+    const iv = setInterval(() => late++, 20);
+    const bt = $('#fgGenB');
+    const enVuelo = { boton: bt ? bt.textContent : null,
+                      cancel: $('#fgGenX') ? getComputedStyle($('#fgGenX')).display : null };
+    await p;
+    clearInterval(iv);
+    return { msBloqueado: +bloqueo.toFixed(1), latidosMientrasBajaba: late,
+             enVuelo: enVuelo, alTerminar: bt ? bt.textContent : null,
+             fondo: lee('fondoSel', 'fab') };
+  },
+
+  bajaAsincHay(){ return typeof AND !== 'undefined' && AND
+                     && typeof AND.bajaAsinc === 'function'; },
+  /* arranca y NO espera: sirve para el puente que no contesta nunca —y así se
+     puede medir el cancelar— y para el APK viejo, que ni siquiera arranca */
+  bajaPide(){
+    fgGenera('acuario');
+    const bt = $('#fgGenB'), av = $('#aviso');
+    return { gen: FG_GEN, boton: bt ? bt.textContent : null,
+             cancel: $('#fgGenX') ? getComputedStyle($('#fgGenX')).display : null,
+             aviso: av ? av.textContent : null };
+  },
+  bajaCancela(){ fgCancela(); return { gen: FG_GEN, pend: Object.keys(FG_BAJAS).length }; },
+  /* ── CUÁNTAS APPS TIENEN CELDA GENERADA, Y CUÁLES NO ──
+     Un pack generado que le cae a la mitad de las apps se ve como dos packs
+     mezclados, así que el número que importa no es cuántas celdas se hornearon
+     sino cuántas ALCANZAN a una app instalada. */
+  gen(id){
+    const T = (typeof ICOGEN_PACKS !== 'undefined') ? ICOGEN_PACKS : {};
+    const uno = p => {
+      const hay = T[p] || {};
+      const con = [], sin = [];
+      for (const a of APPS){
+        const g = glifoDe(a.p, a.n);
+        (g && hay[g] ? con : sin).push(a.n);
+      }
+      return { celdas: Object.keys(hay).length, apps: APPS.length,
+               con: con.length, sin: sin.slice(0, 12) };
+    };
+    if (id) return uno(id);
+    const r = {};
+    for (const p of Object.keys(T)) r[p] = uno(p);
+    return r;
+  },
+  pack(id){
+    guarda('icoPack', id); ICO_CACHE_LIMPIA(); rejaRepinta();
+    const b = $('#dock .baldosa') || $('#tira .baldosa');
+    const cs = b ? getComputedStyle(b) : null;
+    return { hoy: packHoy().id,
+             clases: b ? b.className : null,
+             fondo: b ? (b.style.backgroundImage || '').slice(0, 26) : null,
+             vidrio: cs ? cs.backdropFilter : null,
+             radio: cs ? cs.borderRadius : null,
+             glifos: $$('.baldosa .glf').length };
+  },
+  /* ── EL CONTRASTE DEL GLIFO, MEDIDO DONDE ESTÁ LA BALDOSA ──
+     Y la caja sale del DOM y no de un rectángulo escrito a mano: la primera
+     versión de esta medición muestreaba coordenadas puestas a ojo y por eso
+     devolvía el MISMO número para tres packs distintos — estaba midiendo fondo
+     de pantalla, no baldosa. Devuelve la caja para que quien saque la foto
+     recorte exactamente ahí. */
+  baldosaCaja(i){
+    const l = $$('#tira .baldosa');
+    const b = l[i || 0]; if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return { x: Math.round(r.left), y: Math.round(r.top),
+             w: Math.round(r.width), h: Math.round(r.height), n: l.length,
+             clases: b.className };
+  },
+  relieve(v){ GLF_RELIEVE = v !== false; ICO_CACHE_LIMPIA(); rejaRepinta(); return GLF_RELIEVE; },
+  glifos(){
+    const fam = {}; let cut = 0;
+    for (const f in ICO_FAM) fam[f] = ICO_FAM[f].length;
+    for (const g in GLIFOS)
+      if (GLIFOS[g].some(pz => String(pz[0]).charAt(0) === '-')) cut++;
+    const sinFam = Object.keys(GLIFOS).filter(g => !ICO_DE_FAM[g]);
+    const sinPkg = Object.keys(GLIFOS).filter(g => !ICO_PKG[g]);
+    return { n: Object.keys(GLIFOS).length, conRecorte: cut, fam: fam,
+             sinFamilia: sinFam, sinPaquete: sinPkg,
+             fondos: (typeof ICONOS !== 'undefined') ? Object.keys(ICONOS).length : 0 };
+  },
+  icono(){
+    const b = $('#tira .baldosa') || $('#dock .baldosa');
+    const c = b ? getComputedStyle(b) : {};
+    return { tex: getComputedStyle(document.documentElement).getPropertyValue('--bTex').trim().slice(0, 30),
+             clase: document.body.classList.contains('icoTex'),
+             guardado: lee('icoTex', 'agua'),
+             bg: (c.backgroundImage || '').slice(0, 70),
+             capas: ((c.backgroundImage || '').match(/url\(|linear-gradient\(/g) || []).length,
+             tam: c.backgroundSize };
+  },
+  persAbrir(){ persAbre(); return this.pers(); },
+  persCerrar(){ persCierra(); return this.pers(); },
+  /* se toca la opción por su texto, que es lo que hace el dedo */
+  /* el deslizador de oscurecer, por el mismo camino que el dedo: `persOscuro`
+     es quien tiene que pedir el rehorneado, así que la sonda lo llama a él y no
+     escribe la opacidad a mano */
+  oscurece(v){
+    guarda('oscuro', v); persOscuro();
+    return { velo: getComputedStyle($('#oscuro')).opacity,
+             bytesVid: (document.documentElement.style
+               .getPropertyValue('--vidFrost') || '').length };
+  },
+  persToca(grupo, txt){
+    const g = $$('#persCuerpo .pGrupo').find(x => x.querySelector('.pTit').textContent === T(grupo));
+    if (!g) return { error: 'no está ' + grupo, hay: $$('#persCuerpo .pTit').map(t => t.textContent) };
+    const b = $$('.pOp,.pCol', ) .filter(e => g.contains(e))
+                .find(e => e.textContent === txt || e.style.background === txt);
+    if (!b) return { error: 'no está la opción ' + txt,
+                     hay: Array.prototype.slice.call(g.querySelectorAll('.pOp')).map(e => e.textContent) };
+    b.click();
+    return this.pers();
+  },
+  /* el rango se mueve por el mismo `input` que dispara el dedo */
+  persRango(grupo, v){
+    const g = $$('#persCuerpo .pGrupo').find(x => x.querySelector('.pTit').textContent === T(grupo));
+    if (!g) return { error: 'no está ' + grupo };
+    const r = g.querySelector('.pRango');
+    r.value = v; r.dispatchEvent(new Event('input', { bubbles: true }));
+    return Object.assign(this.pers(), { reja: this.reja() });
+  },
+
+  /* ══════════ EL ASISTENTE ══════════ */
+  asis(){
+    const e = $('#asis');
+    return { abierto: e.classList.contains('on'),
+             prov: asisProv(), provs: Object.keys(ASIS_PROV),
+             conLlave: !!asisLlave(),
+             pkg: ASIS_PKG, enLista: !!POR_PKG[ASIS_PKG],
+             acciones: Object.keys(ASIS_ACC),
+             msgs: $$('#asLista .asMsg').map(m => m.textContent.slice(0, 120)),
+             firmas: $$('#asLista .asFirma').map(m => m.textContent) };
+  },
+  /* el intérprete de la casa, sin tocar el DOM ni la red: es lo que contesta
+     cuando no hay llave, o sea la mayor parte de las veces */
+  asisLocal(t){ const r = asisLocal(t);
+                return { acc: r.acciones.map(a => a.hacer + ':' + a.valor), resp: r.respuesta }; },
+  asisAbrir(){ asisAbre(); return this.asis(); },
+  asisCerrar(){ asisCierra(); return this.asis(); },
+  asisLlave(v){ guarda('llave_' + asisProv(), v || ''); asisIdioma(); return this.asis(); },
+  asisProv(p){ guarda('prov', p); asisIdioma(); return this.asis(); },
+  /* el camino ENTERO, por donde entra el dedo: se escribe en el campo y se toca
+     el botón, así que si el enganche está roto la sonda no contesta */
+  async asisDecir(t){
+    $('#asTxt').value = t;
+    $('#asMandar').click();
+    for (let k = 0; k < 60 && ASIS_PENSANDO; k++)
+      await new Promise(r => setTimeout(r, 50));
+    return this.asis();
+  },
+  /* ── PROBAR LA IA SIN GASTAR UNA LLAVE ──
+     No tengo ninguna y no se puede embarcar una, así que se intercepta `fetch`,
+     se guarda LO QUE EL ASISTENTE IBA A MANDAR y se contesta con una respuesta
+     armada a mano. Con eso queda medido lo único que puede estar mal de este
+     lado: la dirección, los encabezados, el modelo, el esquema, y que la
+     respuesta se lea. Lo que NO queda probado es una llamada de verdad. */
+  asisFinge(caso, acciones){
+    const org = window.fetch;
+    window.__pedido = null;
+    window.fetch = async (u, o) => {
+      o = o || {};
+      window.__pedido = { url: String(u), metodo: o.method || 'GET', cab: o.headers,
+                          cuerpo: o.body ? JSON.parse(o.body) : null };
+      if (caso === 'red') throw new TypeError('Failed to fetch');
+      if (caso === '401') return { ok: false, status: 401 };
+      if (caso === '402') return { ok: false, status: 402 };
+      /* el proveedor sin llave contesta TEXTO pelado y no JSON */
+      if (asisProv() === 'libre'){
+        if (caso === 'niega') return { ok: true, status: 200, text: async () => 'no puedo' };
+        return { ok: true, status: 200, text: async () =>
+          'Claro: ' + JSON.stringify({ respuesta: 'listo', acciones: acciones || [] }) };
+      }
+      if (caso === 'niega'){
+        const id = asisProv();
+        if (id === 'gemini') return { ok: true, status: 200,
+          json: async () => ({ candidates: [{ finishReason: 'SAFETY', content: { parts: [] } }] }) };
+        if (id === 'groq') return { ok: true, status: 200, json: async () => ({ choices: [] }) };
+        return { ok: true, status: 200, json: async () => ({ stop_reason: 'refusal', content: [] }) };
+      }
+      const t = JSON.stringify({ respuesta: 'listo', acciones: acciones || [] });
+      const id = asisProv();
+      if (id === 'gemini') return { ok: true, status: 200, json: async () => ({
+        candidates: [{ finishReason: 'STOP', content: { parts: [{ text: t }] } }] }) };
+      if (id === 'groq') return { ok: true, status: 200, json: async () => ({
+        choices: [{ message: { role: 'assistant', content: t } }] }) };
+      return { ok: true, status: 200, json: async () => ({
+        stop_reason: 'end_turn', content: [{ type: 'text', text: t }] }) };
+    };
+    return () => { window.fetch = org; };
+  },
+  /* qué salió por el cable en la última llamada fingida */
+  asisPedido(){
+    const p = window.__pedido; if (!p) return null;
+    const c = p.cuerpo;
+    /* el sistema y el enum viven en sitios distintos según el proveedor: lo que
+       la sonda tiene que decir es que los TRES los mandan, no cómo se llaman */
+    const sis = c.system || (c.systemInstruction && c.systemInstruction.parts[0].text) ||
+                (c.messages && (c.messages.find(m => m.role === 'system') || {}).content) || '';
+    const esq = (c.output_config && c.output_config.format.schema) ||
+                (c.generationConfig && c.generationConfig.responseSchema) || null;
+    return { url: p.url, cab: Object.keys(p.cab),
+             llaveVa: !!(p.cab['x-api-key'] || p.cab['x-goog-api-key'] || p.cab['authorization']),
+             navegador: p.cab['anthropic-dangerous-direct-browser-access'] || null,
+             modelo: c.model || 'gemini-2.5-flash',
+             tope: c.max_tokens || (c.generationConfig && c.generationConfig.maxOutputTokens),
+             formato: (c.output_config && c.output_config.format.type) ||
+                      (c.generationConfig && c.generationConfig.responseMimeType) ||
+                      (c.response_format && c.response_format.type),
+             campos: esq ? Object.keys(esq.properties) : null,
+             enum: esq ? esq.properties.acciones.items.properties.hacer.enum : null,
+             sistemaTiene: { apps: sis.indexOf('APPS INSTALADAS') >= 0,
+                             estado: sis.indexOf('iconos ' + ICO) >= 0 },
+             mensaje: (c.messages ? c.messages[c.messages.length-1].content
+                                  : c.contents[0].parts[0].text) };
+  }
+};
+
+/* ── EL PUENTE DE MENTIRA NO PONE BATERÍA, ASÍ QUE LA PONE LA VISTA PREVIA ──
+   `pintaBateria()` se rinde sin `AND` a propósito: inventar un porcentaje en el
+   teléfono sería mentir. En el navegador, en cambio, dejar el pastillero en «—»
+   esconde justamente el elemento que hay que mirar. */
+if (!HAY_AND){
+  addEventListener('DOMContentLoaded', () => {
+    ponBateria({ n: 76, c: false });
+    setTimeout(() => avisa(T('sinPuente')), 900);
+  });
+}
+
+arranca();
+
+</script>
+</body>
+</html>

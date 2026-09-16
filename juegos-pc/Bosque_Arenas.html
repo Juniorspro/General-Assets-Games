@@ -1,0 +1,2204 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>BOSQUE DE LAS DIEZ ARENAS</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;
+    background:#070d0a;color:#e8f2ea;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  /* Apaisado siempre: si el teléfono está parado se acuesta todo noventa grados
+     en vez de pedir pantalla completa. */
+  #rot{position:fixed;left:50%;top:50%;transform-origin:50% 50%;
+    transform:translate(-50%,-50%);background:#070d0a;touch-action:none;overflow:hidden}
+  #stage{position:absolute;inset:0;overflow:hidden;touch-action:none}
+  #stage canvas{display:block;width:100%;height:100%;touch-action:none}
+  #mandos{position:absolute;inset:0;z-index:9;pointer-events:none;touch-action:none}
+  #err{display:none;position:fixed;top:0;left:0;right:0;z-index:999;background:#8e2b20;color:#fff;
+    font:11px/1.5 ui-monospace,monospace;padding:8px;white-space:pre-wrap;max-height:40vh;overflow:auto}
+  #hud{position:absolute;inset:0;pointer-events:none;z-index:10}
+  .fila{position:absolute;left:10px;top:10px;display:flex;gap:7px;flex-wrap:wrap;pointer-events:auto}
+  .btn{cursor:pointer;font:700 10px/1 ui-monospace,monospace;letter-spacing:2px;
+    padding:11px 12px;border-radius:7px;border:1px solid rgba(170,215,180,.32);
+    color:#e9f8ec;background:rgba(10,26,18,.60);backdrop-filter:blur(6px);white-space:nowrap}
+  .btn:active{background:rgba(40,100,60,.85)}
+  .btn.on{border-color:#8fe8a4;color:#dcffe4;background:rgba(24,80,46,.85)}
+
+  /* ------------------------------------------------------------------ HUD */
+  #vida{position:absolute;left:10px;bottom:34px;width:min(38%,190px);height:11px;
+    border:1px solid rgba(180,220,190,.35);border-radius:6px;overflow:hidden;
+    background:rgba(6,14,10,.72);z-index:11}
+  #vida i{display:block;height:100%;width:100%;border-radius:5px;
+    background:linear-gradient(90deg,#4be07a,#a6f26a);transition:width .18s}
+  #vida.baja i{background:linear-gradient(90deg,#e04b4b,#f2a06a)}
+  #vidaTxt{position:absolute;left:10px;bottom:48px;z-index:11;
+    font:700 9px/1 ui-monospace,monospace;letter-spacing:2px;color:#a9d6b6}
+  #oleada{position:absolute;right:12px;bottom:34px;z-index:11;text-align:right;
+    font:700 10px/1.7 ui-monospace,monospace;letter-spacing:2.4px;color:#cfeed8;
+    text-shadow:0 2px 8px #000}
+  #oleada b{color:#ffd98a}
+  #cartel{position:absolute;left:50%;top:26%;transform:translate(-50%,-50%);z-index:13;
+    text-align:center;pointer-events:none;opacity:0;transition:opacity .5s}
+  #cartel.show{opacity:1}
+  #cartel .g{font:700 22px/1.3 ui-monospace,monospace;letter-spacing:7px;color:#fff;
+    text-shadow:0 3px 18px #000,0 0 30px rgba(255,190,90,.5)}
+  #cartel .p{font:700 10px/1.8 ui-monospace,monospace;letter-spacing:3.5px;color:#ffd98a;
+    text-shadow:0 2px 10px #000}
+  #tinte{position:absolute;inset:0;z-index:12;pointer-events:none;opacity:0;
+    background:radial-gradient(ellipse at center,rgba(150,0,0,0) 35%,rgba(150,0,0,.85) 100%);
+    transition:opacity .25s}
+  #barras{position:absolute;inset:0;z-index:12;pointer-events:none;opacity:0;transition:opacity .5s}
+  #barras.show{opacity:1}
+  #barras b{position:absolute;left:0;right:0;height:12%;background:#000;display:block}
+  #barras b:first-child{top:0} #barras b:last-child{bottom:0}
+  #mira{position:absolute;left:50%;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;
+    border-radius:50%;background:rgba(230,255,238,.75);z-index:11;pointer-events:none}
+
+  #panel{position:absolute;right:10px;top:10px;z-index:14;width:min(58%,236px);
+    padding:11px 12px;border-radius:10px;pointer-events:auto;
+    border:1px solid rgba(170,215,180,.22);background:rgba(8,18,13,.88);backdrop-filter:blur(8px);
+    display:none;flex-direction:column;gap:8px;max-height:calc(100% - 20px);overflow:auto}
+  #panel.show{display:flex}
+  #panel h3{font-size:9.5px;letter-spacing:3px;color:#9fd8ae;font-weight:700}
+  .ctl{display:flex;flex-direction:column;gap:2px}
+  .ctl label{font-size:9px;letter-spacing:1.3px;color:#aacab4;display:flex;justify-content:space-between}
+  .ctl label b{color:#dcf6e2;font-weight:700}
+  input[type=range]{-webkit-appearance:none;width:100%;height:19px;background:transparent}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:#2c4636}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;margin-top:-6px;
+    border-radius:50%;background:#8fe8a4;border:none}
+  input[type=range]::-moz-range-track{height:3px;border-radius:3px;background:#2c4636}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border:none;border-radius:50%;background:#8fe8a4}
+  #stats{position:absolute;left:10px;bottom:8px;z-index:11;
+    font:9.5px/1.6 ui-monospace,monospace;color:#7d9d89;letter-spacing:1px;pointer-events:none}
+  #ayuda{position:absolute;left:50%;top:46px;transform:translateX(-50%);z-index:12;
+    font:9.5px/1.6 ui-monospace,monospace;color:#94bda2;letter-spacing:1.5px;
+    text-align:center;pointer-events:none;transition:opacity .8s}
+
+  /* ------------------------------------------------------------- la carga */
+  #carga{position:absolute;inset:0;z-index:40;background:#070d0a;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .7s}
+  #carga.ir{opacity:0;pointer-events:none}
+  #carga h1{font:700 15px/1 ui-monospace,monospace;letter-spacing:9px;color:#bfe9cc}
+  #carga p{font:9.5px/1.6 ui-monospace,monospace;letter-spacing:2px;color:#6f9480;min-height:16px}
+  #barra{width:min(64%,300px);height:2px;background:#1b2c22;border-radius:2px;overflow:hidden}
+  #barra i{display:block;height:100%;width:0;background:#7fe0a0;transition:width .3s}
+</style>
+</head>
+<body>
+<div id="err"></div>
+<div id="rot">
+  <div id="stage"></div>
+  <canvas id="mandos"></canvas>
+  <div id="mira"></div>
+  <div id="tinte"></div>
+  <div id="barras"><b></b><b></b></div>
+  <div id="cartel"><div class="g" id="cartelG"></div><div class="p" id="cartelP"></div></div>
+  <div id="ayuda">pulgar izquierdo: caminar · derecho: mirar · GOLPE para pelear</div>
+  <div id="stats"></div>
+  <div id="vidaTxt">VIDA</div>
+  <div id="vida"><i></i></div>
+  <div id="oleada"></div>
+  <div id="hud"><div class="fila">
+    <button class="btn" id="bPanel">AJUSTES</button>
+    <button class="btn" id="bCorrer">CORRER</button>
+  </div></div>
+  <div id="panel">
+    <h3>MUNDO</h3>
+    <div class="ctl"><label>ÁRBOLES <b id="vArb">1.00</b></label>
+      <input type="range" id="sArb" min="0.3" max="1" step="0.02" value="1"></div>
+    <div class="ctl"><label>PASTO <b id="vDens">0.85</b></label>
+      <input type="range" id="sDens" min="0.1" max="1" step="0.02" value="0.85"></div>
+    <div class="ctl"><label>VIENTO <b id="vViento">0.50</b></label>
+      <input type="range" id="sViento" min="0" max="1.4" step="0.02" value="0.5"></div>
+    <h3>IMAGEN</h3>
+    <div class="ctl"><label>SOL <b id="vSol">0.46</b></label>
+      <input type="range" id="sSol" min="0.06" max="1" step="0.01" value="0.46"></div>
+    <div class="ctl"><label>EXPOSICIÓN <b id="vExp">1.00</b></label>
+      <input type="range" id="sExp" min="0.4" max="2" step="0.02" value="1"></div>
+    <div class="ctl"><label>COLOR <b id="vSat">1.14</b></label>
+      <input type="range" id="sSat" min="0.6" max="1.6" step="0.02" value="1.14"></div>
+    <div class="ctl"><label>NITIDEZ <b id="vNit">0.32</b></label>
+      <input type="range" id="sNit" min="0" max="1.5" step="0.05" value="0.32"></div>
+    <div class="ctl"><label>NEBLINA <b id="vNiebla">0.40</b></label>
+      <input type="range" id="sNiebla" min="0" max="1.6" step="0.02" value="0.4"></div>
+    <h3>SONIDO</h3>
+    <div class="ctl"><label>VOLUMEN <b id="vVol">0.75</b></label>
+      <input type="range" id="sVol" min="0" max="1" step="0.02" value="0.75"></div>
+  </div>
+  <div id="carga">
+    <h1>EL BOSQUE</h1>
+    <div id="barra"><i></i></div>
+    <p id="cargaTxt">despertando el bosque…</p>
+  </div>
+</div>
+<script>
+window.addEventListener('error',e=>{const b=document.getElementById('err'); if(!b) return;
+  b.style.display='block'; b.textContent+=(e.message||e.error)+'\n'+(e.filename||'')+':'+(e.lineno||'')+'\n';});
+</script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+/* ============================================================================
+   EL BOSQUE DE LAS DIEZ ARENAS
+
+   El suelo y el pasto son los mismos de Pastizal: briznas de geometría de
+   verdad, grilla envolvente, viento con ráfagas. Encima va un bosque hecho con
+   modelos 3D generados —árboles, troncos, cajas y bichos— y un recorrido: un
+   caminito de tierra que va de arena en arena, diez en total, y en cada una hay
+   que aguantar cinco oleadas para que se abran los troncos que tapan la salida.
+
+   Nada de esto se decide a mano. El mapa sale de una cadena de nodos con giros
+   al azar; el bosque se siembra en todo lo que no es claro ni camino; los
+   troncos se apilan en la boca del corredor; las cajas y las plataformas se
+   reparten por la arena buscando que se pueda trepar de una a otra.
+
+   Los árboles de cerca son el modelo entero. Los de lejos son IMPOSTORES: al
+   arrancar, cada modelo se fotografía a sí mismo contra un fondo transparente y
+   de ahí en más se dibuja como una carta que mira a la cámara. Es la diferencia
+   entre veinte millones de triángulos y medio millón.
+
+   El sonido es todo sintetizado en el momento —viento, pájaros, pasos, golpes,
+   gruñidos, el crujido de los troncos—: cero archivos de audio.
+============================================================================ */
+const MOVIL=matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+const FOV0=64;
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const cv=(w,h)=>{const c=document.createElement('canvas'); c.width=w; c.height=h; return c;};
+
+/* Semilla fija: el bosque es el mismo para todos, siempre. */
+function semilla(s){ return function(){ s=(s*1664525+1013904223)>>>0; return s/4294967296; }; }
+
+const rotEl=document.getElementById('rot'), stage=document.getElementById('stage');
+let ROT=false, CAJA={w:1,h:1};
+function acomodarCaja(){
+  const vw=innerWidth, vh=innerHeight;
+  ROT = vh > vw*1.02;
+  CAJA.w = ROT? vh : vw; CAJA.h = ROT? vw : vh;
+  rotEl.style.width=CAJA.w+'px'; rotEl.style.height=CAJA.h+'px';
+  rotEl.style.transform='translate(-50%,-50%) rotate('+(ROT?90:0)+'deg)';
+}
+acomodarCaja();
+const renderer=new THREE.WebGLRenderer({antialias:false, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1, MOVIL?1.5:2));
+renderer.setSize(CAJA.w, CAJA.h, false);
+/* Todo se dibuja en LINEAL sobre un buffer; el tono, el color y el paso a sRGB
+   los hace el pase de post, una sola vez y para todos. */
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.NoToneMapping;
+const ANISO=Math.min(8, renderer.capabilities.getMaxAnisotropy());
+stage.appendChild(renderer.domElement);
+const escena=new THREE.Scene();
+const camara=new THREE.PerspectiveCamera(FOV0, CAJA.w/CAJA.h, 0.03, 1400);
+camara.rotation.order='YXZ';
+
+const SOL=new THREE.Vector3();
+const CIELO=new THREE.Color(0x6fb6e8), HORIZ=new THREE.Color(0xc8dfe6), SOLC=new THREE.Color(1,0.97,0.9);
+const MATS=[];
+let nieblaD=0.011;
+
+const _barra=document.querySelector('#barra i'), _ctxt=document.getElementById('cargaTxt');
+let _hechos=0, _total=14;
+function avance(msg){
+  _hechos++;
+  if(_barra) _barra.style.width=Math.round(Math.min(1,_hechos/_total)*100)+'%';
+  if(_ctxt && msg) _ctxt.textContent=msg;
+}
+
+/* --------------------------------------------------------------- el ruido */
+const RUIDO_GLSL=`
+  float h21(vec2 p){ vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z); }
+  float ruido(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+    return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x), f.y); }
+  float fbm(vec2 p){ return ruido(p)*0.55+ruido(p*2.07+11.3)*0.28+ruido(p*4.13+5.7)*0.17; }`;
+const NIEBLA_GLSL=`
+  vec3 conNiebla(vec3 col, vec3 W, vec3 ojo, vec3 luz, vec3 hor, vec3 solc, float k){
+    vec3 dv=W-ojo; float d=length(dv); dv/=max(d,1e-4);
+    float f=1.0-exp(-k*d);
+    vec3 n=mix(hor, solc, pow(max(dot(dv,luz),0.0), 6.0)*0.55);
+    return mix(col, n, clamp(f,0.0,1.0));
+  }`;
+/* ============================================================================
+   EL MAPA
+   Once claros encadenados: el de arranque más las diez arenas. De uno al
+   siguiente va un corredor recto, y el ángulo gira al azar en cada tramo, así
+   que el camino serpentea y nunca se ve la arena que viene.
+
+   Todo lo demás —dónde hay bosque, dónde hay tierra, por dónde se puede
+   caminar— sale de la distancia a esta cadena. Una sola función lo decide todo
+   y no hay ni una posición escrita a mano.
+============================================================================ */
+const N_ARENAS=10;
+const ANCHO_CAMINO=4.6;                 // media anchura del corredor, en metros
+const NODOS=[], TRAMOS=[];
+{
+  const r=semilla(20260813);
+  let ang=0, x=0, z=0;
+  NODOS.push({x:0, z:0, r:13.5, arena:-1});          // el claro donde se despierta
+  for(let i=0;i<N_ARENAS;i++){
+    ang += (r()-0.5)*1.45;                            // hasta unos cuarenta grados
+    const L = 58+r()*26;
+    x += Math.sin(ang)*L;  z -= Math.cos(ang)*L;      // se avanza hacia el frente (−Z)
+    NODOS.push({x, z, r:16.5+i*0.85, arena:i, ang});
+  }
+  for(let i=0;i<NODOS.length-1;i++) TRAMOS.push({a:NODOS[i], b:NODOS[i+1]});
+}
+/* límites del mundo, con margen para que el bosque tape el borde */
+const LIM={x0:1e9,x1:-1e9,z0:1e9,z1:-1e9};
+for(const n of NODOS){
+  LIM.x0=Math.min(LIM.x0,n.x-n.r); LIM.x1=Math.max(LIM.x1,n.x+n.r);
+  LIM.z0=Math.min(LIM.z0,n.z-n.r); LIM.z1=Math.max(LIM.z1,n.z+n.r);
+}
+const MARGEN=54;
+LIM.x0-=MARGEN; LIM.x1+=MARGEN; LIM.z0-=MARGEN; LIM.z1+=MARGEN;
+const LIM_W=LIM.x1-LIM.x0, LIM_H=LIM.z1-LIM.z0;
+
+/* distancia de un punto a un segmento, y de paso el parámetro t sobre él */
+function aSegmento(px,pz, ax,az, bx,bz, out){
+  const dx=bx-ax, dz=bz-az, L2=dx*dx+dz*dz;
+  let t = L2>1e-6 ? ((px-ax)*dx+(pz-az)*dz)/L2 : 0;
+  t=clamp(t,0,1);
+  const qx=ax+dx*t, qz=az+dz*t;
+  if(out){ out[0]=t; out[1]=qx; out[2]=qz; }
+  return Math.hypot(px-qx, pz-qz);
+}
+/* Cuánto sobra —o falta— para estar en terreno abierto. Negativo adentro,
+   positivo en el bosque. Es la única fuente de verdad del mapa: la usan el
+   suelo, el pasto, la siembra de árboles y la colisión del jugador. */
+const _s3=[0,0,0];
+function holgura(x,z){
+  let d=1e9;
+  for(const n of NODOS) d=Math.min(d, Math.hypot(x-n.x, z-n.z)-n.r);
+  for(const t of TRAMOS) d=Math.min(d, aSegmento(x,z,t.a.x,t.a.z,t.b.x,t.b.z,null)-ANCHO_CAMINO);
+  return d;
+}
+/* Cuán "camino de tierra" es un punto: pleno sobre el corredor, y en las arenas
+   sólo un anillo gastado contra el borde más el pisoteo del centro. */
+function tierraEn(x,z){
+  let t=0;
+  for(const tr of TRAMOS){
+    const d=aSegmento(x,z,tr.a.x,tr.a.z,tr.b.x,tr.b.z,null);
+    /* la huella pisada es angosta y se deshilacha rápido: si se ensancha, el
+       pasto se muere en media hectárea y el claro queda pelado */
+    t=Math.max(t, 1-clamp((d-ANCHO_CAMINO*0.40)/(ANCHO_CAMINO*0.42),0,1));
+  }
+  for(const n of NODOS){
+    const d=Math.hypot(x-n.x,z-n.z);
+    if(d<n.r+1.0){
+      const anillo=1-clamp(Math.abs(d-n.r*0.84)/(n.r*0.18),0,1);
+      const centro=1-clamp(d/(n.r*0.26),0,1);
+      t=Math.max(t, anillo*0.80, centro*0.70);
+    }
+  }
+  return t;
+}
+/* ¿En qué nodo estoy? −1 si estoy en un corredor o en el bosque. */
+function nodoEn(x,z){
+  for(let i=0;i<NODOS.length;i++){
+    const n=NODOS[i];
+    if(Math.hypot(x-n.x,z-n.z) < n.r) return i;
+  }
+  return -1;
+}
+/* La boca del corredor que sale del nodo i hacia el i+1, y la que entra desde
+   el i−1: ahí van los troncos que traban el paso. */
+function boca(i, haciaAdelante){
+  const a=NODOS[i], b=NODOS[haciaAdelante? i+1 : i-1];
+  if(!b) return null;
+  const dx=b.x-a.x, dz=b.z-a.z, L=Math.hypot(dx,dz);
+  const ux=dx/L, uz=dz/L;
+  const d=a.r+1.2;
+  return {x:a.x+ux*d, z:a.z+uz*d, rot:Math.atan2(ux,uz)};
+}
+
+/* --------------------------------------------------------------- la máscara
+   Lo mismo que arriba, pero horneado en una textura para que el shader no tenga
+   que repetir veintiún tests por píxel. Rojo: cuán abierto; verde: cuánta
+   tierra. Media resolución alcanza porque después se suaviza con smoothstep. */
+const MAP_N=768;
+let MAPA_TEX=null;
+{
+  const d=new Uint8Array(MAP_N*MAP_N*4);
+  for(let j=0;j<MAP_N;j++){
+    const z=LIM.z0+(j+0.5)/MAP_N*LIM_H;
+    for(let i=0;i<MAP_N;i++){
+      const x=LIM.x0+(i+0.5)/MAP_N*LIM_W;
+      const h=holgura(x,z);
+      const k=(j*MAP_N+i)*4;
+      d[k]   = Math.round(clamp(1-(h+0.5)/3.0, 0, 1)*255);   // 1 adentro, 0 en el bosque
+      d[k+1] = Math.round(tierraEn(x,z)*255);
+      d[k+2] = 0; d[k+3]=255;
+    }
+  }
+  MAPA_TEX=new THREE.DataTexture(d, MAP_N, MAP_N, THREE.RGBAFormat, THREE.UnsignedByteType);
+  MAPA_TEX.magFilter=THREE.LinearFilter; MAPA_TEX.minFilter=THREE.LinearFilter;
+  MAPA_TEX.wrapS=MAPA_TEX.wrapT=THREE.ClampToEdgeWrapping;
+  MAPA_TEX.generateMipmaps=false; MAPA_TEX.needsUpdate=true;
+}
+const MAPA_GLSL=`
+  uniform sampler2D tMapa;
+  uniform vec4 uLim;                       // x0, z0, ancho, alto
+  vec2 mapaEn(vec2 p){
+    vec2 uv=(p-uLim.xy)/uLim.zw;
+    if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) return vec2(0.0);
+    return texture2D(tMapa, uv).rg;        // r: abierto  g: tierra
+  }`;
+const U_MAPA=()=>({ tMapa:{value:MAPA_TEX},
+  uLim:{value:new THREE.Vector4(LIM.x0, LIM.z0, LIM_W, LIM_H)} });
+avance('el mapa del bosque');
+
+/* ============================================================================
+   CIELO, SUELO Y PASTO
+   El pasto es el mismo de Pastizal —briznas de geometría, grilla envolvente,
+   viento con ráfagas— con dos cambios: se muere sobre la tierra del camino y
+   ralea bajo los árboles, porque un pastizal parejo dentro de un bosque canta.
+============================================================================ */
+const cieloMat=new THREE.ShaderMaterial({
+  side:THREE.BackSide, depthWrite:false,
+  uniforms:{ luz:{value:SOL.clone()}, uCenit:{value:CIELO.clone()},
+             uHoriz:{value:HORIZ.clone()}, uSolC:{value:SOLC.clone()}, uT:{value:0} },
+  vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
+    gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vD; uniform vec3 luz,uCenit,uHoriz,uSolC; uniform float uT;
+    ${RUIDO_GLSL}
+    void main(){
+      vec3 d=normalize(vD);
+      float h=clamp(d.y,-1.0,1.0);
+      vec3 col=mix(uHoriz, uCenit, pow(clamp(h,0.0,1.0), 0.42));
+      col=mix(col, uHoriz*0.80, clamp(-h*3.0,0.0,1.0));
+      float ds=max(dot(d, luz), 0.0);
+      col+=uSolC*pow(ds, 5.0)*0.24;
+      col+=uSolC*pow(ds, 1400.0)*16.0;
+      if(h>0.02){
+        vec2 p=d.xz/max(h,0.02);
+        float n=fbm(p*0.28+vec2(uT*0.004,uT*0.0025));
+        float n2=fbm(p*0.72-vec2(uT*0.007,0.0));
+        float nub=smoothstep(0.50,0.86,n*0.72+n2*0.28)*smoothstep(0.03,0.30,h);
+        col=mix(col, mix(vec3(0.92,0.95,0.99), uSolC*1.15, pow(ds,3.0)*0.5), nub*0.82);
+      }
+      gl_FragColor=vec4(col,1.0);
+    }`
+});
+MATS.push(cieloMat);
+{
+  const c=new THREE.Mesh(new THREE.SphereGeometry(1000,40,26), cieloMat);
+  c.frustumCulled=false; escena.add(c);
+}
+
+/* ------------------------------------------------------------------ suelo */
+const matSuelo=new THREE.ShaderMaterial({
+  uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
+    uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
+    uFogD:{value:nieblaD} }, U_MAPA()),
+  /* el plano sigue al jugador, así que la posición del mundo sale de la matriz
+     del objeto y no del atributo, o los manchones viajarían con uno */
+  vertexShader:`varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.0);
+    vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vW; uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
+    ${RUIDO_GLSL}
+    ${MAPA_GLSL}
+    ${NIEBLA_GLSL}
+    void main(){
+      vec2 mp=mapaEn(vW.xz);
+      float m=fbm(vW.xz*0.035);
+      float g=fbm(vW.xz*0.21+31.7);
+      /* verde de fondo: oscuro a propósito, para que los huecos entre briznas
+         no se conviertan en puntitos claros */
+      vec3 col=mix(vec3(0.024,0.050,0.017), vec3(0.056,0.098,0.029), m);
+      col=mix(col, vec3(0.070,0.074,0.032), smoothstep(0.62,0.92,g)*0.35);
+      /* la tierra del camino: tres tonos y grano fino, más piedritas */
+      float t=smoothstep(0.30,0.74,mp.g);
+      vec3 tie=mix(vec3(0.108,0.074,0.044), vec3(0.168,0.122,0.076), fbm(vW.xz*0.85));
+      tie=mix(tie, vec3(0.205,0.170,0.130), smoothstep(0.70,0.95,ruido(vW.xz*7.5))*0.55);
+      tie*=0.80+0.40*ruido(vW.xz*3.1);
+      col=mix(col, tie, t);
+      /* bajo los árboles el suelo pierde luz */
+      float sombra=mix(0.52, 1.0, smoothstep(-0.2, 4.0, (mp.r-0.35)*8.0));
+      col*=0.82+0.36*ruido(vW.xz*1.7);
+      float lamb=0.30+0.70*max(luz.y,0.0);
+      col*=lamb*sombra*uSolC*1.32 + uCielo*0.20*sombra;
+      gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
+    }`
+});
+MATS.push(matSuelo);
+const suelo=new THREE.Mesh(new THREE.PlaneGeometry(360,360,1,1).rotateX(-Math.PI/2), matSuelo);
+suelo.frustumCulled=false; escena.add(suelo);
+
+/* ------------------------------------------------------------------ pasto */
+const PASTO_U={
+  uT:{value:0}, luz:{value:SOL.clone()}, uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()},
+  uHoriz:{value:HORIZ.clone()}, uOjo:{value:new THREE.Vector3()}, uJug:{value:new THREE.Vector3()},
+  uViento:{value:0.50}, uArco:{value:0.70}, uAltoK:{value:1.0}, uDens:{value:0.85},
+  uRJug:{value:0.62}, uFogD:{value:nieblaD}
+};
+const CAMPOS=[];
+function crearCampo(o){
+  const N=o.N, S=o.segs;
+  const pos=[], idx=[];
+  for(let k=0;k<S;k++){ const v=k/S; pos.push(-1,v,0, 1,v,0); }
+  pos.push(0,1,0);                                  // la punta, un solo vértice
+  for(let k=0;k<S-1;k++){ const a=k*2; idx.push(a,a+1,a+3, a,a+3,a+2); }
+  idx.push((S-1)*2, (S-1)*2+1, S*2);
+  const geo=new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  geo.setIndex(idx);
+  const ii=new Float32Array(N*N*2);
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){ const k=(j*N+i)*2; ii[k]=i; ii[k+1]=j; }
+  geo.setAttribute('iIdx', new THREE.InstancedBufferAttribute(ii,2));
+  geo.instanceCount=N*N;
+  geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e6);
+
+  const mat=new THREE.ShaderMaterial({
+    side:THREE.DoubleSide,
+    uniforms:Object.assign({}, PASTO_U, U_MAPA(), {
+      uBase:{value:new THREE.Vector2()}, uN:{value:N}, uCelda:{value:o.celda},
+      uAncho:{value:o.ancho}, uAltoMin:{value:o.altoMin}, uAltoMax:{value:o.altoMax},
+      uDist:{value:o.dist}, uCerca:{value:o.cerca}, uSem:{value:o.sem}
+    }),
+    vertexShader:`
+      precision highp float;
+      attribute vec2 iIdx;
+      uniform vec2 uBase; uniform float uN,uCelda,uAncho,uAltoMin,uAltoMax,uDist,uCerca,uSem;
+      uniform float uT,uViento,uArco,uAltoK,uDens,uRJug;
+      uniform vec3 uOjo,uJug;
+      varying vec3 vW,vNor; varying float vV,vTono,vSeco;
+      ${RUIDO_GLSL}
+      ${MAPA_GLSL}
+      float h1(vec2 p, float s){ return fract(sin(dot(p,vec2(127.1,311.7))+s)*43758.5453); }
+      void main(){
+        /* la celda del mundo que le toca a esta instancia: la grilla envuelve */
+        vec2 g=uBase+mod(iIdx-uBase, vec2(uN));
+        float r1=h1(g,uSem), r2=h1(g,uSem+7.7), r3=h1(g,uSem+13.1);
+        float r4=h1(g,uSem+21.3), r5=h1(g,uSem+29.9), r6=h1(g,uSem+37.7);
+        vec2 P=(g+0.5)*uCelda+(vec2(r1,r2)-0.5)*uCelda*0.98;
+
+        vec2 mp=mapaEn(P);
+        /* sobre la huella pisada no crece y en el bosque cerrado ralea, pero el
+           umbral va alto a propósito: con el umbral bajo el pasto desaparecía a
+           cinco metros del camino y el claro quedaba pelado */
+        float suelo=(1.0-smoothstep(0.42,0.82,mp.g))*mix(0.45,1.0,smoothstep(0.05,0.55,mp.r));
+
+        float mancha=fbm(P*0.035);
+        float claro=smoothstep(0.10,0.34,fbm(P*0.011+7.3));
+        float alto=(uAltoMin+r3*(uAltoMax-uAltoMin))*uAltoK*(0.55+mancha*0.95);
+        float vive=step(r5, uDens*claro*suelo);
+        alto*=vive;
+        /* anillo de distancia: cada capa cubre su franja y ni un metro más */
+        float d=length(P-uJug.xz);
+        alto*= step(d, uDist) * step(uCerca, d+0.0001);
+
+        float v=position.y, lado=position.x;
+        float w=uAncho*(1.0-pow(v,1.4))*(0.72+r4*0.56)*0.5;
+        float a=r6*6.2831853;
+        float raf=max(0.05, 0.48+0.36*sin(P.x*0.13+P.y*0.10-uT*0.65)
+                                +0.20*sin(P.x*0.041-P.y*0.063-uT*0.33));
+        float osc=sin(uT*1.9+P.x*0.7+P.y*0.55+r4*6.283)+0.42*sin(uT*3.7+P.x*1.5-P.y*1.1);
+        float dob=(uArco*(0.35+r6*1.6) + uViento*raf*osc*0.60)*v*v;
+
+        vec2 dir=vec2(cos(a), sin(a)); vec2 late=vec2(-dir.y, dir.x);
+        vec3 eje=vec3(dir.x*dob*alto, (v-dob*dob*0.32)*alto, dir.y*dob*alto);
+        vec3 loc=eje+vec3(late.x,0.0,late.y)*lado*w*alto;
+
+        /* el jugador aparta: empuje radial más aplastado, sin tocar JavaScript */
+        vec2 dj=P-uJug.xz; float dd=length(dj);
+        float emp=1.0-smoothstep(uRJug*0.25, uRJug, dd);
+        loc.xz+=(dj/max(dd,0.0015))*emp*v*alto*0.9;
+        loc.y-=emp*v*alto*0.55;
+
+        float dv=2.0*dob*v;
+        vec3 tan=normalize(vec3(dir.x*dv, 1.0-dob*dob*0.64*v, dir.y*dv));
+        vec3 lat3=vec3(late.x,0.0,late.y);
+        /* la normal abomba a lo ancho: la cinta se ilumina como una hoja curva */
+        vNor=normalize(cross(lat3, tan) + lat3*lado*0.55);
+
+        vW=vec3(P.x+loc.x, loc.y, P.y+loc.z);
+        vV=v; vTono=0.78+r1*0.44; vSeco=smoothstep(0.55,0.95,fbm(P*0.02+51.0));
+        gl_Position=projectionMatrix*viewMatrix*vec4(vW,1.0);
+      }`,
+    fragmentShader:`
+      precision highp float;
+      varying vec3 vW,vNor; varying float vV,vTono,vSeco;
+      uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
+      ${NIEBLA_GLSL}
+      void main(){
+        vec3 N=normalize(vNor), E=normalize(uOjo-vW);
+        if(dot(N,E)<0.0) N=-N;                       // la brizna se ve por las dos caras
+        vec3 H=normalize(luz+E);
+        float ndl=max(dot(N,luz),0.0);
+        vec3 col=mix(vec3(0.028,0.076,0.018), vec3(0.175,0.400,0.062), pow(vV,0.80));
+        col=mix(col, vec3(0.340,0.300,0.090), vSeco*0.50);
+        col*=vTono;
+        float lamb=0.26+0.80*ndl;
+        float atras=pow(max(dot(-E,luz),0.0),2.4)*0.85*vV;   // a contraluz se prende
+        float esp=pow(max(dot(N,H),0.0), 34.0)*0.55*vV;
+        float ao=mix(0.42,1.10,vV);                          // la base recibe menos cielo
+        col=col*lamb*ao*2.0 + vec3(0.55,1.00,0.32)*atras*col*3.1 + uSolC*esp*ndl;
+        col+=col*uCielo*0.35*vV;
+        gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
+      }`
+  });
+  MATS.push(mat);
+  const m=new THREE.Mesh(geo,mat);
+  m.frustumCulled=false; escena.add(m);
+  const c={malla:m, mat, N, celda:o.celda, base:mat.uniforms.uBase.value, briznas:N*N};
+  CAMPOS.push(c); return c;
+}
+/* Menos pasto que en Pastizal: acá el protagonista es el bosque y hay que dejar
+   cuadros para los árboles y los bichos. */
+const K=MOVIL?0.55:0.85;
+crearCampo({N:Math.round(300*K), celda:0.052, segs:4, ancho:0.036,
+            altoMin:0.14, altoMax:0.36, dist:8*K,  cerca:0,     sem:0});
+crearCampo({N:Math.round(300*K), celda:0.145, segs:3, ancho:0.056,
+            altoMin:0.19, altoMax:0.48, dist:24*K, cerca:5.5*K, sem:311});
+crearCampo({N:Math.round(240*K), celda:0.480, segs:2, ancho:0.150,
+            altoMin:0.26, altoMax:0.60, dist:80*K, cerca:19*K,  sem:977});
+function seguirPasto(x,z){
+  for(const c of CAMPOS)
+    c.base.set(Math.floor(x/c.celda)-(c.N>>1), Math.floor(z/c.celda)-(c.N>>1));
+}
+avance('el pasto');
+
+/* ============================================================================
+   LOS MODELOS Y EL BOSQUE
+
+   Los nueve modelos —tres árboles, un arbusto, la barrera de troncos, la caja y
+   los tres bichos— se generaron con Higgsfield: una imagen del objeto aislado y
+   de ahí a malla texturizada. Vienen del repositorio por jsDelivr.
+
+   El material del GLTF se cambia por uno propio. No es capricho: todo el juego
+   se dibuja en lineal y el paso a sRGB lo hace el pase final, así que un
+   MeshStandardMaterial —que codifica por su cuenta— saldría con otro color que
+   el pasto y el suelo. Con shader propio, además, la niebla es la misma para
+   todos y el follaje puede prenderse a contraluz.
+
+   Y los árboles lejos no son el modelo: al arrancar, cada uno se retrata a sí
+   mismo contra fondo transparente y de ahí en más se dibuja como una carta que
+   mira a la cámara. Cuarenta árboles enteros y mil quinientas cartas cuestan
+   menos que ciento cincuenta modelos.
+============================================================================ */
+const REPO='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@31740b2c6c/mundo/bosque/';
+const A=f=>REPO+f;
+const MOD={};
+
+const SRGB_GLSL=`vec3 aLineal(vec3 c){ return pow(c, vec3(2.2)); }`;
+
+/* Un solo material para todo lo sólido del bosque. `uHoja` decide si además se
+   prende a contraluz, que es lo que separa una copa de un tronco. */
+function matModelo(tex, o){
+  o=o||{};
+  const m=new THREE.ShaderMaterial({
+    side:o.doble!==false? THREE.DoubleSide : THREE.FrontSide,
+    uniforms:{
+      tCol:{value:tex}, luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
+      uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
+      uFogD:{value:nieblaD}, uHoja:{value:o.hoja||0}, uTinte:{value:new THREE.Color(1,1,1)},
+      uEmision:{value:o.emision||0}
+    },
+    /* con instancias hay que multiplicar la matriz a mano: un ShaderMaterial
+       crudo no trae los trozos que three le inyecta a sus materiales */
+    vertexShader:`
+      precision highp float;
+      varying vec3 vW,vN; varying vec2 vUv;
+      void main(){
+        ${o.inst? `vec4 w=modelMatrix*instanceMatrix*vec4(position,1.0);
+                   vN=normalize(mat3(modelMatrix)*mat3(instanceMatrix)*normal);`
+                : `vec4 w=modelMatrix*vec4(position,1.0);
+                   vN=normalize(mat3(modelMatrix)*normal);`}
+        vW=w.xyz; vUv=uv;
+        gl_Position=projectionMatrix*viewMatrix*w;
+      }`,
+    fragmentShader:`
+      precision highp float;
+      varying vec3 vW,vN; varying vec2 vUv;
+      uniform sampler2D tCol; uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz,uTinte;
+      uniform float uFogD,uHoja,uEmision;
+      ${SRGB_GLSL}
+      ${NIEBLA_GLSL}
+      void main(){
+        vec4 t=texture2D(tCol, vUv);
+        if(t.a<0.4) discard;
+        vec3 col=aLineal(t.rgb)*uTinte;
+        vec3 N=normalize(vN), E=normalize(uOjo-vW);
+        if(dot(N,E)<0.0) N=-N;
+        float ndl=max(dot(N,luz),0.0);
+        float lamb=0.30+0.80*ndl;
+        vec3 out3=col*lamb*uSolC*1.30 + col*uCielo*0.26;
+        if(uHoja>0.0){
+          float atras=pow(max(dot(-E,luz),0.0),2.2)*uHoja;
+          out3+=col*vec3(0.60,1.00,0.36)*atras*1.9;
+        }
+        out3+=col*uEmision;
+        gl_FragColor=vec4(conNiebla(out3, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
+      }`
+  });
+  MATS.push(m); return m;
+}
+
+/* Lo que baja el GLTF viene metido en un cubo unidad y centrado. Acá se lo
+   endereza: se lo escala al alto que corresponde y se le baja la base al cero,
+   así plantar un árbol es sólo poner x y z. */
+function normalizar(gltf, altoObjetivo, cubo){
+  let geo=null, tex=null;
+  gltf.scene.updateWorldMatrix(true,true);
+  const partes=[];
+  gltf.scene.traverse(o=>{ if(o.isMesh) partes.push(o); });
+  if(!partes.length) return null;
+  const g0=partes[0];
+  geo=g0.geometry.clone();
+  geo.applyMatrix4(g0.matrixWorld);
+  const mm=g0.material;
+  tex=mm && (mm.map||null);
+  if(tex){ tex.colorSpace=THREE.NoColorSpace; tex.anisotropy=ANISO;
+           tex.minFilter=THREE.LinearMipmapLinearFilter; tex.needsUpdate=true; }
+  geo.computeBoundingBox();
+  const bb=geo.boundingBox, alto=bb.max.y-bb.min.y;
+  geo.translate(-(bb.min.x+bb.max.x)/2, -bb.min.y, -(bb.min.z+bb.max.z)/2);
+  if(cubo){
+    /* la caja no salió cúbica: se la mete en un metro por lado en los tres
+       ejes, así después escalarla en metros es escalarla en metros */
+    geo.scale(1/Math.max(bb.max.x-bb.min.x,1e-4), 1/Math.max(alto,1e-4),
+              1/Math.max(bb.max.z-bb.min.z,1e-4));
+  }else{
+    const k=altoObjetivo/Math.max(alto,1e-4);
+    geo.scale(k,k,k);
+  }
+  geo.computeBoundingBox(); geo.computeBoundingSphere();
+  if(!geo.attributes.normal) geo.computeVertexNormals();
+  const b=geo.boundingBox;
+  return {geo, tex, alto:b.max.y, radio:Math.max(b.max.x,-b.min.x,b.max.z,-b.min.z)};
+}
+
+async function cargarModelos(){
+  const cargador=new GLTFLoader();
+  const lista=[
+    ['roble',   'roble.glb',   9.5,  'un roble',                 0],
+    ['pino',    'pino.glb',   12.0,  'un pino',                  0],
+    ['abedul',  'abedul.glb',  8.0,  'un abedul',                0],
+    ['troncos', 'troncos.glb', 3.0,  'la barrera de troncos',    0],
+    ['caja',    'caja.glb',    1.0,  'las cajas',                1],
+    ['duende',  'duende.glb',  1.15, 'los duendes de musgo',     0],
+    ['lobo',    'lobo.glb',    1.25, 'los lobos',                0],
+    ['treant',  'treant.glb',  2.60, 'el treant',                0]
+  ];
+  for(const [k,f,h,msg,cubo] of lista){
+    _ctxt && (_ctxt.textContent=msg+'…');
+    try{
+      const g=await new Promise((ok,mal)=>cargador.load(A(f), ok, undefined, mal));
+      MOD[k]=normalizar(g,h,!!cubo);
+    }catch(e){ MOD[k]=null; console.warn('no cargó',f,e); }
+    avance(msg);
+  }
+}
+
+/* ------------------------------------------------------------- impostores
+   Cada árbol se retrata a sí mismo una vez, de costado, con fondo
+   transparente. Después se dibuja como una carta que gira alrededor de su eje
+   para mirar siempre a la cámara. Un árbol así cuesta dos triángulos. */
+function retratar(m, W, H){
+  const rt=new THREE.WebGLRenderTarget(W,H,{
+    format:THREE.RGBAFormat, type:THREE.UnsignedByteType,
+    minFilter:THREE.LinearMipmapLinearFilter, magFilter:THREE.LinearFilter,
+    generateMipmaps:true, depthBuffer:true
+  });
+  const esc=new THREE.Scene();
+  const mat=new THREE.MeshBasicMaterial({map:m.tex, side:THREE.DoubleSide, transparent:false});
+  /* a propósito plano: el impostor guarda el COLOR del árbol y la luz se la
+     pone el shader de la carta, así el bosque de lejos responde al sol igual
+     que el de cerca */
+  const malla=new THREE.Mesh(m.geo, mat);
+  esc.add(malla);
+  const r=m.radio*1.06, h=m.alto;
+  const cam=new THREE.OrthographicCamera(-r, r, h*1.02, -h*0.02, 0.1, 200);
+  cam.position.set(0, h*0.5, 60); cam.lookAt(0, h*0.5, 0);
+  const cl=renderer.getClearColor(new THREE.Color()), ca=renderer.getClearAlpha();
+  renderer.setClearColor(0x000000, 0);
+  renderer.setRenderTarget(rt); renderer.clear(true,true,true);
+  renderer.render(esc, cam);
+  renderer.setRenderTarget(null);
+  renderer.setClearColor(cl, ca);
+  mat.dispose();
+  return {tex:rt.texture, ancho:r*2, alto:h};
+}
+
+/* la carta: un plano con el pivote abajo, que gira en Y hacia la cámara */
+function mallaImpostores(retrato, max){
+  const geo=new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(
+    [-0.5,0,0, 0.5,0,0, 0.5,1,0, -0.5,1,0],3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute([0,0, 1,0, 1,1, 0,1],2));
+  geo.setIndex([0,1,2, 0,2,3]);
+  const dat=new Float32Array(max*4);                 // x, z, escala, tono
+  geo.setAttribute('iDat', new THREE.InstancedBufferAttribute(dat,4));
+  geo.instanceCount=0;
+  geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e6);
+  const mat=new THREE.ShaderMaterial({
+    side:THREE.DoubleSide, transparent:false, alphaTest:0.35, depthWrite:true,
+    uniforms:{ tCol:{value:retrato.tex}, uAncho:{value:retrato.ancho}, uAlto:{value:retrato.alto},
+      luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()}, uSolC:{value:SOLC.clone()},
+      uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()}, uFogD:{value:nieblaD} },
+    vertexShader:`
+      precision highp float;
+      attribute vec4 iDat;
+      uniform float uAncho,uAlto; uniform vec3 uOjo;
+      varying vec2 vUv; varying vec3 vW; varying float vTono;
+      void main(){
+        vec3 c=vec3(iDat.x, 0.0, iDat.y);
+        vec3 haciaOjo=uOjo-c; haciaOjo.y=0.0;
+        vec3 der=normalize(vec3(-haciaOjo.z, 0.0, haciaOjo.x));
+        vec3 p=c + der*position.x*uAncho*iDat.z + vec3(0.0,1.0,0.0)*position.y*uAlto*iDat.z;
+        vW=p; vUv=uv; vTono=iDat.w;
+        gl_Position=projectionMatrix*viewMatrix*vec4(p,1.0);
+      }`,
+    fragmentShader:`
+      precision highp float;
+      varying vec2 vUv; varying vec3 vW; varying float vTono;
+      uniform sampler2D tCol; uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
+      ${SRGB_GLSL}
+      ${NIEBLA_GLSL}
+      void main(){
+        vec4 t=texture2D(tCol, vUv);
+        if(t.a<0.35) discard;
+        vec3 col=aLineal(t.rgb)*vTono;
+        /* la carta no tiene normal, así que se le da una media: el sol le pega
+           de frente y algo de cielo, y el contraluz la prende como a una copa */
+        vec3 E=normalize(uOjo-vW);
+        float atras=pow(max(dot(-E,luz),0.0),2.2)*0.55;
+        vec3 out3=col*(0.62+0.42*max(luz.y,0.0))*uSolC*1.22 + col*uCielo*0.26
+                + col*vec3(0.60,1.00,0.36)*atras*1.5;
+        gl_FragColor=vec4(conNiebla(out3, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
+      }`
+  });
+  MATS.push(mat);
+  const malla=new THREE.Mesh(geo,mat);
+  malla.frustumCulled=false; escena.add(malla);
+  return {malla, geo, dat, attr:geo.attributes.iDat, max};
+}
+
+/* --------------------------------------------------------------- la siembra
+   Grilla con temblor: un árbol por celda, corrido al azar dentro de la celda.
+   Se queda el que cae en el bosque, y contra el borde del claro se aprieta más
+   para que la pared se lea maciza. */
+const ARBOLES=[];       // {x,z,e,tipo,tono}
+const ESPECIES=['roble','pino','abedul'];
+function sembrar(){
+  const r=semilla(77003);
+  const paso=3.9;
+  for(let z=LIM.z0; z<LIM.z1; z+=paso)
+    for(let x=LIM.x0; x<LIM.x1; x+=paso){
+      const px=x+(r()-0.5)*paso*0.92, pz=z+(r()-0.5)*paso*0.92;
+      const h=holgura(px,pz);
+      if(h<1.1) continue;                       // el claro y el camino quedan limpios
+      /* contra el borde, más denso; hacia adentro del bosque, se afloja */
+      const p = h<7 ? 1.0 : (h<18? 0.80 : 0.55);
+      if(r()>p) continue;
+      const t=r();
+      /* pocos abedules: son finitos y de lejos, convertidos en carta, se ven
+         moteados. El roble y el pino tienen copa maciza y aguantan el impostor. */
+      const tipo = t<0.46? 0 : (t<0.87? 1 : 2);
+      ARBOLES.push({x:px, z:pz, e:0.72+r()*0.62, tipo, tono:0.80+r()*0.42});
+    }
+}
+
+/* una grilla gruesa para no recorrer treinta mil árboles por cuadro */
+const CELDA_G=16;
+const GRILLA=new Map();
+function claveG(i,j){ return i+'|'+j; }
+function indexar(lista){
+  GRILLA.clear();
+  for(const a of lista){
+    const i=Math.floor(a.x/CELDA_G), j=Math.floor(a.z/CELDA_G), k=claveG(i,j);
+    let c=GRILLA.get(k); if(!c){ c=[]; GRILLA.set(k,c); }
+    c.push(a);
+  }
+}
+function cerca(x,z,R,fn){
+  const i0=Math.floor((x-R)/CELDA_G), i1=Math.floor((x+R)/CELDA_G);
+  const j0=Math.floor((z-R)/CELDA_G), j1=Math.floor((z+R)/CELDA_G);
+  for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){
+    const c=GRILLA.get(claveG(i,j)); if(!c) continue;
+    for(const a of c) fn(a);
+  }
+}
+
+/* ============================================================================
+   LAS DIEZ ARENAS
+   Cada una se arma sola con una semilla: las cajas donde caen, las torres de
+   cajas apiladas y, encima, las plataformas. El generador no las tira al azar y
+   listo: cada plataforma se cuelga de una torre o de otra plataforma a una
+   altura y una distancia que SE PUEDEN saltar, así el parkour siempre cierra.
+
+   Los troncos que traban las bocas son el mismo modelo repetido tres veces de
+   costado. El de la entrada cae cuando entrás —esa es la cinemática— y el de la
+   salida se hunde cuando cae la última oleada.
+============================================================================ */
+const SALTO_ALTO=0.95, SALTO_LARGO=2.0;   // lo que se sube y lo que se cruza
+const GRUESO_PLAT=0.34;                   // el espesor de una plataforma
+
+const CUERPOS=[];    // colisión: {x0,x1,y0,y1,z0,z1}
+const BARRERAS=[];   // {arena, lado:'entra'|'sale', obj, caja, estado, t}
+const ARENAS=[];     // {i, nodo, cajas:[], plataformas:[], listo, oleada, estado}
+
+function aabb(cx,cy,cz, hx,hy,hz){
+  return {x0:cx-hx, x1:cx+hx, y0:cy-hy, y1:cy+hy, z0:cz-hz, z1:cz+hz};
+}
+/* piezas de madera: la caja generada, estirada. Una plataforma es la misma caja
+   aplastada, así todo el parkour está hecho con el mismo modelo. */
+let grupoMadera=null, matMadera=null;
+const PIEZAS=[];      // {m:matriz, caja}
+function ponerMadera(cx,cy,cz, sx,sy,sz, giro){
+  const m=new THREE.Matrix4();
+  m.compose(new THREE.Vector3(cx,cy,cz),
+            new THREE.Quaternion().setFromEuler(new THREE.Euler(0,giro||0,0)),
+            new THREE.Vector3(sx,sy,sz));
+  /* la caja de colisión se toma alineada a los ejes: con giros chicos la
+     diferencia no se siente y el choque queda barato y estable */
+  const c=Math.abs(Math.cos(giro||0)), s=Math.abs(Math.sin(giro||0));
+  const hx=(sx*c+sz*s)*0.5, hz=(sx*s+sz*c)*0.5;
+  const caja=aabb(cx, cy+sy*0.5, cz, hx, sy*0.5, hz);
+  PIEZAS.push({m, caja});
+  return caja;
+}
+
+function armarArenas(){
+  for(let k=0;k<N_ARENAS;k++){
+    const n=NODOS[k+1], R=n.r;
+    const r=semilla(4400+k*977);
+    const A={i:k, nodo:n, estado:'dormida', oleada:0, p0:PIEZAS.length, p1:0, malla:null};
+
+    /* las bocas quedan libres: nada de cajas tapando por donde se entra */
+    const bocas=[];
+    const b1=boca(k+1,false), b2=boca(k+1,true);
+    if(b1) bocas.push(b1); if(b2) bocas.push(b2);
+    const libre=(x,z)=>{
+      for(const b of bocas) if(Math.hypot(x-b.x,z-b.z)<6.0) return false;
+      return Math.hypot(x-n.x,z-n.z) > 4.0;      // el centro también, para pelear
+    };
+    const puesto=[];
+    const lejos=(x,z,d)=>{ for(const p of puesto) if(Math.hypot(x-p[0],z-p[1])<d) return false; return true; };
+    function sitio(dmin, rmin, rmax){
+      for(let t=0;t<40;t++){
+        const a=r()*6.2831853, d=R*(rmin+r()*(rmax-rmin));
+        const x=n.x+Math.cos(a)*d, z=n.z+Math.sin(a)*d;
+        if(libre(x,z) && lejos(x,z,dmin)){ puesto.push([x,z]); return [x,z]; }
+      }
+      return null;
+    }
+
+    /* cajas sueltas por el piso, para cubrirse y para arrancar a trepar */
+    const sueltas=6+k;
+    for(let i=0;i<sueltas;i++){
+      const p=sitio(2.2, 0.30, 0.88); if(!p) continue;
+      const s=0.95+r()*0.35;
+      ponerMadera(p[0], 0, p[1], s, s, s, r()*0.7-0.35);
+    }
+    /* Torres escalonadas, no apiladas a plomo. Apiladas a plomo no se pueden
+       trepar: la caja de arriba te tapa el escalón de la de abajo y desde el
+       piso hay dos metros de un salto. Corridas casi un metro por nivel, cada
+       caja deja ochenta centímetros de repisa y se sube de a setenta. */
+    const torres=[];
+    const nTorres=3+Math.floor(r()*2)+Math.min(2,Math.floor(k/4));
+    for(let i=0;i<nTorres;i++){
+      const p=sitio(5.4, 0.34, 0.80); if(!p) continue;
+      const alto=2+Math.floor(r()*2);
+      const a=r()*6.2831853, ux=Math.cos(a), uz=Math.sin(a);
+      let y=0, x=p[0], z=p[1];
+      for(let c=0;c<alto;c++){
+        const s=1.02-c*0.04, h=0.68+r()*0.10;
+        ponerMadera(x, y, z, s, h, s, a+r()*0.5-0.25);
+        y+=h;
+        x+=ux*0.86+(r()-0.5)*0.16; z+=uz*0.86+(r()-0.5)*0.16;
+      }
+      torres.push({x:x-ux*0.86, z:z-uz*0.86, y});
+    }
+    /* plataformas: cada una se cuelga de una torre o de la anterior, siempre a
+       un salto de distancia. Es lo que hace que el parkour se pueda hacer. */
+    const altos=[];
+    const nPlat=3+Math.floor(r()*2)+Math.min(3,Math.floor(k/3));
+    for(let i=0;i<nPlat;i++){
+      const base = (altos.length && r()<0.55) ? altos[Math.floor(r()*altos.length)]
+                 : (torres.length? torres[Math.floor(r()*torres.length)] : null);
+      if(!base) break;
+      const a=r()*6.2831853;
+      const d=1.1+r()*SALTO_LARGO;
+      let x=base.x+Math.cos(a)*d, z=base.z+Math.sin(a)*d;
+      /* la altura se mide contra la CARA DE ARRIBA de la plataforma nueva, no
+         contra su base: si se mide contra la base, el grosor se suma y hay
+         plataformas a un metro treinta, que con este salto no se alcanzan */
+      const y=base.y+0.24+r()*(SALTO_ALTO-GRUESO_PLAT-0.24);
+      /* que no se vaya de la arena ni tape una boca */
+      const dc=Math.hypot(x-n.x,z-n.z);
+      if(dc>R*0.92){ const f=R*0.92/dc; x=n.x+(x-n.x)*f; z=n.z+(z-n.z)*f; }
+      if(!libre(x,z)) continue;
+      const w=2.0+r()*1.8, dd=1.6+r()*1.6;
+      ponerMadera(x, y, z, w, GRUESO_PLAT, dd, r()*1.2-0.6);
+      altos.push({x, z, y:y+GRUESO_PLAT});
+    }
+    A.altos=altos;
+    A.p1=PIEZAS.length;
+    ARENAS.push(A);
+  }
+}
+/* Una malla instanciada POR ARENA, no una sola con todo: así se puede apagar la
+   madera de las nueve arenas que no estás pisando. Dibujarlas todas costaba
+   medio millón de triángulos por cuadro para no mostrar nada. */
+function armarMadera(){
+  if(!MOD.caja) return;
+  const mat=matModelo(MOD.caja.tex, {inst:true});
+  for(const A of ARENAS){
+    const n=A.p1-A.p0; if(n<=0) continue;
+    const mi=new THREE.InstancedMesh(MOD.caja.geo, mat, n);
+    for(let i=0;i<n;i++) mi.setMatrixAt(i, PIEZAS[A.p0+i].m);
+    mi.instanceMatrix.needsUpdate=true;
+    mi.frustumCulled=false; mi.visible=false;
+    escena.add(mi);
+    A.malla=mi;
+  }
+}
+/* Lo que está lejos no se dibuja. Sin esto, las diez arenas y las diecinueve
+   barreras se mandaban a la GPU siempre, estuvieras donde estuvieras. */
+const VER_LEJOS=78;
+function verCerca(x,z){
+  for(const A of ARENAS){
+    if(!A.malla) continue;
+    A.malla.visible = Math.hypot(x-A.nodo.x, z-A.nodo.z) < A.nodo.r+VER_LEJOS;
+  }
+  for(const b of BARRERAS){
+    if(b.estado==='guardada' || b.estado==='abierta'){ b.obj.visible=false; continue; }
+    b.obj.visible = Math.hypot(x-b.x, z-b.z) < VER_LEJOS;
+  }
+}
+/* la colisión también: sólo contra la madera de la arena que estás pisando */
+let PIEZAS_ACT=[];
+function piezasCerca(x,z){
+  PIEZAS_ACT.length=0;
+  for(const A of ARENAS){
+    if(!A.malla || !A.malla.visible) continue;
+    for(let i=A.p0;i<A.p1;i++) PIEZAS_ACT.push(PIEZAS[i]);
+  }
+}
+
+/* ------------------------------------------------------------- los troncos */
+function armarBarreras(){
+  const g=MOD.troncos; if(!g) return;
+  for(let k=0;k<N_ARENAS;k++){
+    for(const lado of ['entra','sale']){
+      const b = lado==='entra' ? boca(k+1,false) : boca(k+1,true);
+      if(!b) continue;
+      const grupo=new THREE.Group();
+      /* el modelo salió con el largo sobre Z, así que va un cuarto de vuelta
+         para que la pared cruce el corredor en vez de mirar hacia él */
+      const anchoPieza=g.alto*1.55;
+      for(let i=-1;i<=1;i++){
+        const m=new THREE.Mesh(g.geo, matMadera);
+        m.rotation.y=Math.PI/2;
+        m.position.set(i*anchoPieza*0.92, 0, (i%2)*0.22);
+        m.scale.setScalar(1);
+        grupo.add(m);
+      }
+      grupo.position.set(b.x, 0, b.z);
+      grupo.rotation.y=b.rot;
+      grupo.visible=false;
+      escena.add(grupo);
+      BARRERAS.push({arena:k, lado, obj:grupo, x:b.x, z:b.z, rot:b.rot,
+                     radio:ANCHO_CAMINO+2.2, alto:g.alto, estado:'guardada', t:0});
+    }
+  }
+}
+function barrera(k, lado){ return BARRERAS.find(b=>b.arena===k && b.lado===lado); }
+function cerrarBarrera(b){ if(!b) return; b.estado='cayendo'; b.t=0; b.obj.visible=true; }
+function abrirBarrera(b){ if(!b) return; b.estado='hundiendo'; b.t=0; }
+function pasoBarreras(dt){
+  for(const b of BARRERAS){
+    if(b.estado==='cayendo'){
+      b.t+=dt/0.85;
+      const p=Math.min(1,b.t);
+      /* cae de golpe y rebota una vez: el rebote es lo que la hace pesada */
+      const e=1-Math.pow(1-p,3);
+      b.obj.position.y = (1-e)*9.0 + Math.sin(p*Math.PI*2)*(1-p)*0.30;
+      if(p>=1){ b.estado='cerrada'; b.obj.position.y=0; }
+    } else if(b.estado==='hundiendo'){
+      b.t+=dt/1.3;
+      const p=Math.min(1,b.t);
+      b.obj.position.y=-p*p*b.alto*1.15;
+      b.obj.rotation.z=Math.sin(p*7.0)*0.05*(1-p);
+      if(p>=1){ b.estado='abierta'; b.obj.visible=false; }
+    }
+  }
+}
+/* ¿Me traba el paso alguna barrera cerrada? Se mira contra la recta de la boca
+   y no contra una caja: la pared es un plano y así el empuje sale perpendicular. */
+function chocarBarreras(P, r){
+  for(const b of BARRERAS){
+    if(b.estado!=='cerrada' && b.estado!=='cayendo') continue;
+    const ux=Math.sin(b.rot), uz=Math.cos(b.rot);        // normal de la pared
+    const dx=P.x-b.x, dz=P.z-b.z;
+    const n=dx*ux+dz*uz;                                  // distancia al plano
+    const t=-dx*uz+dz*ux;                                 // corrida a lo largo
+    if(Math.abs(t)>b.radio) continue;
+    const grosor=1.1+r;
+    if(Math.abs(n)<grosor){
+      const s=n>=0?1:-1;
+      P.x+=ux*(grosor-Math.abs(n))*s;
+      P.z+=uz*(grosor-Math.abs(n))*s;
+    }
+  }
+}
+
+/* ------------------------------------------------ choque contra la madera
+   Primero se resuelve el horizontal y después el vertical, y el vertical sólo
+   cuando se venía cayendo: si se hace al revés, caminar contra una caja te
+   sube encima sola. */
+function chocarPiezas(P, vel, r, alto, enSuelo){
+  let apoyo=null;
+  for(const p of PIEZAS_ACT){
+    const c=p.caja;
+    if(P.x+r<c.x0 || P.x-r>c.x1 || P.z+r<c.z0 || P.z-r>c.z1) continue;
+    const pies=P.y, cabeza=P.y+alto;
+    if(cabeza<c.y0 || pies>c.y1-0.001) continue;
+    /* subir un escalón bajo sin saltar, como en cualquier plataformero */
+    if(enSuelo && c.y1-pies<=0.42 && c.y1>pies){ P.y=c.y1; apoyo=c; continue; }
+    const px=Math.min(c.x1+r-P.x, P.x-(c.x0-r));
+    const pz=Math.min(c.z1+r-P.z, P.z-(c.z0-r));
+    if(px<pz) P.x += (P.x>(c.x0+c.x1)*0.5) ? px : -px;
+    else      P.z += (P.z>(c.z0+c.z1)*0.5) ? pz : -pz;
+  }
+  return apoyo;
+}
+/* la altura del piso bajo los pies: el suelo es plano, así que lo único que
+   puede levantarlo es una caja */
+function pisoEn(x,z,yDesde){
+  let y=0;
+  for(const p of PIEZAS_ACT){
+    const c=p.caja;
+    if(x<c.x0||x>c.x1||z<c.z0||z>c.z1) continue;
+    if(c.y1<=yDesde+0.30 && c.y1>y) y=c.y1;
+  }
+  return y;
+}
+
+/* ============================================================================
+   LOS BICHOS Y LAS OLEADAS
+
+   Tres clases: el duende de musgo, que es lento y viene de a muchos; el lobo,
+   que corre; y el treant, que aguanta y pega fuerte y sólo aparece en la última
+   oleada de las arenas de más adelante.
+
+   No hay esqueleto ni animación importada. El bicho se menea desde el shader:
+   el vértice se corre más cuanto más arriba está, con una fase propia, así el
+   cuerpo bambolea al caminar y se estira al pegar. Con eso alcanza para que se
+   lea vivo en primera persona, y cuesta cero.
+============================================================================ */
+const CLASES={
+  duende:{ mod:'duende', alto:1.15, vel:2.05, vida:30, daño:9,  radio:0.50,
+           alcance:1.55, frente:0, menea:0.075, color:[1,1,1] },
+  lobo:  { mod:'lobo',   alto:1.25, vel:4.35, vida:44, daño:13, radio:0.60,
+           alcance:1.90, frente:1, menea:0.045, color:[1,1,1] },
+  treant:{ mod:'treant', alto:2.60, vel:1.75, vida:180,daño:26, radio:0.85,
+           alcance:2.45, frente:0, menea:0.055, color:[1,1,1] }
+};
+const BICHOS=[];
+const MAX_BICHOS=26;
+
+function nuevoBicho(clase, x, z, escalaVida, escalaVel){
+  const C=CLASES[clase], g=MOD[C.mod];
+  if(!g) return null;
+  const mat=matModelo(g.tex, {hoja:0, emision: clase==='treant'?0.10:0});
+  mat.uniforms.uMenea={value:C.menea};
+  mat.uniforms.uFase={value:Math.random()*6.283};
+  mat.uniforms.uT={value:0};
+  mat.uniforms.uAltoM={value:C.alto};
+  mat.uniforms.uGolpe={value:0};
+  mat.uniforms.uDanio={value:0};
+  /* se le injerta el meneo al shader ya escrito: más desplazamiento cuanto más
+     arriba está el vértice, que es exactamente cómo bambolea un cuerpo */
+  mat.vertexShader=mat.vertexShader.replace('void main(){',
+    `uniform float uMenea,uFase,uT,uAltoM,uGolpe;
+     void main(){`)
+    .replace('vec4 w=modelMatrix*vec4(position,1.0);',
+    `vec3 pos=position;
+     float k=clamp(pos.y/uAltoM,0.0,1.0); k=k*k;
+     pos.x+=sin(uT*6.5+uFase)*uMenea*k;
+     pos.z+=cos(uT*5.1+uFase*1.7)*uMenea*0.6*k;
+     pos.y-=abs(sin(uT*6.5+uFase))*uMenea*0.35*k;
+     pos.z+=uGolpe*k*0.55;                       // el envión del ataque
+     vec4 w=modelMatrix*vec4(pos,1.0);`);
+  mat.fragmentShader=mat.fragmentShader.replace('uniform float uFogD,uHoja,uEmision;',
+    'uniform float uFogD,uHoja,uEmision,uDanio;')
+    .replace('gl_FragColor=vec4(conNiebla(',
+    'out3=mix(out3, vec3(2.2,0.25,0.18), uDanio);\n        gl_FragColor=vec4(conNiebla(');
+  const malla=new THREE.Mesh(g.geo, mat);
+  malla.scale.setScalar(1);
+  malla.position.set(x, 0, z);
+  malla.frustumCulled=false;
+  escena.add(malla);
+  const b={clase, C, malla, mat, x, z, y:0, vy:0,
+    vida:C.vida*escalaVida, vidaMax:C.vida*escalaVida,
+    vel:C.vel*escalaVel, daño:C.daño*escalaVida,
+    esperando:0, muerto:0, tDaño:0, giro:0, aturdido:0};
+  BICHOS.push(b);
+  return b;
+}
+function matarBicho(b){
+  b.muerto=0.001; b.vida=0;
+  ruidoMuerte(b.clase);
+  chispas(b.x, b.y+b.C.alto*0.5, b.z, b.clase==='treant'?26:14);
+}
+function limpiarBichos(){
+  for(let i=BICHOS.length-1;i>=0;i--){
+    const b=BICHOS[i];
+    escena.remove(b.malla); b.mat.dispose();
+    const k=MATS.indexOf(b.mat); if(k>=0) MATS.splice(k,1);
+    BICHOS.splice(i,1);
+  }
+}
+
+/* ------------------------------------------------------------- las oleadas */
+function recetaOleada(k, w){
+  /* k: arena 0..9   w: oleada 0..4. Sube la cuenta, la vida y la velocidad, y
+     cambia la mezcla: primero puros duendes, después lobos, y el treant recién
+     en la última de la cuarta arena en adelante. */
+  const n = 3 + w + Math.floor(k*0.7);
+  const vidaK = 1 + w*0.26 + k*0.30;
+  const velK  = 1 + w*0.045 + k*0.030;
+  const lista=[];
+  const pLobo = clamp((w-1)*0.22 + k*0.05, 0, 0.62);
+  const nTreant = (w===4 && k>=3) ? 1+Math.floor((k-3)/3) : 0;
+  for(let i=0;i<n;i++) lista.push(Math.random()<pLobo? 'lobo':'duende');
+  for(let i=0;i<nTreant;i++) lista.push('treant');
+  return {lista, vidaK, velK};
+}
+function soltarOleada(A){
+  const {lista, vidaK, velK}=recetaOleada(A.i, A.oleada);
+  const n=A.nodo, R=n.r;
+  let puestos=0;
+  for(const clase of lista){
+    if(BICHOS.length>=MAX_BICHOS) break;
+    /* aparecen contra el borde, lejos del jugador, para que se los vea venir */
+    let x=0,z=0, mejor=-1;
+    for(let t=0;t<14;t++){
+      const a=Math.random()*6.2831853, d=R*(0.80+Math.random()*0.16);
+      const px=n.x+Math.cos(a)*d, pz=n.z+Math.sin(a)*d;
+      const dj=Math.hypot(px-PJ.pos.x, pz-PJ.pos.z);
+      if(dj>mejor){ mejor=dj; x=px; z=pz; }
+      if(dj>R*1.1) break;
+    }
+    nuevoBicho(clase, x, z, vidaK, velK);
+    puestos++;
+  }
+  return puestos;
+}
+
+/* ------------------------------------------------------------- el combate */
+const PJ={pos:new THREE.Vector3(0,0,4), vel:new THREE.Vector3(), yaw:Math.PI, cabeceo:-0.03,
+  enSuelo:true, vida:100, vidaMax:100, golpeT:0, invul:0, muerto:0, kills:0};
+const ALCANCE=2.75, ARCO=Math.cos(0.95);
+
+function golpear(){
+  if(PJ.golpeT>0 || PJ.muerto) return;
+  PJ.golpeT=0.44;
+  ruidoTajo();
+  const dx=Math.sin(PJ.yaw), dz=Math.cos(PJ.yaw);
+  let pegó=0;
+  for(const b of BICHOS){
+    if(b.muerto) continue;
+    const vx=b.x-PJ.pos.x, vz=b.z-PJ.pos.z;
+    const d=Math.hypot(vx,vz);
+    if(d>ALCANCE+b.C.radio) continue;
+    if(Math.abs(b.y-PJ.pos.y)>2.2) continue;
+    if((vx*dx+vz*dz)/Math.max(d,1e-4) < ARCO) continue;
+    const dmg = 34 + PJ.kills*0.10;
+    b.vida-=dmg; b.tDaño=0.18; b.aturdido=0.22;
+    b.x+=vx/d*0.35; b.z+=vz/d*0.35;                 // retroceso
+    pegó++;
+    if(b.vida<=0){ matarBicho(b); PJ.kills++; }
+  }
+  if(pegó) ruidoImpacto(pegó>1);
+}
+function dañoAlJugador(d){
+  if(PJ.invul>0 || PJ.muerto) return;
+  PJ.vida-=d; PJ.invul=0.55;
+  tinteDaño();
+  ruidoDolor();
+  if(PJ.vida<=0){ PJ.vida=0; PJ.muerto=1; morir(); }
+}
+
+function pasoBichos(dt){
+  for(let i=BICHOS.length-1;i>=0;i--){
+    const b=BICHOS[i], C=b.C;
+    b.mat.uniforms.uT.value=T;
+    b.tDaño=Math.max(0,b.tDaño-dt*5.5);
+    b.mat.uniforms.uDanio.value=b.tDaño;
+
+    if(b.muerto){
+      b.muerto+=dt;
+      const p=Math.min(1,b.muerto/1.05);
+      b.malla.rotation.x=-p*1.55;                    // se desploma de frente
+      b.malla.position.y=b.y-p*0.15;
+      b.mat.uniforms.uTinte.value.setScalar(1-p*0.75);
+      if(p>=1){
+        escena.remove(b.malla); b.mat.dispose();
+        const k=MATS.indexOf(b.mat); if(k>=0) MATS.splice(k,1);
+        BICHOS.splice(i,1);
+      }
+      continue;
+    }
+    b.aturdido=Math.max(0,b.aturdido-dt);
+    b.esperando=Math.max(0,b.esperando-dt);
+
+    const vx=PJ.pos.x-b.x, vz=PJ.pos.z-b.z;
+    const d=Math.hypot(vx,vz)||1e-4;
+    const cerca = d < C.alcance+0.35;
+
+    if(!cerca && !b.aturdido){
+      const v=b.vel*dt;
+      let nx=b.x+vx/d*v, nz=b.z+vz/d*v;
+      /* se separan entre ellos, o se apilan todos en el mismo punto */
+      for(const o of BICHOS){
+        if(o===b||o.muerto) continue;
+        const ox=nx-o.x, oz=nz-o.z, od=Math.hypot(ox,oz);
+        const min=C.radio+o.C.radio;
+        if(od<min && od>1e-4){ nx+=ox/od*(min-od)*0.5; nz+=oz/od*(min-od)*0.5; }
+      }
+      b.x=nx; b.z=nz;
+      /* no se meten en el bosque ni atraviesan la madera */
+      const h=holgura(b.x,b.z);
+      if(h>0.2){
+        const e=0.35;
+        const gx=(holgura(b.x+e,b.z)-holgura(b.x-e,b.z))/(2*e);
+        const gz=(holgura(b.x,b.z+e)-holgura(b.x,b.z-e))/(2*e);
+        const gl=Math.hypot(gx,gz)||1;
+        b.x-=gx/gl*h; b.z-=gz/gl*h;
+      }
+    } else if(cerca && b.esperando<=0 && !b.aturdido){
+      b.esperando = C.alcance>2.0? 1.55 : 1.15;
+      b.mat.uniforms.uGolpe.value=0.55;
+      if(Math.abs(b.y-PJ.pos.y)<1.8) dañoAlJugador(b.daño);
+      ruidoGruñido(b.clase);
+    }
+    b.mat.uniforms.uGolpe.value*=Math.pow(0.02,dt);
+
+    /* el piso: se suben a las cajas si les toca una debajo */
+    const piso=pisoEn(b.x,b.z,b.y+0.4);
+    b.y += (piso-b.y)*Math.min(1,dt*9);
+    b.malla.position.set(b.x, b.y, b.z);
+    /* miran hacia donde caminan; el lobo salió mirando a +X y los otros a +Z */
+    const objetivo = C.frente? Math.atan2(-vz, vx) : Math.atan2(vx, vz);
+    let dg=objetivo-b.giro;
+    while(dg>Math.PI) dg-=6.2831853; while(dg<-Math.PI) dg+=6.2831853;
+    b.giro+=dg*Math.min(1,dt*7);
+    b.malla.rotation.y=b.giro;
+  }
+}
+
+/* -------------------------------------------------------------- chispas */
+let chispasG=null, chispasDat=null, chispasN=0;
+const CHISPAS_MAX=420;
+const CH=[];
+function crearChispas(){
+  const geo=new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.5,-0.5,0, 0.5,-0.5,0, 0.5,0.5,0, -0.5,0.5,0],3));
+  geo.setIndex([0,1,2,0,2,3]);
+  chispasDat=new Float32Array(CHISPAS_MAX*4);       // x,y,z,tamaño
+  geo.setAttribute('iDat', new THREE.InstancedBufferAttribute(chispasDat,4));
+  geo.instanceCount=0;
+  geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e6);
+  const mat=new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    uniforms:{ uOjo:{value:new THREE.Vector3()}, uArriba:{value:new THREE.Vector3(0,1,0)},
+               uDer:{value:new THREE.Vector3(1,0,0)} },
+    vertexShader:`attribute vec4 iDat; uniform vec3 uDer,uArriba;
+      varying float vT;
+      void main(){
+        vec3 p=iDat.xyz + uDer*position.x*iDat.w + uArriba*position.y*iDat.w;
+        vT=iDat.w; gl_Position=projectionMatrix*viewMatrix*vec4(p,1.0); }`,
+    fragmentShader:`precision mediump float; varying float vT;
+      void main(){ gl_FragColor=vec4(1.0,0.62,0.22,1.0)*clamp(vT*22.0,0.0,1.0); }`
+  });
+  chispasG=new THREE.Mesh(geo,mat);
+  chispasG.frustumCulled=false; escena.add(chispasG);
+}
+function chispas(x,y,z,n){
+  for(let i=0;i<n;i++){
+    if(CH.length>=CHISPAS_MAX) break;
+    const a=Math.random()*6.283, e=Math.random()*1.4;
+    CH.push({x,y,z, vx:Math.cos(a)*Math.cos(e)*3.2*Math.random(),
+             vy:1.2+Math.random()*3.4, vz:Math.sin(a)*Math.cos(e)*3.2*Math.random(),
+             t:0, vida:0.45+Math.random()*0.5});
+  }
+}
+function pasoChispas(dt){
+  let k=0;
+  for(let i=CH.length-1;i>=0;i--){
+    const c=CH[i]; c.t+=dt;
+    if(c.t>=c.vida){ CH.splice(i,1); continue; }
+    c.vy-=13*dt;
+    c.x+=c.vx*dt; c.y+=c.vy*dt; c.z+=c.vz*dt;
+    if(c.y<0.02){ c.y=0.02; c.vy*=-0.32; c.vx*=0.6; c.vz*=0.6; }
+  }
+  for(const c of CH){
+    const j=k*4;
+    chispasDat[j]=c.x; chispasDat[j+1]=c.y; chispasDat[j+2]=c.z;
+    chispasDat[j+3]=0.085*(1-c.t/c.vida);
+    k++;
+  }
+  chispasG.geometry.instanceCount=k;
+  chispasG.geometry.attributes.iDat.needsUpdate=true;
+}
+
+/* ============================================================================
+   EL SONIDO
+   Nada de esto es un archivo: son osciladores y ruido filtrado armados en el
+   momento. Un bosque suena a tres cosas —viento entre las hojas, pájaros y
+   madera que cruje— y las tres salen del mismo ruido blanco pasado por filtros
+   distintos. Los golpes son ataques de milisegundos sobre ese mismo ruido.
+
+   El ambiente cambia solo: mientras se camina hay pájaros y viento suave; en
+   cuanto arranca una oleada los pájaros se callan, entra un bordón grave y el
+   viento se pone denso. No hay música grabada; es el mismo motor.
+============================================================================ */
+let AC=null, master=null, RUIDO=null;
+let busAmb=null, busSfx=null, ambViento=null, ambHojas=null, ambPajaro=0;
+let bordón=null, bordónG=null, tension=0, tensionObj=0;
+let VOL=0.75;
+
+function initAudio(){
+  if(AC) return;
+  try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+  master=AC.createGain(); master.gain.value=VOL; master.connect(AC.destination);
+  const comp=AC.createDynamicsCompressor();
+  comp.threshold.value=-14; comp.ratio.value=5; comp.attack.value=0.004; comp.release.value=0.22;
+  comp.connect(master);
+  busAmb=AC.createGain(); busAmb.gain.value=1.0; busAmb.connect(comp);
+  busSfx=AC.createGain(); busSfx.gain.value=1.0; busSfx.connect(comp);
+
+  /* dos segundos de ruido blanco en bucle: de acá sale casi todo */
+  const N=AC.sampleRate*2;
+  RUIDO=AC.createBuffer(1,N,AC.sampleRate);
+  const d=RUIDO.getChannelData(0);
+  for(let i=0;i<N;i++) d[i]=Math.random()*2-1;
+
+  /* viento: ruido grave con la banda paseándose, para que respire */
+  const f1=AC.createBiquadFilter(); f1.type='lowpass'; f1.frequency.value=420; f1.Q.value=0.7;
+  const g1=AC.createGain(); g1.gain.value=0.10;
+  const s1=AC.createBufferSource(); s1.buffer=RUIDO; s1.loop=true;
+  s1.connect(f1); f1.connect(g1); g1.connect(busAmb); s1.start();
+  const lfo=AC.createOscillator(); lfo.frequency.value=0.075;
+  const lg=AC.createGain(); lg.gain.value=230;
+  lfo.connect(lg); lg.connect(f1.frequency); lfo.start();
+  ambViento={g:g1, f:f1};
+
+  /* hojas: banda alta y angosta, muy bajita, encima del viento */
+  const f2=AC.createBiquadFilter(); f2.type='bandpass'; f2.frequency.value=3400; f2.Q.value=0.8;
+  const g2=AC.createGain(); g2.gain.value=0.030;
+  const s2=AC.createBufferSource(); s2.buffer=RUIDO; s2.loop=true;
+  s2.connect(f2); f2.connect(g2); g2.connect(busAmb); s2.start();
+  const lfo2=AC.createOscillator(); lfo2.frequency.value=0.13;
+  const lg2=AC.createGain(); lg2.gain.value=0.022;
+  lfo2.connect(lg2); lg2.connect(g2.gain); lfo2.start();
+  ambHojas={g:g2};
+
+  /* bordón: dos senoidales apenas desafinadas. En silencio no se oye; sube con
+     la tensión de la pelea y ES la música. */
+  bordónG=AC.createGain(); bordónG.gain.value=0.0; bordónG.connect(busAmb);
+  const fB=AC.createBiquadFilter(); fB.type='lowpass'; fB.frequency.value=520;
+  fB.connect(bordónG);
+  for(const [f,g] of [[55,0.5],[55.6,0.4],[82.5,0.22],[110,0.14]]){
+    const o=AC.createOscillator(); o.type='sawtooth'; o.frequency.value=f;
+    const og=AC.createGain(); og.gain.value=g;
+    o.connect(og); og.connect(fB); o.start();
+  }
+  bordón={g:bordónG, f:fB};
+}
+function ponerVolumen(v){ VOL=v; if(master) master.gain.value=v; }
+
+/* un golpe de ruido con envolvente: la base de casi todos los efectos */
+function pum(o){
+  if(!AC) return;
+  const t=AC.currentTime;
+  const s=AC.createBufferSource(); s.buffer=RUIDO; s.loop=true;
+  s.playbackRate.value=o.rate||1;
+  const f=AC.createBiquadFilter(); f.type=o.tipo||'bandpass';
+  f.frequency.setValueAtTime(o.f0, t);
+  if(o.f1!==undefined) f.frequency.exponentialRampToValueAtTime(Math.max(30,o.f1), t+o.dur);
+  f.Q.value=o.q||1.0;
+  const g=AC.createGain();
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(o.vol, t+(o.ataque||0.006));
+  g.gain.exponentialRampToValueAtTime(0.0001, t+o.dur);
+  s.connect(f); f.connect(g); g.connect(busSfx);
+  s.start(t); s.stop(t+o.dur+0.02);
+}
+function tono(o){
+  if(!AC) return;
+  const t=AC.currentTime;
+  const s=AC.createOscillator(); s.type=o.onda||'sine';
+  s.frequency.setValueAtTime(o.f0,t);
+  if(o.f1!==undefined) s.frequency.exponentialRampToValueAtTime(Math.max(20,o.f1), t+o.dur);
+  const g=AC.createGain();
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(o.vol, t+(o.ataque||0.008));
+  g.gain.exponentialRampToValueAtTime(0.0001, t+o.dur);
+  s.connect(g); g.connect(busSfx);
+  s.start(t); s.stop(t+o.dur+0.02);
+}
+
+/* ------------------------------------------------------------- los efectos */
+function ruidoPaso(tierra, corriendo){
+  /* sobre tierra el paso es seco y grave; sobre pasto es un roce agudo */
+  const f=0.75+Math.random()*0.5;
+  if(tierra>0.4){
+    pum({f0:260*f, f1:110*f, q:1.1, dur:0.13, vol:(corriendo?0.10:0.065), rate:0.9});
+    pum({f0:90, f1:55, tipo:'lowpass', dur:0.09, vol:0.05});
+  }else{
+    pum({f0:2400*f, f1:900*f, q:0.9, dur:0.16, vol:(corriendo?0.055:0.035), rate:1.2});
+  }
+}
+function ruidoSalto(){ pum({f0:1500, f1:520, q:1.0, dur:0.16, vol:0.055});
+                       tono({f0:220, f1:340, dur:0.12, vol:0.03}); }
+function ruidoCaida(f){ pum({f0:300, f1:80, q:1.2, dur:0.20, vol:0.05+0.09*f});
+                        pum({f0:70, tipo:'lowpass', dur:0.16, vol:0.06*f}); }
+function ruidoTajo(){ pum({f0:900, f1:3200, q:0.7, dur:0.17, vol:0.075, rate:1.5, ataque:0.02}); }
+function ruidoImpacto(doble){
+  pum({f0:420, f1:120, q:1.4, dur:0.16, vol:0.13});
+  tono({onda:'square', f0:150, f1:70, dur:0.10, vol:0.05});
+  if(doble) setTimeout(()=>pum({f0:520, f1:150, q:1.3, dur:0.13, vol:0.09}), 45);
+}
+function ruidoGruñido(clase){
+  if(Math.random()>0.55) return;
+  if(clase==='lobo'){ tono({onda:'sawtooth', f0:300+Math.random()*70, f1:120, dur:0.34, vol:0.045});
+                      pum({f0:1400, f1:600, q:1.2, dur:0.26, vol:0.035}); }
+  else if(clase==='treant'){ tono({onda:'sawtooth', f0:78, f1:44, dur:0.70, vol:0.075});
+                             pum({f0:220, f1:80, q:2.2, dur:0.55, vol:0.055}); }
+  else { tono({onda:'square', f0:190+Math.random()*90, f1:110, dur:0.20, vol:0.035});
+         pum({f0:900, f1:420, q:1.6, dur:0.18, vol:0.028}); }
+}
+function ruidoMuerte(clase){
+  const grave = clase==='treant';
+  tono({onda:'sawtooth', f0:grave?92:250, f1:grave?38:70, dur:grave?0.95:0.45, vol:0.085});
+  pum({f0:grave?300:800, f1:grave?70:180, q:1.1, dur:grave?0.8:0.4, vol:0.075});
+}
+function ruidoDolor(){
+  pum({f0:700, f1:180, q:1.0, dur:0.26, vol:0.13});
+  tono({onda:'triangle', f0:120, f1:60, dur:0.30, vol:0.07});
+}
+function ruidoTroncos(cae){
+  if(cae){
+    /* la barrera cayendo: un golpe hueco, y tres crujidos detrás */
+    pum({f0:180, f1:52, tipo:'lowpass', dur:0.65, vol:0.24, ataque:0.003});
+    pum({f0:900, f1:220, q:0.8, dur:0.45, vol:0.11});
+    for(let i=0;i<4;i++) setTimeout(()=>pum({f0:400+Math.random()*700, f1:160,
+      q:2.2, dur:0.18, vol:0.06}), 70+i*95+Math.random()*70);
+  }else{
+    pum({f0:120, f1:40, tipo:'lowpass', dur:1.30, vol:0.15, ataque:0.20});
+    for(let i=0;i<6;i++) setTimeout(()=>pum({f0:300+Math.random()*500, f1:120,
+      q:2.6, dur:0.22, vol:0.045}), i*150+Math.random()*90);
+  }
+}
+function ruidoOleada(n){
+  /* un cuerno: cuarta y quinta, y la oleada cinco medio tono más arriba */
+  const b=(n>=4? 118 : 104)*Math.pow(1.02,n);
+  tono({onda:'sawtooth', f0:b,     f1:b,     dur:1.15, vol:0.085, ataque:0.10});
+  tono({onda:'sawtooth', f0:b*1.5, f1:b*1.5, dur:1.05, vol:0.055, ataque:0.14});
+  tono({onda:'sine',     f0:b*2,   f1:b*2,   dur:0.95, vol:0.035, ataque:0.18});
+}
+function ruidoLimpia(){
+  const esc=[261.6,329.6,392.0,523.3];
+  esc.forEach((f,i)=>setTimeout(()=>tono({f0:f, dur:0.85, vol:0.06, ataque:0.02}), i*130));
+}
+function ruidoMorir(){
+  tono({onda:'sawtooth', f0:180, f1:32, dur:2.2, vol:0.14, ataque:0.02});
+  pum({f0:600, f1:50, tipo:'lowpass', dur:2.0, vol:0.12});
+}
+/* la tensión mueve el bordón y calla a los pájaros */
+function ponerTension(v){ tensionObj=v; }
+function pasoAudio(dt, tierra, quieto){
+  if(!AC) return;
+  tension += (tensionObj-tension)*Math.min(1, dt*1.1);
+  if(bordón) bordón.g.gain.value = tension*0.055;
+  if(bordón) bordón.f.frequency.value = 300+tension*900;
+  if(ambViento) ambViento.g.gain.value = 0.075+tension*0.075;
+  /* pájaros: sólo con calma, y cada tanto */
+  ambPajaro-=dt;
+  if(ambPajaro<=0 && tension<0.25){
+    ambPajaro=1.6+Math.random()*5.5;
+    const base=1500+Math.random()*2300;
+    const n=2+((Math.random()*3)|0);
+    for(let i=0;i<n;i++) setTimeout(()=>tono({
+      f0:base*(0.9+Math.random()*0.35), f1:base*(1.1+Math.random()*0.5),
+      dur:0.07+Math.random()*0.06, vol:0.016+Math.random()*0.012, ataque:0.008
+    }), i*(60+Math.random()*90));
+  }
+}
+
+/* ============================================================================
+   POST · un solo pase al final
+   Brillo derramado, ACES, contraste, color, nitidez adaptativa y el paso a
+   sRGB. La escena entera se dibuja en lineal sobre un buffer.
+============================================================================ */
+const escPost=new THREE.Scene(), camPost=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+const mallaPost=new THREE.Mesh(new THREE.PlaneGeometry(2,2)); escPost.add(mallaPost);
+const VQ='varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }';
+const rtLin=(w,h,ms)=>new THREE.WebGLRenderTarget(w,h,{minFilter:THREE.LinearFilter,
+  magFilter:THREE.LinearFilter, type:THREE.HalfFloatType, colorSpace:THREE.NoColorSpace,
+  samples:ms||0, depthBuffer:true, stencilBuffer:false});
+const rtEsc=rtLin(2,2, MOVIL?0:4), rtBr=rtLin(2,2), rtB1=rtLin(2,2), rtB2=rtLin(2,2);
+const matBrillo=new THREE.ShaderMaterial({vertexShader:VQ, fragmentShader:`
+  precision highp float; varying vec2 vUv; uniform sampler2D t; uniform float uU,uS;
+  void main(){ vec3 c=texture2D(t,vUv).rgb; float l=max(max(c.r,c.g),c.b);
+    float k=clamp((l-uU)/max(uS,1e-4),0.0,1.0); gl_FragColor=vec4(c*k*k,1.0); }`,
+  uniforms:{t:{value:null},uU:{value:1.20},uS:{value:1.2}}});
+const matBorron=new THREE.ShaderMaterial({vertexShader:VQ, fragmentShader:`
+  precision highp float; varying vec2 vUv; uniform sampler2D t; uniform vec2 uD;
+  void main(){ vec3 s=texture2D(t,vUv).rgb*0.227027;
+    s+=texture2D(t,vUv+uD*1.3846).rgb*0.316216; s+=texture2D(t,vUv-uD*1.3846).rgb*0.316216;
+    s+=texture2D(t,vUv+uD*3.2308).rgb*0.070270; s+=texture2D(t,vUv-uD*3.2308).rgb*0.070270;
+    gl_FragColor=vec4(s,1.0); }`, uniforms:{t:{value:null},uD:{value:new THREE.Vector2()}}});
+const matGrado=new THREE.ShaderMaterial({vertexShader:VQ, fragmentShader:`
+  precision highp float; varying vec2 vUv;
+  uniform sampler2D tEsc,tBloom; uniform vec2 uPx;
+  uniform float uBloom,uExp,uCon,uSat,uVin,uNit,uRojo;
+  vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
+  vec3 aSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,1e-5),vec3(0.4166667))-0.055,
+                                 step(0.0031308,c)); }
+  void main(){
+    vec3 c=texture2D(tEsc,vUv).rgb;
+    if(uNit>0.001){
+      vec3 a=texture2D(tEsc,vUv+vec2(uPx.x,0)).rgb, b=texture2D(tEsc,vUv-vec2(uPx.x,0)).rgb;
+      vec3 d=texture2D(tEsc,vUv+vec2(0,uPx.y)).rgb, e=texture2D(tEsc,vUv-vec2(0,uPx.y)).rgb;
+      vec3 mn=min(min(a,b),min(d,e)), mx=max(max(a,b),max(d,e));
+      c=clamp(c+(c*4.0-(a+b+d+e))*0.25*uNit, min(mn,c), max(mx,c));
+    }
+    c+=texture2D(tBloom,vUv).rgb*uBloom;
+    c=aces(c*uExp);
+    c=(c-0.5)*uCon+0.5;
+    float l=dot(c,vec3(0.2126,0.7152,0.0722));
+    c=mix(vec3(l),c,uSat);
+    /* al perder vida el mundo se desangra: satura hacia el rojo y se apaga */
+    if(uRojo>0.001) c=mix(c, vec3(l*0.55+0.45, l*0.06, l*0.05), uRojo);
+    float dd=length((vUv-0.5)*vec2(1.30,1.0));
+    c*=1.0-uVin*dd*dd;
+    gl_FragColor=vec4(aSRGB(clamp(c,0.0,1.0)),1.0);
+  }`,
+  uniforms:{tEsc:{value:null},tBloom:{value:null},uPx:{value:new THREE.Vector2()},
+    uBloom:{value:0.22},uExp:{value:1.0},uCon:{value:1.06},uSat:{value:1.14},
+    uVin:{value:0.26},uNit:{value:0.32},uRojo:{value:0}}});
+let postBloom=true;
+function acomodarPost(w,h){
+  const d=renderer.getPixelRatio(), W=Math.round(w*d), H=Math.round(h*d);
+  if(rtEsc.width===W&&rtEsc.height===H) return;
+  rtEsc.setSize(W,H); matGrado.uniforms.uPx.value.set(1/W,1/H);
+  const w4=Math.max(4,W>>2), h4=Math.max(4,H>>2);
+  rtBr.setSize(w4,h4); rtB1.setSize(w4,h4); rtB2.setSize(w4,h4);
+}
+function pasar(m,d){ mallaPost.material=m; renderer.setRenderTarget(d); renderer.render(escPost,camPost); }
+const NEGRO=new THREE.DataTexture(new Uint8Array([0,0,0,255]),1,1); NEGRO.needsUpdate=true;
+function pintarPost(){
+  if(postBloom){
+    matBrillo.uniforms.t.value=rtEsc.texture; pasar(matBrillo,rtBr);
+    matBorron.uniforms.t.value=rtBr.texture;
+    matBorron.uniforms.uD.value.set(1.2/rtBr.width,0); pasar(matBorron,rtB1);
+    matBorron.uniforms.t.value=rtB1.texture;
+    matBorron.uniforms.uD.value.set(0,1.2/rtBr.height); pasar(matBorron,rtB2);
+  }
+  matGrado.uniforms.tEsc.value=rtEsc.texture;
+  matGrado.uniforms.tBloom.value=postBloom?rtB2.texture:NEGRO;
+  pasar(matGrado,null);
+}
+
+/* ============================================================================
+   EL JUGADOR
+============================================================================ */
+const ALTO_OJO=1.66, RADIO_PJ=0.42, ALTO_PJ=1.72;
+const CAM={bobY:0,bobX:0,rol:0,hundir:0,vHundir:0,fov:FOV0,sacudir:0};
+let correr=false, andando=0, pasoT=0, giroVel=0, yawAnt=0;
+
+function moverJugador(dt){
+  const n=Math.min(5,Math.max(1,Math.ceil(dt*90)));
+  for(let k=0;k<n;k++) pasoJugador(dt/n);
+  ponerCamara(dt);
+}
+function pasoJugador(paso){
+  if(PJ.muerto || JUEGO.estado==='cine'){
+    PJ.vel.x*=0.82; PJ.vel.z*=0.82;
+  }else{
+    const fx=-Math.sin(PJ.yaw), fz=-Math.cos(PJ.yaw);
+    const dx=Math.cos(PJ.yaw), dz=-Math.sin(PJ.yaw);
+    let mx=0,mz=0;
+    if(palanca.activa){ mx=palanca.x; mz=palanca.y; }
+    if(teclas['w']||teclas['arrowup']) mz-=1;
+    if(teclas['s']||teclas['arrowdown']) mz+=1;
+    if(teclas['a']||teclas['arrowleft']) mx-=1;
+    if(teclas['d']||teclas['arrowright']) mx+=1;
+    const largo=Math.hypot(mx,mz);
+    let qx=0,qz=0,tope=0;
+    if(largo>0.06){
+      const k=Math.min(1,largo)/largo;
+      qx=(fx*(-mz)+dx*mx)*k; qz=(fz*(-mz)+dz*mx)*k;
+      tope=(correr||teclas['shift'])?6.0:3.35;
+    }
+    const acel=PJ.enSuelo?24:5, roza=PJ.enSuelo?(tope>0?3:13):0.6;
+    PJ.vel.x+=(qx*tope-PJ.vel.x)*Math.min(1,(tope>0?acel:roza)*paso);
+    PJ.vel.z+=(qz*tope-PJ.vel.z)*Math.min(1,(tope>0?acel:roza)*paso);
+  }
+  const rapidez=Math.hypot(PJ.vel.x,PJ.vel.z);
+  PJ.pos.x+=PJ.vel.x*paso; PJ.pos.z+=PJ.vel.z*paso;
+
+  /* la pared del bosque: no hay choque árbol por árbol, hay una sola función
+     que dice cuánto sobresalís del claro, y el empuje va por su gradiente */
+  const h=holgura(PJ.pos.x, PJ.pos.z);
+  if(h > -RADIO_PJ){
+    const e=0.30;
+    const gx=(holgura(PJ.pos.x+e,PJ.pos.z)-holgura(PJ.pos.x-e,PJ.pos.z))/(2*e);
+    const gz=(holgura(PJ.pos.x,PJ.pos.z+e)-holgura(PJ.pos.x,PJ.pos.z-e))/(2*e);
+    const gl=Math.hypot(gx,gz)||1;
+    const fuera=h+RADIO_PJ;
+    PJ.pos.x-=gx/gl*fuera; PJ.pos.z-=gz/gl*fuera;
+    PJ.vel.x*=0.55; PJ.vel.z*=0.55;
+  }
+  chocarBarreras(PJ.pos, RADIO_PJ);
+  chocarPiezas(PJ.pos, PJ.vel, RADIO_PJ, ALTO_PJ, PJ.enSuelo);
+
+  andando+=(Math.min(1,rapidez/2.4)-andando)*Math.min(1,7*paso);
+  pasoT+=paso*rapidez*0.58;
+  if(pasoT>1){ pasoT-=1; CAM.vHundir-=0.5+rapidez*0.09;
+    ruidoPaso(tierraEn(PJ.pos.x,PJ.pos.z), rapidez>4.5); }
+
+  PJ.vel.y-=21*paso; PJ.pos.y+=PJ.vel.y*paso;
+  const piso=pisoEn(PJ.pos.x, PJ.pos.z, PJ.pos.y);
+  if(PJ.pos.y<piso){
+    if(!PJ.enSuelo && PJ.vel.y<-3){
+      CAM.vHundir-=Math.min(5.5,-PJ.vel.y*0.55);
+      CAM.sacudir=Math.min(0.5,-PJ.vel.y*0.045);
+      ruidoCaida(Math.min(1,-PJ.vel.y/12));
+      if(-PJ.vel.y>15) dañoAlJugador(Math.min(28,(-PJ.vel.y-15)*3.2));
+    }
+    PJ.pos.y=piso; PJ.vel.y=0; PJ.enSuelo=true;
+  } else if(PJ.pos.y>piso+0.06) PJ.enSuelo=false;
+  PJ.rapidez=rapidez;
+}
+function saltar(){
+  if(!PJ.enSuelo || PJ.muerto || JUEGO.estado==='cine') return;
+  PJ.vel.y=7.1; PJ.enSuelo=false; CAM.vHundir+=1.5; ruidoSalto();
+}
+function ponerCamara(dt){
+  const dx=Math.cos(PJ.yaw), dz=-Math.sin(PJ.yaw);
+  const amp=andando*(0.028+PJ.rapidez*0.005);
+  CAM.bobY+=(Math.sin(pasoT*Math.PI*4)*amp-CAM.bobY)*Math.min(1,dt*22);
+  CAM.bobX+=(Math.sin(pasoT*Math.PI*2)*amp*1.35-CAM.bobX)*Math.min(1,dt*22);
+  CAM.vHundir+=(-CAM.hundir*46-CAM.vHundir*9.5)*dt;
+  CAM.hundir+=CAM.vHundir*dt; CAM.hundir=clamp(CAM.hundir,-0.55,0.30);
+  CAM.sacudir=Math.max(0,CAM.sacudir-dt*2.2);
+  /* el golpe también hunde la cámara: es lo que le da peso al mandoble */
+  if(PJ.golpeT>0.30) CAM.hundir-=dt*0.9;
+  const lat=(PJ.vel.x*dx+PJ.vel.z*dz)/Math.max(1,PJ.rapidez);
+  CAM.rol+=((-lat*andando*0.05-clamp(giroVel,-3,3)*0.028
+             -(PJ.golpeT>0.22? 0.10:0))-CAM.rol)*Math.min(1,dt*9);
+  const objFov=FOV0+Math.max(0,PJ.rapidez-3.4)*2.5;
+  if(Math.abs(objFov-CAM.fov)>0.01){ CAM.fov+=(objFov-CAM.fov)*Math.min(1,dt*4.5);
+    camara.fov=CAM.fov; camara.updateProjectionMatrix(); }
+  const s=CAM.sacudir;
+  camara.position.set(PJ.pos.x+dx*CAM.bobX+(Math.random()-0.5)*s*0.08,
+                      PJ.pos.y+ALTO_OJO+CAM.hundir+CAM.bobY+(Math.random()-0.5)*s*0.08,
+                      PJ.pos.z+dz*CAM.bobX+(Math.random()-0.5)*s*0.08);
+  camara.rotation.set(PJ.cabeceo+CAM.bobY*0.16, PJ.yaw, CAM.rol+CAM.bobX*0.1);
+}
+
+/* ============================================================================
+   LOS MANDOS
+============================================================================ */
+const mandos=document.getElementById('mandos'), gm=mandos.getContext('2d');
+const palanca={activa:false,ox:0,oy:0,x:0,y:0}, mirada={activa:false,x:0,y:0}, teclas={};
+let bG={x:0,y:0,r:0}, bS={x:0,y:0,r:0}, pulsG=0, pulsS=0;
+function acomodarMandos(){
+  const d=Math.min(devicePixelRatio||1,2);
+  mandos.width=Math.round(CAJA.w*d); mandos.height=Math.round(CAJA.h*d);
+  mandos.style.width=CAJA.w+'px'; mandos.style.height=CAJA.h+'px';
+  gm.setTransform(d,0,0,d,0,0);
+  const m=Math.min(CAJA.w,CAJA.h);
+  bG.r=m*0.098; bG.x=CAJA.w-bG.r-m*0.050; bG.y=CAJA.h-bG.r-m*0.075;
+  bS.r=m*0.068; bS.x=bG.x-bG.r-bS.r*1.0;  bS.y=bG.y-bG.r*0.60;
+}
+function boton(b,t,p,c){
+  const k=p>0?0.9:1;
+  gm.globalAlpha=0.30; gm.fillStyle='#08160f';
+  gm.beginPath(); gm.arc(b.x,b.y,b.r*k,0,6.2832); gm.fill();
+  gm.globalAlpha=p>0?0.95:0.62; gm.lineWidth=3; gm.strokeStyle=c;
+  gm.beginPath(); gm.arc(b.x,b.y,b.r*k,0,6.2832); gm.stroke();
+  gm.globalAlpha=0.90; gm.fillStyle=c;
+  gm.font='700 '+Math.round(b.r*0.26)+'px ui-monospace, monospace';
+  gm.textAlign='center'; gm.textBaseline='middle'; gm.fillText(t,b.x,b.y);
+}
+function dibujarMandos(){
+  gm.clearRect(0,0,CAJA.w,CAJA.h);
+  const m=Math.min(CAJA.w,CAJA.h), R=m*0.115;
+  const cx=palanca.activa?palanca.ox:m*0.155, cy=palanca.activa?palanca.oy:CAJA.h-m*0.155;
+  gm.globalAlpha=palanca.activa?0.55:0.26; gm.lineWidth=2.5; gm.strokeStyle='#dcfae6';
+  gm.beginPath(); gm.arc(cx,cy,R,0,6.2832); gm.stroke();
+  gm.globalAlpha=palanca.activa?0.62:0.30; gm.fillStyle='#eafff2';
+  gm.beginPath(); gm.arc(cx+palanca.x*R*0.55,cy+palanca.y*R*0.55,R*0.42,0,6.2832); gm.fill();
+  boton(bG,'GOLPE',pulsG||(PJ.golpeT>0?0.1:0),'#ffcf8a');
+  boton(bS,'SALTO',pulsS,'#b6ffce');
+  gm.globalAlpha=1;
+}
+/* El dedo llega en coordenadas de pantalla; si la imagen está acostada hay que
+   deshacer el giro a mano, porque el rectángulo que informa el navegador es el
+   envolvente y miente. */
+function aUI(ev){
+  let dx=ev.clientX-innerWidth/2, dy=ev.clientY-innerHeight/2;
+  if(ROT){ const t=dx; dx=dy; dy=-t; }
+  return [dx+CAJA.w/2, dy+CAJA.h/2];
+}
+const lienzo=renderer.domElement, punteros=new Map();
+const dentro=(b,x,y)=>Math.hypot(x-b.x,y-b.y)<b.r*1.3;
+lienzo.addEventListener('pointerdown', ev=>{
+  ev.preventDefault(); initAudio(); if(AC&&AC.state==='suspended') AC.resume();
+  esconderAyuda();
+  const [x,y]=aUI(ev);
+  if(dentro(bG,x,y)){ pulsG=0.14; golpear(); punteros.set(ev.pointerId,{r:'G'}); return; }
+  if(dentro(bS,x,y)){ pulsS=0.14; saltar(); punteros.set(ev.pointerId,{r:'S'}); return; }
+  if(x<CAJA.w*0.44 && !palanca.activa){
+    palanca.activa=true; palanca.ox=x; palanca.oy=y; palanca.x=0; palanca.y=0;
+    punteros.set(ev.pointerId,{r:'palanca'});
+  } else { mirada.activa=true; mirada.x=x; mirada.y=y; punteros.set(ev.pointerId,{r:'mirada'}); }
+  try{ lienzo.setPointerCapture(ev.pointerId); }catch(e){}
+},{passive:false});
+lienzo.addEventListener('pointermove', ev=>{
+  const r=punteros.get(ev.pointerId); if(!r) return;
+  ev.preventDefault();
+  const [x,y]=aUI(ev);
+  if(r.r==='palanca'){ const R=Math.min(CAJA.w,CAJA.h)*0.115;
+    palanca.x=clamp((x-palanca.ox)/R,-1,1); palanca.y=clamp((y-palanca.oy)/R,-1,1);
+  } else if(r.r==='mirada'){
+    PJ.yaw-=(x-mirada.x)*0.0042;
+    PJ.cabeceo=clamp(PJ.cabeceo-(y-mirada.y)*0.0036,-1.35,1.25);
+    mirada.x=x; mirada.y=y;
+  }
+},{passive:false});
+function soltar(ev){
+  const r=punteros.get(ev.pointerId); punteros.delete(ev.pointerId);
+  if(!r) return;
+  if(r.r==='palanca'){ palanca.activa=false; palanca.x=0; palanca.y=0; }
+  if(r.r==='mirada') mirada.activa=false;
+}
+lienzo.addEventListener('pointerup',soltar);
+lienzo.addEventListener('pointercancel',soltar);
+lienzo.addEventListener('lostpointercapture',soltar);
+for(const e of ['touchstart','touchmove','touchend'])
+  lienzo.addEventListener(e, ev=>ev.preventDefault(), {passive:false});
+lienzo.addEventListener('contextmenu', e=>e.preventDefault());
+addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); teclas[k]=true; initAudio();
+  if(k===' '){ e.preventDefault(); saltar(); }
+  if(k==='e'||k==='f'||k==='enter'){ golpear(); }
+  if(k==='r'){ correr=!correr; document.getElementById('bCorrer').classList.toggle('on',correr); } });
+addEventListener('keyup', e=>{ teclas[e.key.toLowerCase()]=false; });
+addEventListener('mousedown', e=>{ if(e.target===lienzo && e.button===0){} });
+
+/* ============================================================================
+   EL RECORRIDO · cinemáticas y oleadas
+============================================================================ */
+const JUEGO={estado:'libre', t:0, arena:null, restantes:0, ganó:false};
+const elCartel=document.getElementById('cartel');
+const elCG=document.getElementById('cartelG'), elCP=document.getElementById('cartelP');
+const elBarras=document.getElementById('barras'), elTinte=document.getElementById('tinte');
+const elVida=document.getElementById('vida'), elVidaI=elVida.querySelector('i');
+const elOleada=document.getElementById('oleada'), elAyuda=document.getElementById('ayuda');
+let ayudaIda=false;
+function esconderAyuda(){ if(ayudaIda) return; ayudaIda=true;
+  setTimeout(()=>{ elAyuda.style.opacity=0; }, 2600); }
+function cartel(g,p,seg){
+  elCG.textContent=g||''; elCP.textContent=p||'';
+  elCartel.classList.add('show');
+  clearTimeout(cartel._t);
+  if(seg) cartel._t=setTimeout(()=>elCartel.classList.remove('show'), seg*1000);
+}
+function tinteDaño(){
+  elTinte.style.opacity=Math.min(0.9, 0.35+(1-PJ.vida/PJ.vidaMax)*0.55);
+  CAM.sacudir=0.55;
+  clearTimeout(tinteDaño._t);
+  tinteDaño._t=setTimeout(()=>{ elTinte.style.opacity=0; }, 190);
+}
+function morir(){
+  JUEGO.estado='muerto'; JUEGO.t=0;
+  ruidoMorir(); ponerTension(0.15);
+  cartel('CAÍSTE', 'el bosque te devuelve a la arena', 0);
+}
+function revivir(){
+  const A=JUEGO.arena;
+  limpiarBichos();
+  PJ.vida=PJ.vidaMax; PJ.muerto=0; PJ.invul=1.6;
+  elTinte.style.opacity=0;
+  if(A){
+    PJ.pos.set(A.nodo.x, 0, A.nodo.z); PJ.vel.set(0,0,0);
+    A.oleada=0; JUEGO.estado='aviso'; JUEGO.t=0;
+  }else{
+    PJ.pos.set(0,0,4); PJ.vel.set(0,0,0);
+    JUEGO.estado='libre';
+  }
+  elCartel.classList.remove('show');
+}
+function entrarArena(k){
+  const A=ARENAS[k];
+  A.estado='peleando'; A.oleada=0;
+  JUEGO.arena=A; JUEGO.estado='cine'; JUEGO.t=0;
+  elBarras.classList.add('show');
+  cartel('ARENA '+(k+1), 'cinco oleadas · sin salida', 0);
+  ponerTension(0.85);
+}
+function pasoJuego(dt){
+  JUEGO.t+=dt;
+  const A=JUEGO.arena;
+  switch(JUEGO.estado){
+    case 'libre': {
+      const ni=nodoEn(PJ.pos.x, PJ.pos.z);
+      /* se dispara bien adentro, no al pisar el borde: si los troncos cayeran
+         con uno todavía en la boca, el empujón de la pared lo podría dejar del
+         lado de afuera y con la puerta cerrada */
+      if(ni>=1 && ARENAS[ni-1].estado==='dormida'){
+        const n=NODOS[ni];
+        if(Math.hypot(PJ.pos.x-n.x, PJ.pos.z-n.z) < n.r*0.80) entrarArena(ni-1);
+      }
+      ponerTension(0);
+      break;
+    }
+    case 'cine': {
+      /* la cámara gira sola hacia la boca por donde entraste y ahí ve caer los
+         troncos que la tapan */
+      const b=barrera(A.i,'entra');
+      if(b){
+        const obj=Math.atan2(b.x-PJ.pos.x, b.z-PJ.pos.z)+Math.PI;
+        let d=obj-PJ.yaw;
+        while(d>Math.PI) d-=6.2831853; while(d<-Math.PI) d+=6.2831853;
+        PJ.yaw+=d*Math.min(1,dt*2.6);
+        PJ.cabeceo+=(0.06-PJ.cabeceo)*Math.min(1,dt*2.2);
+        if(JUEGO.t>0.75 && b.estado==='guardada'){
+          cerrarBarrera(b); ruidoTroncos(true); CAM.sacudir=0.9;
+        }
+      }
+      if(JUEGO.t>3.6){ JUEGO.estado='aviso'; JUEGO.t=0; elBarras.classList.remove('show'); }
+      break;
+    }
+    case 'aviso': {
+      const n=A.oleada+1;
+      if(JUEGO.t<0.05){ cartel('OLEADA '+n+' / 5', n===5?'la última':'preparate', 2.2);
+                        ruidoOleada(A.oleada); }
+      ponerTension(0.55+A.oleada*0.10);
+      if(JUEGO.t>2.4){
+        soltarOleada(A);
+        JUEGO.estado='pelea'; JUEGO.t=0;
+      }
+      break;
+    }
+    case 'pelea': {
+      ponerTension(0.75+A.oleada*0.06);
+      const vivos=BICHOS.filter(b=>!b.muerto).length;
+      if(vivos===0 && JUEGO.t>0.6){
+        A.oleada++;
+        if(A.oleada>=5){
+          A.estado='limpia';
+          JUEGO.estado='limpia'; JUEGO.t=0;
+          const s=barrera(A.i,'sale');
+          if(s && s.estado==='cerrada'){ abrirBarrera(s); ruidoTroncos(false); }
+          ruidoLimpia();
+          cartel(A.i===N_ARENAS-1? 'BOSQUE LIMPIO' : 'PASO LIBRE',
+                 A.i===N_ARENAS-1? 'las diez arenas cayeron'
+                                 : 'los troncos se hunden · seguí el camino', 4.0);
+          if(A.i===N_ARENAS-1) JUEGO.ganó=true;
+        }else{ JUEGO.estado='aviso'; JUEGO.t=0; }
+      }
+      break;
+    }
+    case 'limpia': {
+      ponerTension(Math.max(0, 0.5-JUEGO.t*0.25));
+      if(JUEGO.t>3.2){ JUEGO.estado='libre'; JUEGO.arena=JUEGO.ganó?A:null; }
+      break;
+    }
+    case 'muerto': {
+      matGrado.uniforms.uRojo.value=Math.min(0.85, JUEGO.t*0.55);
+      if(JUEGO.t>3.4){ matGrado.uniforms.uRojo.value=0; revivir(); }
+      break;
+    }
+  }
+  if(JUEGO.estado!=='muerto') matGrado.uniforms.uRojo.value*=Math.pow(0.02,dt);
+}
+
+/* ============================================================================
+   EL BOSQUE QUE SE VE
+   Cada tanto se decide quién se dibuja entero y quién como carta. No se hace
+   todos los cuadros: tres veces por segundo no se nota y sale diez veces más
+   barato.
+============================================================================ */
+let R_VIS=118, R_REAL=21, MAX_REAL=16;
+const REALES=[], IMPOS=[];
+const _mat4=new THREE.Matrix4(), _q=new THREE.Quaternion(), _v3=new THREE.Vector3();
+const _bufCerca=[[],[],[]];
+function armarBosque(){
+  for(let t=0;t<ESPECIES.length;t++){
+    const g=MOD[ESPECIES[t]]; if(!g){ REALES.push(null); IMPOS.push(null); continue; }
+    const mat=matModelo(g.tex, {hoja:0.55, inst:true});
+    const im=new THREE.InstancedMesh(g.geo, mat, MAX_REAL);
+    im.frustumCulled=false; im.count=0; escena.add(im);
+    REALES.push(im);
+    IMPOS.push(mallaImpostores(retratar(g, 384, 512), 1100));
+  }
+}
+function refrescarBosque(x,z){
+  for(const c of _bufCerca) c.length=0;
+  const nI=[0,0,0];
+  const R2=R_VIS*R_VIS, RR2=R_REAL*R_REAL;
+  cerca(x,z,R_VIS,a=>{
+    const dx=a.x-x, dz=a.z-z, d2=dx*dx+dz*dz;
+    if(d2>R2) return;
+    if(d2<RR2){ _bufCerca[a.tipo].push(a, d2); return; }
+    const I=IMPOS[a.tipo]; if(!I) return;
+    const k=nI[a.tipo]; if(k>=I.max) return;
+    const j=k*4;
+    I.dat[j]=a.x; I.dat[j+1]=a.z; I.dat[j+2]=a.e; I.dat[j+3]=a.tono;
+    nI[a.tipo]=k+1;
+  });
+  for(let t=0;t<3;t++){
+    const im=REALES[t], I=IMPOS[t]; if(!im||!I) continue;
+    /* los de adentro del anillo se ordenan y los MAX_REAL más cercanos van
+       enteros; los que sobran caen a carta, así el presupuesto no se desborda
+       cuando el jugador se mete contra la pared del bosque */
+    const b=_bufCerca[t], par=[];
+    for(let i=0;i<b.length;i+=2) par.push([b[i], b[i+1]]);
+    par.sort((p,q)=>p[1]-q[1]);
+    let n=0;
+    for(const [a] of par){
+      if(n<MAX_REAL){
+        _q.setFromAxisAngle(_v3.set(0,1,0), a.tono*11.7);
+        _mat4.compose(_v3.set(a.x,0,a.z), _q, new THREE.Vector3(a.e,a.e,a.e));
+        im.setMatrixAt(n, _mat4);
+        im.material.uniforms.uTinte.value.setScalar(1);
+        n++;
+      }else{
+        const k=nI[t]; if(k>=I.max) break;
+        const j=k*4;
+        I.dat[j]=a.x; I.dat[j+1]=a.z; I.dat[j+2]=a.e; I.dat[j+3]=a.tono;
+        nI[t]=k+1;
+      }
+    }
+    im.count=n; im.instanceMatrix.needsUpdate=true;
+    I.geo.instanceCount=nI[t]; I.attr.needsUpdate=true;
+  }
+}
+
+/* ============================================================================
+   AJUSTES, ESTADO Y BUCLE
+============================================================================ */
+function ponerSol(a){
+  const el=lerp(0.10,1.25,a);
+  SOL.set(Math.cos(el)*0.55, Math.sin(el), -Math.cos(el)*0.84).normalize();
+  const calor=Math.max(0,1-a*1.35);
+  SOLC.setRGB(1, 0.97-calor*0.22, 0.92-calor*0.48);
+  CIELO.setHSL(0.58, lerp(0.55,0.62,a), lerp(0.30,0.52,a));
+  HORIZ.setHSL(lerp(0.10,0.55,Math.min(1,a*1.5)), lerp(0.55,0.30,a), lerp(0.55,0.82,a));
+  for(const m of MATS){
+    if(m.uniforms.luz) m.uniforms.luz.value.copy(SOL);
+    if(m.uniforms.uSolC) m.uniforms.uSolC.value.copy(SOLC);
+    if(m.uniforms.uCielo) m.uniforms.uCielo.value.copy(CIELO);
+    if(m.uniforms.uCenit) m.uniforms.uCenit.value.copy(CIELO);
+    if(m.uniforms.uHoriz) m.uniforms.uHoriz.value.copy(HORIZ);
+  }
+}
+function ponerNiebla(d){ nieblaD=0.0004+d*0.0090;
+  for(const m of MATS) if(m.uniforms.uFogD) m.uniforms.uFogD.value=nieblaD; }
+function acomodar(){
+  acomodarCaja(); renderer.setSize(CAJA.w,CAJA.h,false);
+  camara.aspect=CAJA.w/CAJA.h; camara.updateProjectionMatrix();
+  acomodarPost(CAJA.w,CAJA.h); acomodarMandos();
+}
+addEventListener('resize',acomodar);
+addEventListener('orientationchange',()=>setTimeout(acomodar,120));
+
+let T=0, ultimo=performance.now(), fps=0, cuadros=0, fpsT=0, refT=0;
+const NIVELES=[{p:[0.58,0.55,0.55], vis:70,  real:8,  b:false},
+               {p:[0.80,0.78,0.78], vis:95,  real:12, b:true},
+               {p:[1.0,1.0,1.0],    vis:118, real:16, b:true}];
+let nivel=MOVIL?1:2, autoNivel=true, nivelT=0;
+const DIST0=[];
+function aplicarNivel(){
+  const n=NIVELES[nivel];
+  for(let i=0;i<CAMPOS.length;i++) CAMPOS[i].mat.uniforms.uDist.value=DIST0[i]*n.p[i];
+  postBloom=n.b;
+  R_VIS=n.vis*arbolK; R_REAL=Math.min(21, n.vis*0.20); MAX_REAL=Math.round(n.real*arbolK);
+  refT=99;
+}
+let arbolK=1;
+const $=id=>document.getElementById(id);
+function deslizador(id, vid, fn, dec){
+  const s=$(id), v=$(vid);
+  const ap=()=>{ const x=parseFloat(s.value); v.textContent=x.toFixed(dec===undefined?2:dec); fn(x); };
+  s.addEventListener('input',ap); ap();
+}
+function bucle(ahora){
+  requestAnimationFrame(bucle);
+  let dt=(ahora-ultimo)/1000; ultimo=ahora;
+  /* el contador de cuadros suma el tiempo REAL, no el recortado: si se suma el
+     recortado, con el juego a un cuadro por segundo el contador informa quince
+     y uno se pasa la tarde optimizando lo que no era */
+  cuadros++; fpsT+=dt;
+  if(dt>0.08) dt=0.08;
+  T+=dt;
+  if(fpsT>0.5){
+    fps=Math.round(cuadros/fpsT); cuadros=0; fpsT=0;
+    if(autoNivel){ nivelT+=0.5;
+      if(nivelT>2.5){
+        if(fps<26 && nivel>0){ nivel--; aplicarNivel(); nivelT=0; }
+        else if(fps>52 && nivel<2){ nivel++; aplicarNivel(); nivelT=0; }
+      }
+    }
+  }
+  giroVel=(PJ.yaw-yawAnt)/Math.max(dt,1e-4); yawAnt=PJ.yaw;
+
+  PJ.golpeT=Math.max(0,PJ.golpeT-dt);
+  PJ.invul=Math.max(0,PJ.invul-dt);
+  pulsG=Math.max(0,pulsG-dt*4); pulsS=Math.max(0,pulsS-dt*4);
+
+  verCerca(PJ.pos.x, PJ.pos.z);
+  piezasCerca(PJ.pos.x, PJ.pos.z);
+  pasoJuego(dt);
+  moverJugador(dt);
+  pasoBarreras(dt);
+  pasoBichos(dt);
+  pasoChispas(dt);
+  pasoAudio(dt, tierraEn(PJ.pos.x,PJ.pos.z), PJ.rapidez<0.2);
+
+  seguirPasto(PJ.pos.x, PJ.pos.z);
+  suelo.position.set(PJ.pos.x, 0, PJ.pos.z);
+  refT+=dt;
+  if(refT>0.32){ refT=0; refrescarBosque(PJ.pos.x, PJ.pos.z); }
+
+  PASTO_U.uT.value=T;
+  PASTO_U.uJug.value.set(PJ.pos.x, PJ.pos.y, PJ.pos.z);
+  cieloMat.uniforms.uT.value=T;
+  for(const m of MATS) if(m.uniforms.uOjo) m.uniforms.uOjo.value.copy(camara.position);
+  chispasG.material.uniforms.uOjo.value.copy(camara.position);
+  camara.matrixWorld.decompose(_v3, _q, new THREE.Vector3());
+  chispasG.material.uniforms.uDer.value.set(1,0,0).applyQuaternion(_q);
+  chispasG.material.uniforms.uArriba.value.set(0,1,0).applyQuaternion(_q);
+
+  renderer.setRenderTarget(rtEsc); renderer.clear();
+  renderer.render(escena, camara);
+  pintarPost();
+  dibujarMandos();
+
+  /* HUD */
+  const v=PJ.vida/PJ.vidaMax;
+  elVidaI.style.width=(v*100).toFixed(1)+'%';
+  elVida.classList.toggle('baja', v<0.34);
+  const A=JUEGO.arena;
+  if(A && (JUEGO.estado==='pelea'||JUEGO.estado==='aviso')){
+    const vivos=BICHOS.filter(b=>!b.muerto).length;
+    elOleada.innerHTML='ARENA <b>'+(A.i+1)+'</b>/'+N_ARENAS+'<br>OLEADA <b>'
+      +Math.min(5,A.oleada+1)+'</b>/5'+(JUEGO.estado==='pelea'? '<br>'+vivos+' EN PIE':'');
+  }else if(JUEGO.ganó) elOleada.innerHTML='<b>BOSQUE LIMPIO</b><br>'+PJ.kills+' CAÍDOS';
+  else{
+    const ni=nodoEn(PJ.pos.x,PJ.pos.z);
+    const hechas=ARENAS.filter(a=>a.estado==='limpia').length;
+    elOleada.innerHTML='ARENAS <b>'+hechas+'</b>/'+N_ARENAS+(ni===0? '<br>SEGUÍ EL CAMINO':'');
+  }
+  const st=$('stats');
+  if(st) st.textContent=fps+' fps · '+ARBOLES.length+' árboles · calidad '+(nivel+1)+'/3';
+}
+
+/* ============================================================================
+   ARRANQUE
+============================================================================ */
+async function arrancar(){
+  await cargarModelos();
+  _ctxt && (_ctxt.textContent='sembrando el bosque…');
+  await new Promise(r=>setTimeout(r,16));
+  sembrar(); indexar(ARBOLES); avance('el bosque');
+  _ctxt && (_ctxt.textContent='retratando los árboles…');
+  await new Promise(r=>setTimeout(r,16));
+  armarBosque(); avance('los impostores');
+  _ctxt && (_ctxt.textContent='levantando las arenas…');
+  await new Promise(r=>setTimeout(r,16));
+  if(MOD.troncos) matMadera=matModelo(MOD.troncos.tex, {inst:false});
+  armarArenas();
+  armarMadera();
+  armarBarreras();
+  /* la salida de cada arena nace tapada; la entrada cae recién en la cinemática */
+  for(const b of BARRERAS) if(b.lado==='sale'){ b.estado='cerrada'; b.obj.visible=true; }
+  avance('las arenas');
+  crearChispas();
+
+  for(const c of CAMPOS) DIST0.push(c.mat.uniforms.uDist.value);
+  deslizador('sArb','vArb', x=>{ arbolK=x; aplicarNivel(); });
+  deslizador('sDens','vDens', x=>PASTO_U.uDens.value=x);
+  deslizador('sViento','vViento', x=>PASTO_U.uViento.value=x);
+  deslizador('sSol','vSol', ponerSol);
+  deslizador('sExp','vExp', x=>matGrado.uniforms.uExp.value=x);
+  deslizador('sSat','vSat', x=>matGrado.uniforms.uSat.value=x);
+  deslizador('sNit','vNit', x=>matGrado.uniforms.uNit.value=x);
+  deslizador('sNiebla','vNiebla', ponerNiebla);
+  deslizador('sVol','vVol', ponerVolumen);
+  $('bPanel').addEventListener('click',()=>$('panel').classList.toggle('show'));
+  $('bCorrer').addEventListener('click',()=>{ correr=!correr;
+    $('bCorrer').classList.toggle('on',correr); });
+  aplicarNivel();
+  acomodar();
+
+  /* el arranque: en el claro, mirando el camino que sale hacia la arena uno */
+  const d=NODOS[1];
+  PJ.pos.set(NODOS[0].x, 0, NODOS[0].z+4);
+  PJ.yaw=Math.atan2(-(d.x-PJ.pos.x), -(d.z-PJ.pos.z));
+  yawAnt=PJ.yaw;
+  refrescarBosque(PJ.pos.x, PJ.pos.z);
+
+  avance('listo');
+  document.getElementById('carga').classList.add('ir');
+  setTimeout(()=>{ const c=document.getElementById('carga'); if(c) c.remove(); }, 900);
+  requestAnimationFrame(bucle);
+}
+arrancar();
+
+window.__dbg={
+  get fps(){ return fps; },
+  get jugador(){ return {x:+PJ.pos.x.toFixed(2), y:+PJ.pos.y.toFixed(2), z:+PJ.pos.z.toFixed(2),
+                         yaw:+PJ.yaw.toFixed(2), vida:Math.round(PJ.vida), kills:PJ.kills}; },
+  get juego(){ return {estado:JUEGO.estado, arena:JUEGO.arena?JUEGO.arena.i:-1,
+                       oleada:JUEGO.arena?JUEGO.arena.oleada:-1, bichos:BICHOS.length,
+                       vivos:BICHOS.filter(b=>!b.muerto).length}; },
+  get mundo(){ return {arboles:ARBOLES.length, piezas:PIEZAS.length, barreras:BARRERAS.length,
+                       nodos:NODOS.length, lim:LIM,
+                       reales:REALES.map(r=>r?r.count:0),
+                       cartas:IMPOS.map(i=>i?i.geo.instanceCount:0)}; },
+  get modelos(){ const o={}; for(const k in MOD) o[k]=MOD[k]? {alto:+MOD[k].alto.toFixed(2),
+                   tri:MOD[k].geo.index?MOD[k].geo.index.count/3:0} : null; return o; },
+  poner(x,z){ PJ.pos.set(x,PJ.pos.y,z); PJ.vel.set(0,0,0); refrescarBosque(x,z); },
+  irArena(k){ const n=NODOS[k+1]; this.poner(n.x,n.z); },
+  mirar(y,c){ PJ.yaw=y; PJ.cabeceo=c; yawAnt=y; },
+  ojo(h){ PJ.pos.y=h; },
+  palanca(x,y){ palanca.activa=(x||y)!==0; palanca.x=x||0; palanca.y=y||0; },
+  golpe(){ golpear(); },
+  nodos(){ return NODOS.map(n=>({x:+n.x.toFixed(1), z:+n.z.toFixed(1), r:n.r})); },
+  calidad(n){ autoNivel=(n===undefined); if(n!==undefined){ nivel=n; aplicarNivel(); } return nivel; },
+  holgura(x,z){ return holgura(x,z); },
+  /* para probar la lógica del juego en una máquina sin GPU: se apaga lo que
+     cuesta dibujar y el bucle corre a velocidad usable */
+  ligero(v){ const on=v!==false;
+    for(const c of CAMPOS) c.malla.visible=!on;
+    for(const m of REALES) if(m) m.visible=!on;
+    for(const I of IMPOS) if(I) I.malla.visible=!on;
+    return on; },
+  escena, renderer, camara, CAMPOS, REALES, IMPOS, ARENAS, BARRERAS, BICHOS, JUEGO
+};
+
+</script>
+</body>
+</html>

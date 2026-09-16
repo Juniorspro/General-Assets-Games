@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>VISOR 3D</title>
+<style>
+  /* =========================================================================================
+     VISOR 3D — el modelo generado con Rezona Lab, riggeado, con sus animaciones.
+     Un archivo, sin dependencias fuera del CDN de three: el GLB viaja adentro en base64.
+     ========================================================================================= */
+  html,body{ margin:0; padding:0; width:100%; height:100%; background:#101318; overflow:hidden;
+             font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+             -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+  #lienzo{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+
+  #tit{ position:absolute; top:calc(env(safe-area-inset-top) + 14px); left:0; right:0;
+        text-align:center; color:#e8ecf2; font-size:clamp(15px,4vw,20px); font-weight:700;
+        letter-spacing:.30em; text-indent:.30em; pointer-events:none; z-index:5;
+        text-shadow:0 2px 10px rgba(0,0,0,.6); }
+  #sub{ position:absolute; top:calc(env(safe-area-inset-top) + 40px); left:18px; right:18px;
+        text-align:center; color:#6b7484; font-size:clamp(10px,2.6vw,12px);
+        letter-spacing:.22em; pointer-events:none; z-index:5; }
+
+  /* LA BOTONERA DE ANIMACIONES: dos filas deslizables abajo. Deslizable y no envuelta, porque
+     diez botones envueltos en un telefono angosto son cuatro filas tapando al personaje. */
+  #botones{ position:absolute; left:0; right:0; bottom:calc(env(safe-area-inset-bottom) + 12px);
+            display:flex; gap:8px; padding:6px 12px; overflow-x:auto; z-index:6;
+            -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  #botones::-webkit-scrollbar{ display:none; }
+  #botones button{ flex:0 0 auto; padding:11px 16px; border:1px solid #39404d;
+                   background:rgba(16,19,24,.82); color:#c9d2de; font-family:inherit;
+                   font-size:clamp(11px,3vw,13px); letter-spacing:.14em; cursor:pointer;
+                   border-radius:4px; }
+  #botones button.on{ background:#e8eef5; color:#101318; border-color:#e8eef5; font-weight:700; }
+  #velo{ position:absolute; inset:0; z-index:10; background:#101318; display:flex;
+         align-items:center; justify-content:center; color:#6b7484;
+         letter-spacing:.28em; font-size:clamp(11px,3vw,13px); transition:opacity .5s; }
+  #velo.ir{ opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+  <canvas id="lienzo"></canvas>
+  <div id="tit">MAICOL 3D</div>
+  <div id="sub">GENERADO Y RIGGEADO CON REZONA LAB · ARRASTRÁ PARA GIRAR</div>
+  <div id="botones"></div>
+  <div id="velo">CARGANDO…</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const lienzo=document.getElementById('lienzo');
+const render=new THREE.WebGLRenderer({ canvas:lienzo, antialias:true });
+render.setPixelRatio(Math.min(devicePixelRatio||1, 2));
+render.setSize(innerWidth, innerHeight);
+render.toneMapping=THREE.ACESFilmicToneMapping;
+render.toneMappingExposure=1.1;
+render.shadowMap.enabled=true;
+render.shadowMap.type=THREE.PCFSoftShadowMap;
+
+const escena=new THREE.Scene();
+escena.background=new THREE.Color(0x171b22);
+escena.fog=new THREE.Fog(0x171b22, 14, 40);
+
+const camara=new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.05, 100);
+addEventListener('resize', ()=>{ render.setSize(innerWidth, innerHeight);
+  camara.aspect=innerWidth/innerHeight; camara.updateProjectionMatrix(); });
+
+/* ---------- la tarima: un estudio, no un vacio ---------- */
+{
+  const piso=new THREE.Mesh(new THREE.CircleGeometry(9, 48),
+    new THREE.MeshStandardMaterial({ color:0x232833, roughness:0.9 }));
+  piso.rotation.x=-Math.PI/2; piso.receiveShadow=true; escena.add(piso);
+  const aro=new THREE.Mesh(new THREE.RingGeometry(1.35, 1.42, 48),
+    new THREE.MeshBasicMaterial({ color:0x39414f }));
+  aro.rotation.x=-Math.PI/2; aro.position.y=0.005; escena.add(aro);
+}
+/* tres puntos de luz de estudio: clave calida, contra fria, y relleno. Es el esquema con el que
+   se fotografia gente, y un personaje es gente. */
+const clave=new THREE.DirectionalLight(0xfff0dc, 2.6);
+clave.position.set(3, 5, 4); clave.castShadow=true;
+clave.shadow.mapSize.set(1024,1024);
+clave.shadow.camera.left=-3; clave.shadow.camera.right=3;
+clave.shadow.camera.top=4; clave.shadow.camera.bottom=-1;
+escena.add(clave);
+const contra=new THREE.DirectionalLight(0x9db8e8, 1.4);
+contra.position.set(-4, 3, -4); escena.add(contra);
+escena.add(new THREE.HemisphereLight(0x3a4250, 0x14171c, 1.5));
+
+/* ---------- la camara orbita con el dedo ---------- */
+/* El encuadre se MIDE, no se estima: con dist 4.2 y el objetivo en y=1.0 el personaje de 1.55
+   ocupaba el 27% del alto y quedaba hundido en el tercio de abajo (medido en 412x892). El
+   objetivo va al MEDIO del cuerpo (0.78) y la distancia a 2.7: 55% del alto, centrado. */
+const ORB={ yaw:0.5, pitch:0.17, dist:2.7, alto:0.78, girando:false, vyaw:0.25 };
+let _arr=null;
+addEventListener('pointerdown', e=>{ if(e.target.tagName!=='BUTTON') _arr=[e.clientX,e.clientY]; });
+addEventListener('pointermove', e=>{ if(!_arr) return;
+  ORB.yaw -= (e.clientX-_arr[0])*0.008;
+  ORB.pitch = Math.max(-0.15, Math.min(1.2, ORB.pitch + (e.clientY-_arr[1])*0.005));
+  ORB.vyaw=0;                       // tocaste: la vuelta automatica se apaga y no vuelve
+  _arr=[e.clientX,e.clientY];
+});
+addEventListener('pointerup', ()=>{ _arr=null; });
+addEventListener('wheel', e=>{ ORB.dist=Math.max(1.4, Math.min(8, ORB.dist+e.deltaY*0.003)); }, { passive:true });
+/* la pinza para acercar, que es lo que hace un pulgar en un telefono */
+let _pinza=null;
+addEventListener('touchmove', e=>{
+  if(e.touches.length!==2) { _pinza=null; return; }
+  const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,
+                     e.touches[0].clientY-e.touches[1].clientY);
+  if(_pinza) ORB.dist=Math.max(1.4, Math.min(8, ORB.dist*(_pinza/d)));
+  _pinza=d;
+}, { passive:true });
+addEventListener('touchend', ()=>{ _pinza=null; });
+
+/* ---------- el modelo y sus clips ---------- */
+const GLB_B64='@@GLB@@';
+let mixer=null, accionActual=null;
+const CLIPS={};                       // nombre -> AnimationAction
+const VISOR={ lista:false, clips:[], errores:[] };
+window.__errs=window.__errs||[];
+addEventListener('error', e=>window.__errs.push(String(e.message)));
+
+{
+  const b=atob(GLB_B64), n=b.length, a=new Uint8Array(n);
+  for(let i=0;i<n;i++) a[i]=b.charCodeAt(i);
+  new GLTFLoader().parse(a.buffer, '', (gltf)=>{
+    const g=gltf.scene;
+    /* plantado a 1,55 m mida lo que mida el archivo */
+    const caja=new THREE.Box3().setFromObject(g);
+    const esc=1.55/(caja.max.y-caja.min.y);
+    g.scale.setScalar(esc);
+    caja.setFromObject(g);
+    g.position.y=-caja.min.y;
+    g.position.x=-(caja.min.x+caja.max.x)/2;
+    g.position.z=-(caja.min.z+caja.max.z)/2;
+    g.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
+    escena.add(g);
+    /* los clips: un boton por animacion. El nombre visible se limpia del prefijo del proveedor
+       (Tripo llama a todo "preset:algo") y se traduce: un boton que dice PRESET:HURT no le dice
+       nada a nadie; DOLOR si. */
+    const NOMBRES={ idle:'QUIETO', walk:'CAMINA', run:'CORRE', jump:'SALTA', climb:'TREPA',
+                    slash:'ESPADAZO', shoot:'DISPARA', hurt:'DOLOR', fall:'CAE', turn:'GIRA' };
+    mixer=new THREE.AnimationMixer(g);
+    const cont=document.getElementById('botones');
+    for(const clip of gltf.animations){
+      const crudo=clip.name.replace(/^preset:/i,'').replace(/[_-]?(inplace|anim(ation)?)$/i,'');
+      const nombre=NOMBRES[crudo.toLowerCase()] || crudo.replace(/[_:]/g,' ');
+      CLIPS[clip.name]=mixer.clipAction(clip);
+      VISOR.clips.push({ nombre:clip.name, seg:+clip.duration.toFixed(2) });
+      const b=document.createElement('button');
+      b.textContent=nombre.toUpperCase();
+      b.dataset.clip=clip.name;
+      b.onclick=()=>tocar(clip.name);
+      cont.appendChild(b);
+    }
+    /* arranca en el primer clip que parezca un reposo, o el primero que haya */
+    const idle=gltf.animations.find(c=>/idle|stand|breath/i.test(c.name)) || gltf.animations[0];
+    if(idle) tocar(idle.name);
+    VISOR.lista=true;
+    document.getElementById('velo').classList.add('ir');
+  }, (e)=>{ VISOR.errores.push(String(e)); document.getElementById('velo').textContent='NO CARGO'; });
+}
+function tocar(nombre){
+  const acc=CLIPS[nombre]; if(!acc) return null;
+  /* el cambio se FUNDE en 0,25 s: un corte de pose se ve aunque el personaje mida dos centimetros
+     en pantalla — la misma leccion de los andares de la cosa de Eco */
+  if(accionActual && accionActual!==acc){ accionActual.fadeOut(0.25); }
+  acc.reset().fadeIn(0.25).play();
+  accionActual=acc;
+  for(const b of document.querySelectorAll('#botones button'))
+    b.classList.toggle('on', b.dataset.clip===nombre);
+  return nombre;
+}
+
+/* ---------- el bucle ---------- */
+const reloj=new THREE.Clock();
+function bucle(){
+  requestAnimationFrame(bucle);
+  const dt=Math.min(0.05, reloj.getDelta());
+  if(mixer) mixer.update(dt);
+  ORB.yaw += ORB.vyaw*dt;             // la vuelta lenta de vidriera, hasta el primer toque
+  const co=Math.cos(ORB.pitch), y=ORB.alto+Math.sin(ORB.pitch)*ORB.dist;
+  camara.position.set(Math.sin(ORB.yaw)*ORB.dist*co, y, Math.cos(ORB.yaw)*ORB.dist*co);
+  camara.lookAt(0, ORB.alto, 0);
+  render.render(escena, camara);
+}
+bucle();
+
+/* ---------- ganchos ---------- */
+window.__visor={
+  estado:()=>({ lista:VISOR.lista, clips:VISOR.clips, errores:VISOR.errores,
+                tocando:accionActual? Object.keys(CLIPS).find(k=>CLIPS[k]===accionActual) : null }),
+  tocar:(n)=>tocar(n),
+  /* el recorrido de una mano y un pie durante un clip: la unica prueba de que una animacion ANIMA.
+     Se muestrea el clip entero y se mide cuanto viaja cada extremo, como se hizo con Baldi. */
+  medirClip:(nombre, muestras)=>{
+    const acc=CLIPS[nombre]; if(!acc || !mixer) return null;
+    const clip=acc.getClip(); const N=muestras||24;
+    let mano=null, pie=null;
+    escena.traverse(o=>{ if(o.isBone){
+      const nl=o.name.toLowerCase();
+      if(!mano && /hand/.test(nl)) mano=o;
+      if(!pie && /foot/.test(nl)) pie=o;
+    }});
+    if(!mano && !pie) return { clip:nombre, sinHuesos:true };
+    const antes=accionActual;
+    for(const k in CLIPS) CLIPS[k].stop();
+    acc.play();
+    const v=new THREE.Vector3();
+    const cajas={ mano:new THREE.Box3(), pie:new THREE.Box3() };
+    for(let i=0;i<N;i++){
+      mixer.setTime(clip.duration*i/N);
+      escena.updateMatrixWorld(true);
+      if(mano){ mano.getWorldPosition(v); cajas.mano.expandByPoint(v.clone()); }
+      if(pie){ pie.getWorldPosition(v); cajas.pie.expandByPoint(v.clone()); }
+    }
+    acc.stop(); if(antes) antes.play();
+    const tam=(c)=>{ const s=c.getSize(new THREE.Vector3()); return +Math.max(s.x,s.y,s.z).toFixed(3); };
+    return { clip:nombre, seg:+clip.duration.toFixed(2),
+             manoRecorre:mano? tam(cajas.mano) : null,
+             pieRecorre:pie? tam(cajas.pie) : null };
+  },
+  orbita:(yaw,pitch,dist)=>{ if(yaw!=null)ORB.yaw=yaw; if(pitch!=null)ORB.pitch=pitch;
+                             if(dist!=null)ORB.dist=dist; ORB.vyaw=0; return ORB; },
+  costo:()=>{ render.info.autoReset=false; render.info.reset(); render.render(escena,camara);
+    const r={ llamadas:render.info.render.calls, tris:render.info.render.triangles };
+    render.info.autoReset=true; return r; },
+};
+</script>
+</body>
+</html>

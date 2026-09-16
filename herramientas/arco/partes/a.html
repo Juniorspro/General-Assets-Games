@@ -1,0 +1,253 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>ARCO</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0e1418;color:#20303a;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;touch-action:none;overscroll-behavior:none}
+
+/* ══════════ VERTICAL NATIVO ══════════
+   Un duelo de arqueros es LATERAL, asi que lo obvio seria girar el marco como
+   hacen CUBOS y ROTOR. Va vertical igual, y por dos razones: la referencia que
+   trajo el usuario —Bowmasters— es vertical, y en un juego de tiro parabolico
+   la pantalla alta es la que sirve: lo que hay que ver no es el ancho entre los
+   dos, es CUANTO SUBE la flecha. Los dos arqueros se acercan hasta que entran
+   en el ancho, y el alto que sobra es cielo, que en este juego es la mitad de
+   lo que se mira.
+   `--mw` sale del ANCHO DEL MARCO y no de `vw`: en apaisado el marco es una
+   columna angosta y `vw` es la ventana entera.                              */
+#envase{position:fixed;inset:0;display:grid;place-items:center;background:#0b1013}
+#marco{position:relative;width:min(100%,calc(100vh*0.5625));height:100%;overflow:hidden;
+  background:linear-gradient(180deg,#4a95cf 0%,#79bde4 40%,#b3dcee 74%,#e2ecdf 100%)}
+#cv{display:block;width:100%;height:100%}
+
+/* ══════════ EL HUD ══════════ */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .18s}
+body.jugando #hud{opacity:1}
+
+/* LAS DOS BARRAS DE VIDA VAN EN LOS DOS CANTOS Y EL VIENTO EN EL MEDIO, con
+   margen: con `left:0;right:0` la caja del rotulo del medio ocupa el ancho
+   entero aunque el texto este centrado, asi que se solapa con las barras sin
+   que se vea — y el dedo que va a apuntar toca el rotulo. Lo mide `solapes()`. */
+.vida{position:absolute;top:calc(12px + env(safe-area-inset-top));width:31%;
+  height:26px;border-radius:9px;border:1px solid rgba(20,34,44,.22);
+  background:rgba(255,255,255,.52);overflow:hidden;backdrop-filter:blur(3px)}
+#vIzq{left:10px}
+#vDer{right:10px}
+.vida i{position:absolute;inset:2px;width:auto;border-radius:7px;display:block;
+  transform-origin:left center;transition:transform .30s cubic-bezier(.2,.7,.3,1)}
+#vIzq i{background:linear-gradient(180deg,#66d17f,#3ba85a)}
+#vDer i{background:linear-gradient(180deg,#f07a62,#cf4f37);transform-origin:right center}
+.vida b{position:absolute;inset:0;display:grid;place-items:center;
+  font:800 12px/1 ui-monospace,monospace;letter-spacing:.06em;
+  color:#1d2c34;text-shadow:0 1px 0 rgba(255,255,255,.55)}
+.nom{position:absolute;top:calc(41px + env(safe-area-inset-top));width:31%;
+  font:700 clamp(8px,calc(var(--mw,412px)*0.024),11px)/1 ui-monospace,monospace;
+  letter-spacing:.14em;color:rgba(28,44,54,.70);text-shadow:0 1px 0 rgba(255,255,255,.5)}
+#nIzq{left:10px;text-align:left}
+#nDer{right:10px;text-align:right}
+/* de quien es el turno: sin esto las dos barras se ven iguales y el jugador
+   no sabe si esta esperando o si le toca */
+.nom.act{color:#1a2c36;opacity:1}
+.nom.act::after{content:' •';color:#d98622}
+
+/* el viento: es lo unico que cambia entre un duelo y el siguiente sin que se
+   vea en el terreno, asi que tiene que estar SIEMPRE a la vista */
+#viento{position:absolute;left:36%;right:36%;top:calc(14px + env(safe-area-inset-top));
+  text-align:center;font:800 clamp(9px,calc(var(--mw,412px)*0.028),13px)/1.35 ui-monospace,monospace;
+  letter-spacing:.10em;color:#2c4150;text-shadow:0 1px 0 rgba(255,255,255,.6)}
+#viento u{display:block;font-style:normal;text-decoration:none;
+  font:600 clamp(7px,calc(var(--mw,412px)*0.020),9px)/1 ui-monospace,monospace;
+  letter-spacing:.18em;opacity:.62}
+
+#duelo{position:absolute;left:0;right:0;top:calc(70px + env(safe-area-inset-top));
+  text-align:center;font:700 clamp(8px,calc(var(--mw,412px)*0.023),11px)/1 ui-monospace,monospace;
+  letter-spacing:.20em;color:rgba(30,46,56,.58)}
+
+/* LA FUERZA VA ABAJO Y NO PEGADA AL DEDO: el dedo tapa lo que hay debajo, asi
+   que un medidor puesto ahi lo tapa la propia mano justo cuando hay que leerlo */
+#fuerza{position:absolute;left:21%;right:21%;bottom:calc(28px + env(safe-area-inset-bottom));
+  height:9px;border-radius:5px;background:rgba(255,255,255,.44);
+  border:1px solid rgba(20,34,44,.18);overflow:hidden;opacity:0;transition:opacity .12s}
+#fuerza.on{opacity:1}
+#fuerza i{display:block;height:100%;width:0;border-radius:4px;
+  background:linear-gradient(90deg,#8fd07c,#f0c04a 62%,#e0563a)}
+
+/* LA PISTA VA POR ENCIMA DE TODA LA FRANJA DE ABAJO, y el numero sale de una
+   cuenta y no de tantear: los dos botones miden 40 px con 12 de margen, o sea
+   que la franja de abajo llega a 52; la barra de fuerza vive adentro de esa
+   misma franja pero libre en horizontal (los botones ocupan hasta el 13,6 %
+   del ancho y la barra arranca en el 21). Lo mide `solapes()`.            */
+#pista{position:absolute;left:8%;right:8%;bottom:calc(60px + env(safe-area-inset-bottom));
+  text-align:center;font:600 clamp(9px,calc(var(--mw,412px)*0.029),13px)/1.6 system-ui;
+  letter-spacing:.10em;color:rgba(38,56,66,.72);opacity:0;transition:opacity .35s;
+  text-shadow:0 1px 0 rgba(255,255,255,.55)}
+#pista.on{opacity:1}
+
+/* el numero del golpe: sale del punto de impacto y sube. Sin esto, pegarle
+   baja una barra y nada mas — y una barra que baja no dice CUANTO */
+#golpe{position:absolute;left:0;top:0;transform:translate(-50%,-50%);opacity:0;
+  font:900 clamp(15px,calc(var(--mw,412px)*0.052),24px)/1 system-ui;letter-spacing:.04em;
+  color:#d84a2c;text-shadow:0 2px 0 rgba(255,255,255,.75),0 0 12px rgba(216,74,44,.35)}
+#golpe.cab{color:#c1198f}
+#golpe.on{animation:gol .95s ease-out}
+@keyframes gol{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}
+  18%{opacity:1;transform:translate(-50%,-70%) scale(1.12)}
+  34%{transform:translate(-50%,-78%) scale(1)}
+  100%{opacity:0;transform:translate(-50%,-150%) scale(1)}}
+
+#aviso{position:absolute;left:0;right:0;top:42%;text-align:center;opacity:0;
+  font:800 clamp(11px,calc(var(--mw,412px)*0.036),17px)/1 system-ui;letter-spacing:.20em;
+  color:#2c4150;text-shadow:0 1px 0 rgba(255,255,255,.7)}
+#aviso.on{animation:avi .95s}
+@keyframes avi{0%{opacity:0}16%{opacity:.96}72%{opacity:.96}100%{opacity:0}}
+
+#bPausa,#bReinicia{position:absolute;bottom:calc(12px + env(safe-area-inset-bottom));
+  width:40px;height:40px;border-radius:13px;border:1px solid rgba(20,34,44,.18);
+  background:rgba(255,255,255,.62);color:#2c4150;font:700 15px/1 system-ui;
+  pointer-events:auto;display:none;place-items:center;backdrop-filter:blur(4px)}
+body.jugando #bPausa,body.jugando #bReinicia{display:grid}
+#bPausa{left:12px}
+#bReinicia{right:12px}
+
+/* ══════════ LAS PANTALLAS ══════════ */
+.pan{position:absolute;inset:0;display:none;place-items:center;z-index:6;padding:20px;
+  background:rgba(224,236,243,.93)}
+.pan.on{display:grid}
+.caja{width:min(92%,430px);display:flex;flex-direction:column;align-items:center;
+  gap:calc(var(--mw,412px)*0.026);text-align:center}
+h1{font:900 clamp(30px,calc(var(--mw,412px)*0.135),58px)/1 system-ui;letter-spacing:.22em;
+  color:#26404f;text-shadow:0 2px 0 rgba(255,255,255,.7)}
+.sub{font:700 clamp(9px,calc(var(--mw,412px)*0.027),12px)/1.5 ui-monospace,monospace;
+  letter-spacing:.24em;color:rgba(38,64,79,.60)}
+.tx{font:500 clamp(11px,calc(var(--mw,412px)*0.032),14px)/1.65 system-ui;color:rgba(38,64,79,.82)}
+.pie{font:600 clamp(9px,calc(var(--mw,412px)*0.026),12px)/1.6 ui-monospace,monospace;
+  letter-spacing:.10em;color:rgba(38,64,79,.52)}
+.bt{padding:12px 26px;min-width:210px;border:0;border-radius:14px;
+  background:rgba(255,255,255,.72);border:1px solid rgba(20,34,44,.14);
+  font:700 clamp(11px,calc(var(--mw,412px)*0.031),14px)/1 system-ui;letter-spacing:.14em;
+  color:#26404f;cursor:pointer}
+.bt.p{background:linear-gradient(180deg,#f0a63f,#d98622);border-color:rgba(120,72,10,.25);
+  color:#3a2606;box-shadow:0 3px 0 rgba(120,72,10,.22)}
+.bt:active{transform:translateY(2px)}
+.bt.p:active{box-shadow:0 1px 0 rgba(120,72,10,.22)}
+.fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%}
+.fila .bt{min-width:0;flex:1 1 0;padding:10px 8px;letter-spacing:.08em}
+.bt.sel{background:linear-gradient(180deg,#7fc3e2,#5ea6c8);color:#0f2632;
+  border-color:rgba(20,60,80,.25)}
+.hueco{height:calc(var(--mw,412px)*0.10)}
+
+/* EL MENU ABRE UNA VENTANA EN EL MEDIO: el titulo arriba y los botones abajo,
+   que es donde el velo esta cerrado, y la franja del medio queda para el duelo
+   que corre detras. Con la columna centrada el texto cae justo en la unica
+   banda abierta y los dos arqueros terminan detras de la palabra ARCO.      */
+.pan.abre{place-items:stretch;
+  background:linear-gradient(180deg,rgba(224,236,243,.94) 0%,rgba(224,236,243,.94) 16%,
+    rgba(224,236,243,.14) 27%,rgba(224,236,243,.14) 78%,
+    rgba(224,236,243,.95) 89%,rgba(224,236,243,.95) 100%)}
+.pan.abre .caja{width:100%;height:100%;justify-content:space-between;
+  padding:calc(var(--mw,412px)*0.055) 0 calc(var(--mw,412px)*0.030)}
+.pan.abre .caja > .grupo{display:flex;flex-direction:column;align-items:center;
+  gap:calc(var(--mw,412px)*0.026);width:min(92%,430px)}
+
+#gDue{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
+.nb{aspect-ratio:1;border-radius:12px;border:1px solid rgba(20,34,44,.14);
+  background:rgba(255,255,255,.55);color:#26404f;font:800 15px/1 system-ui;
+  display:grid;place-items:center;cursor:pointer;position:relative}
+.nb.hecho{background:linear-gradient(180deg,#9ed08a,#7cb668);border-color:rgba(40,90,30,.22);
+  color:#1d3313}
+.nb.trabado{opacity:.34;cursor:default}
+.nb i{position:absolute;bottom:4px;left:0;right:0;font:600 8px/1 ui-monospace,monospace;
+  font-style:normal;letter-spacing:.06em;opacity:.66}
+
+input[type=range]{width:100%;accent-color:#d98622}
+
+#carga{position:absolute;inset:0;z-index:9;display:grid;place-items:center;
+  background:linear-gradient(180deg,#cadfee,#e6edf0);transition:opacity .35s}
+#carga.ido{opacity:0;pointer-events:none}
+.barc{width:min(60%,220px);height:5px;border-radius:3px;background:rgba(20,34,44,.14);overflow:hidden}
+.barc i{display:block;height:100%;width:0;background:#d98622;transition:width .3s;font-style:normal}
+</style>
+</head>
+<body>
+
+<div id="envase"><div id="marco">
+  <canvas id="cv"></canvas>
+
+  <div id="hud">
+    <div class="vida" id="vIzq"><i></i><b></b></div>
+    <div class="vida" id="vDer"><i></i><b></b></div>
+    <div class="nom" id="nIzq"></div>
+    <div class="nom" id="nDer"></div>
+    <div id="viento"></div>
+    <div id="duelo"></div>
+    <div id="fuerza"><i></i></div>
+    <div id="pista"></div>
+    <div id="golpe"></div>
+    <div id="aviso"></div>
+    <button id="bPausa">॥</button>
+    <button id="bReinicia">↺</button>
+  </div>
+
+  <div class="pan" id="pIdioma"><div class="caja">
+    <h1>ARCO</h1><div class="sub">IDIOMA · LANGUAGE</div>
+    <div class="hueco"></div>
+    <button class="bt" data-lang="es">Castellano</button>
+    <button class="bt" data-lang="en">English</button>
+    <button class="bt" data-lang="pt">Português</button>
+  </div></div>
+
+  <div class="pan abre" id="pMenu"><div class="caja">
+    <div class="grupo"><h1>ARCO</h1><div class="sub" id="mSub"></div></div>
+    <div class="grupo">
+      <button class="bt p" id="bJugar"></button>
+      <div class="fila"><button class="bt" id="bTuto"></button>
+        <button class="bt" id="bDuelos"></button></div>
+      <button class="bt" id="bAjustes"></button>
+      <div class="pie" id="mPie"></div>
+    </div>
+  </div></div>
+
+  <div class="pan" id="pDuelos"><div class="caja">
+    <h1 id="dTit"></h1><div class="sub" id="dSub"></div>
+    <div id="gDue"></div>
+    <button class="bt" id="dVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pAjustes"><div class="caja">
+    <h1 id="aTit"></h1>
+    <div class="pie" id="aMusL"></div><input type="range" id="aMus" min="0" max="100" value="50">
+    <div class="pie" id="aFxL"></div><input type="range" id="aFx" min="0" max="100" value="80">
+    <div class="pie" id="aIdiL"></div><div class="fila" id="aIdi"></div>
+    <div class="pie" id="aCalL"></div><div class="fila" id="aCal"></div>
+    <button class="bt" id="aBorrar"></button>
+    <button class="bt" id="aVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pPausa"><div class="caja">
+    <h1 id="pTit"></h1><div class="sub" id="pSub"></div>
+    <div class="hueco"></div>
+    <button class="bt p" id="bSigo"></button>
+    <button class="bt" id="bReini2"></button>
+    <button class="bt" id="bSalir"></button>
+  </div></div>
+
+  <div class="pan" id="pFin"><div class="caja">
+    <h1 id="fTit"></h1><div class="sub" id="fSub"></div>
+    <div class="tx" id="fDatos"></div>
+    <div class="hueco"></div>
+    <button class="bt p" id="fSig"></button>
+    <button class="bt" id="fRe"></button>
+    <button class="bt" id="fMenu"></button>
+  </div></div>
+
+  <div id="carga"><div class="caja"><h1>ARCO</h1>
+    <div class="sub" id="cSub">CARGANDO</div>
+    <div class="barc"><i id="cBarra"></i></div></div></div>
+</div></div>
+
+<!-- NI UNA DEPENDENCIA: el juego es vector plano sobre un lienzo 2D, asi que
+     no hay CDN que pueda no contestar. Un archivo, y anda sin red. -->
+<script type="module">

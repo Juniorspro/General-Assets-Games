@@ -1,0 +1,3411 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>ARCO</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0e1418;color:#20303a;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;touch-action:none;overscroll-behavior:none}
+
+/* ══════════ VERTICAL NATIVO ══════════
+   Un duelo de arqueros es LATERAL, asi que lo obvio seria girar el marco como
+   hacen CUBOS y ROTOR. Va vertical igual, y por dos razones: la referencia que
+   trajo el usuario —Bowmasters— es vertical, y en un juego de tiro parabolico
+   la pantalla alta es la que sirve: lo que hay que ver no es el ancho entre los
+   dos, es CUANTO SUBE la flecha. Los dos arqueros se acercan hasta que entran
+   en el ancho, y el alto que sobra es cielo, que en este juego es la mitad de
+   lo que se mira.
+   `--mw` sale del ANCHO DEL MARCO y no de `vw`: en apaisado el marco es una
+   columna angosta y `vw` es la ventana entera.                              */
+#envase{position:fixed;inset:0;display:grid;place-items:center;background:#0b1013}
+#marco{position:relative;width:min(100%,calc(100vh*0.5625));height:100%;overflow:hidden;
+  background:linear-gradient(180deg,#4a95cf 0%,#79bde4 40%,#b3dcee 74%,#e2ecdf 100%)}
+#cv{display:block;width:100%;height:100%}
+
+/* ══════════ EL HUD ══════════ */
+#hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .18s}
+body.jugando #hud{opacity:1}
+
+/* LAS DOS BARRAS DE VIDA VAN EN LOS DOS CANTOS Y EL VIENTO EN EL MEDIO, con
+   margen: con `left:0;right:0` la caja del rotulo del medio ocupa el ancho
+   entero aunque el texto este centrado, asi que se solapa con las barras sin
+   que se vea — y el dedo que va a apuntar toca el rotulo. Lo mide `solapes()`. */
+.vida{position:absolute;top:calc(12px + env(safe-area-inset-top));width:31%;
+  height:26px;border-radius:9px;border:1px solid rgba(20,34,44,.22);
+  background:rgba(255,255,255,.52);overflow:hidden;backdrop-filter:blur(3px)}
+#vIzq{left:10px}
+#vDer{right:10px}
+.vida i{position:absolute;inset:2px;width:auto;border-radius:7px;display:block;
+  transform-origin:left center;transition:transform .30s cubic-bezier(.2,.7,.3,1)}
+#vIzq i{background:linear-gradient(180deg,#66d17f,#3ba85a)}
+#vDer i{background:linear-gradient(180deg,#f07a62,#cf4f37);transform-origin:right center}
+.vida b{position:absolute;inset:0;display:grid;place-items:center;
+  font:800 12px/1 ui-monospace,monospace;letter-spacing:.06em;
+  color:#1d2c34;text-shadow:0 1px 0 rgba(255,255,255,.55)}
+.nom{position:absolute;top:calc(41px + env(safe-area-inset-top));width:31%;
+  font:700 clamp(8px,calc(var(--mw,412px)*0.024),11px)/1 ui-monospace,monospace;
+  letter-spacing:.14em;color:rgba(28,44,54,.70);text-shadow:0 1px 0 rgba(255,255,255,.5)}
+#nIzq{left:10px;text-align:left}
+#nDer{right:10px;text-align:right}
+/* de quien es el turno: sin esto las dos barras se ven iguales y el jugador
+   no sabe si esta esperando o si le toca */
+.nom.act{color:#1a2c36;opacity:1}
+.nom.act::after{content:' •';color:#d98622}
+
+/* el viento: es lo unico que cambia entre un duelo y el siguiente sin que se
+   vea en el terreno, asi que tiene que estar SIEMPRE a la vista */
+#viento{position:absolute;left:36%;right:36%;top:calc(14px + env(safe-area-inset-top));
+  text-align:center;font:800 clamp(9px,calc(var(--mw,412px)*0.028),13px)/1.35 ui-monospace,monospace;
+  letter-spacing:.10em;color:#2c4150;text-shadow:0 1px 0 rgba(255,255,255,.6)}
+#viento u{display:block;font-style:normal;text-decoration:none;
+  font:600 clamp(7px,calc(var(--mw,412px)*0.020),9px)/1 ui-monospace,monospace;
+  letter-spacing:.18em;opacity:.62}
+
+#duelo{position:absolute;left:0;right:0;top:calc(70px + env(safe-area-inset-top));
+  text-align:center;font:700 clamp(8px,calc(var(--mw,412px)*0.023),11px)/1 ui-monospace,monospace;
+  letter-spacing:.20em;color:rgba(30,46,56,.58)}
+
+/* LA FUERZA VA ABAJO Y NO PEGADA AL DEDO: el dedo tapa lo que hay debajo, asi
+   que un medidor puesto ahi lo tapa la propia mano justo cuando hay que leerlo */
+#fuerza{position:absolute;left:21%;right:21%;bottom:calc(28px + env(safe-area-inset-bottom));
+  height:9px;border-radius:5px;background:rgba(255,255,255,.44);
+  border:1px solid rgba(20,34,44,.18);overflow:hidden;opacity:0;transition:opacity .12s}
+#fuerza.on{opacity:1}
+#fuerza i{display:block;height:100%;width:0;border-radius:4px;
+  background:linear-gradient(90deg,#8fd07c,#f0c04a 62%,#e0563a)}
+
+/* LA PISTA VA POR ENCIMA DE TODA LA FRANJA DE ABAJO, y el numero sale de una
+   cuenta y no de tantear: los dos botones miden 40 px con 12 de margen, o sea
+   que la franja de abajo llega a 52; la barra de fuerza vive adentro de esa
+   misma franja pero libre en horizontal (los botones ocupan hasta el 13,6 %
+   del ancho y la barra arranca en el 21). Lo mide `solapes()`.            */
+#pista{position:absolute;left:8%;right:8%;bottom:calc(60px + env(safe-area-inset-bottom));
+  text-align:center;font:600 clamp(9px,calc(var(--mw,412px)*0.029),13px)/1.6 system-ui;
+  letter-spacing:.10em;color:rgba(38,56,66,.72);opacity:0;transition:opacity .35s;
+  text-shadow:0 1px 0 rgba(255,255,255,.55)}
+#pista.on{opacity:1}
+
+/* el numero del golpe: sale del punto de impacto y sube. Sin esto, pegarle
+   baja una barra y nada mas — y una barra que baja no dice CUANTO */
+#golpe{position:absolute;left:0;top:0;transform:translate(-50%,-50%);opacity:0;
+  font:900 clamp(15px,calc(var(--mw,412px)*0.052),24px)/1 system-ui;letter-spacing:.04em;
+  color:#d84a2c;text-shadow:0 2px 0 rgba(255,255,255,.75),0 0 12px rgba(216,74,44,.35)}
+#golpe.cab{color:#c1198f}
+#golpe.on{animation:gol .95s ease-out}
+@keyframes gol{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}
+  18%{opacity:1;transform:translate(-50%,-70%) scale(1.12)}
+  34%{transform:translate(-50%,-78%) scale(1)}
+  100%{opacity:0;transform:translate(-50%,-150%) scale(1)}}
+
+#aviso{position:absolute;left:0;right:0;top:42%;text-align:center;opacity:0;
+  font:800 clamp(11px,calc(var(--mw,412px)*0.036),17px)/1 system-ui;letter-spacing:.20em;
+  color:#2c4150;text-shadow:0 1px 0 rgba(255,255,255,.7)}
+#aviso.on{animation:avi .95s}
+@keyframes avi{0%{opacity:0}16%{opacity:.96}72%{opacity:.96}100%{opacity:0}}
+
+#bPausa,#bReinicia{position:absolute;bottom:calc(12px + env(safe-area-inset-bottom));
+  width:40px;height:40px;border-radius:13px;border:1px solid rgba(20,34,44,.18);
+  background:rgba(255,255,255,.62);color:#2c4150;font:700 15px/1 system-ui;
+  pointer-events:auto;display:none;place-items:center;backdrop-filter:blur(4px)}
+body.jugando #bPausa,body.jugando #bReinicia{display:grid}
+#bPausa{left:12px}
+#bReinicia{right:12px}
+
+/* ══════════ LAS PANTALLAS ══════════ */
+.pan{position:absolute;inset:0;display:none;place-items:center;z-index:6;padding:20px;
+  background:rgba(224,236,243,.93)}
+.pan.on{display:grid}
+.caja{width:min(92%,430px);display:flex;flex-direction:column;align-items:center;
+  gap:calc(var(--mw,412px)*0.026);text-align:center}
+h1{font:900 clamp(30px,calc(var(--mw,412px)*0.135),58px)/1 system-ui;letter-spacing:.22em;
+  color:#26404f;text-shadow:0 2px 0 rgba(255,255,255,.7)}
+.sub{font:700 clamp(9px,calc(var(--mw,412px)*0.027),12px)/1.5 ui-monospace,monospace;
+  letter-spacing:.24em;color:rgba(38,64,79,.60)}
+.tx{font:500 clamp(11px,calc(var(--mw,412px)*0.032),14px)/1.65 system-ui;color:rgba(38,64,79,.82)}
+.pie{font:600 clamp(9px,calc(var(--mw,412px)*0.026),12px)/1.6 ui-monospace,monospace;
+  letter-spacing:.10em;color:rgba(38,64,79,.52)}
+.bt{padding:12px 26px;min-width:210px;border:0;border-radius:14px;
+  background:rgba(255,255,255,.72);border:1px solid rgba(20,34,44,.14);
+  font:700 clamp(11px,calc(var(--mw,412px)*0.031),14px)/1 system-ui;letter-spacing:.14em;
+  color:#26404f;cursor:pointer}
+.bt.p{background:linear-gradient(180deg,#f0a63f,#d98622);border-color:rgba(120,72,10,.25);
+  color:#3a2606;box-shadow:0 3px 0 rgba(120,72,10,.22)}
+.bt:active{transform:translateY(2px)}
+.bt.p:active{box-shadow:0 1px 0 rgba(120,72,10,.22)}
+.fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%}
+.fila .bt{min-width:0;flex:1 1 0;padding:10px 8px;letter-spacing:.08em}
+.bt.sel{background:linear-gradient(180deg,#7fc3e2,#5ea6c8);color:#0f2632;
+  border-color:rgba(20,60,80,.25)}
+.hueco{height:calc(var(--mw,412px)*0.10)}
+
+/* EL MENU ABRE UNA VENTANA EN EL MEDIO: el titulo arriba y los botones abajo,
+   que es donde el velo esta cerrado, y la franja del medio queda para el duelo
+   que corre detras. Con la columna centrada el texto cae justo en la unica
+   banda abierta y los dos arqueros terminan detras de la palabra ARCO.      */
+.pan.abre{place-items:stretch;
+  background:linear-gradient(180deg,rgba(224,236,243,.94) 0%,rgba(224,236,243,.94) 16%,
+    rgba(224,236,243,.14) 27%,rgba(224,236,243,.14) 78%,
+    rgba(224,236,243,.95) 89%,rgba(224,236,243,.95) 100%)}
+.pan.abre .caja{width:100%;height:100%;justify-content:space-between;
+  padding:calc(var(--mw,412px)*0.055) 0 calc(var(--mw,412px)*0.030)}
+.pan.abre .caja > .grupo{display:flex;flex-direction:column;align-items:center;
+  gap:calc(var(--mw,412px)*0.026);width:min(92%,430px)}
+
+#gDue{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
+.nb{aspect-ratio:1;border-radius:12px;border:1px solid rgba(20,34,44,.14);
+  background:rgba(255,255,255,.55);color:#26404f;font:800 15px/1 system-ui;
+  display:grid;place-items:center;cursor:pointer;position:relative}
+.nb.hecho{background:linear-gradient(180deg,#9ed08a,#7cb668);border-color:rgba(40,90,30,.22);
+  color:#1d3313}
+.nb.trabado{opacity:.34;cursor:default}
+.nb i{position:absolute;bottom:4px;left:0;right:0;font:600 8px/1 ui-monospace,monospace;
+  font-style:normal;letter-spacing:.06em;opacity:.66}
+
+input[type=range]{width:100%;accent-color:#d98622}
+
+#carga{position:absolute;inset:0;z-index:9;display:grid;place-items:center;
+  background:linear-gradient(180deg,#cadfee,#e6edf0);transition:opacity .35s}
+#carga.ido{opacity:0;pointer-events:none}
+.barc{width:min(60%,220px);height:5px;border-radius:3px;background:rgba(20,34,44,.14);overflow:hidden}
+.barc i{display:block;height:100%;width:0;background:#d98622;transition:width .3s;font-style:normal}
+</style>
+</head>
+<body>
+
+<div id="envase"><div id="marco">
+  <canvas id="cv"></canvas>
+
+  <div id="hud">
+    <div class="vida" id="vIzq"><i></i><b></b></div>
+    <div class="vida" id="vDer"><i></i><b></b></div>
+    <div class="nom" id="nIzq"></div>
+    <div class="nom" id="nDer"></div>
+    <div id="viento"></div>
+    <div id="duelo"></div>
+    <div id="fuerza"><i></i></div>
+    <div id="pista"></div>
+    <div id="golpe"></div>
+    <div id="aviso"></div>
+    <button id="bPausa">॥</button>
+    <button id="bReinicia">↺</button>
+  </div>
+
+  <div class="pan" id="pIdioma"><div class="caja">
+    <h1>ARCO</h1><div class="sub">IDIOMA · LANGUAGE</div>
+    <div class="hueco"></div>
+    <button class="bt" data-lang="es">Castellano</button>
+    <button class="bt" data-lang="en">English</button>
+    <button class="bt" data-lang="pt">Português</button>
+  </div></div>
+
+  <div class="pan abre" id="pMenu"><div class="caja">
+    <div class="grupo"><h1>ARCO</h1><div class="sub" id="mSub"></div></div>
+    <div class="grupo">
+      <button class="bt p" id="bJugar"></button>
+      <div class="fila"><button class="bt" id="bTuto"></button>
+        <button class="bt" id="bDuelos"></button></div>
+      <button class="bt" id="bAjustes"></button>
+      <div class="pie" id="mPie"></div>
+    </div>
+  </div></div>
+
+  <div class="pan" id="pDuelos"><div class="caja">
+    <h1 id="dTit"></h1><div class="sub" id="dSub"></div>
+    <div id="gDue"></div>
+    <button class="bt" id="dVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pAjustes"><div class="caja">
+    <h1 id="aTit"></h1>
+    <div class="pie" id="aMusL"></div><input type="range" id="aMus" min="0" max="100" value="50">
+    <div class="pie" id="aFxL"></div><input type="range" id="aFx" min="0" max="100" value="80">
+    <div class="pie" id="aIdiL"></div><div class="fila" id="aIdi"></div>
+    <div class="pie" id="aCalL"></div><div class="fila" id="aCal"></div>
+    <button class="bt" id="aBorrar"></button>
+    <button class="bt" id="aVolver"></button>
+  </div></div>
+
+  <div class="pan" id="pPausa"><div class="caja">
+    <h1 id="pTit"></h1><div class="sub" id="pSub"></div>
+    <div class="hueco"></div>
+    <button class="bt p" id="bSigo"></button>
+    <button class="bt" id="bReini2"></button>
+    <button class="bt" id="bSalir"></button>
+  </div></div>
+
+  <div class="pan" id="pFin"><div class="caja">
+    <h1 id="fTit"></h1><div class="sub" id="fSub"></div>
+    <div class="tx" id="fDatos"></div>
+    <div class="hueco"></div>
+    <button class="bt p" id="fSig"></button>
+    <button class="bt" id="fRe"></button>
+    <button class="bt" id="fMenu"></button>
+  </div></div>
+
+  <div id="carga"><div class="caja"><h1>ARCO</h1>
+    <div class="sub" id="cSub">CARGANDO</div>
+    <div class="barc"><i id="cBarra"></i></div></div></div>
+</div></div>
+
+<!-- NI UNA DEPENDENCIA: el juego es vector plano sobre un lienzo 2D, asi que
+     no hay CDN que pueda no contestar. Un archivo, y anda sin red. -->
+<script type="module">
+
+/* ══════════════════════════════════════════════════════════════════════════
+   B · CONSTANTES, BLOQUES, IDIOMAS Y GUARDADO
+   ══════════════════════════════════════════════════════════════════════════ */
+const $ = id => document.getElementById(id);
+const cl = (v, a, b) => v < a ? a : (v > b ? b : v);
+const mez = (a, b, k) => a + (b - a) * k;
+
+/* AZAR CON SEMILLA. Un duelo tiene que ser EL MISMO duelo en cualquier aparato
+   y en cualquier intento: si el terreno cambiara al reintentar, lo que uno
+   aprendio del tiro anterior no valdria nada — y este juego entero consiste en
+   corregir el tiro anterior.                                                */
+function azar(s) {
+  let x = (s | 0) || 1;
+  return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; x |= 0; return (x >>> 0) / 4294967296; };
+}
+
+/* ── LOS BLOQUES ──────────────────────────────────────────────────────────
+   `para` = la flecha se clava y explota.  `rompe` = el crater se lo lleva.
+   El METAL es la excepcion que hace que la distincion exista: para la flecha
+   y NO se rompe, asi que una viga de metal es una cobertura que no se puede
+   demoler a tiros — que es la unica forma de que un obstaculo siga siendo un
+   obstaculo despues del tercer disparo.                                     */
+const VACIO = 0, TIERRA = 1, PASTO = 2, PIEDRA = 3, LADRILLO = 4,
+      MADERA = 5, METAL = 6, ARENA = 7, HOJA = 8, NIEVE = 9;
+
+const BLOQ = {
+  [TIERRA]:   { col: 0x8a6647, top: 0x9a7452, para: 1, rompe: 1 },
+  [PASTO]:    { col: 0x8a6647, top: 0x79ae57, para: 1, rompe: 1 },
+  [PIEDRA]:   { col: 0x8e9aa2, top: 0xa1adb4, para: 1, rompe: 1 },
+  [LADRILLO]: { col: 0xc4705c, top: 0xd08268, para: 1, rompe: 1 },
+  [MADERA]:   { col: 0xb08a54, top: 0xc09b66, para: 1, rompe: 1 },
+  [METAL]:    { col: 0x7e8f9c, top: 0x8ea0ad, para: 1, rompe: 0 },
+  [ARENA]:    { col: 0xd6bd85, top: 0xe4cf9c, para: 1, rompe: 1 },
+  [HOJA]:     { col: 0x5f9448, top: 0x6ea855, para: 1, rompe: 1, hoja: 1 },
+  [NIEVE]:    { col: 0xa8b6be, top: 0xe8f0f4, para: 1, rompe: 1 },
+};
+const esParaT = t => t !== VACIO;
+const esRompeT = t => t !== VACIO && BLOQ[t].rompe === 1;
+
+/* ── EL MUNDO ─────────────────────────────────────────────────────────────
+   NX FIJO EN LOS DOCE DUELOS, y no es pereza: el mapeo entre lo que arrastra
+   el dedo y la velocidad de la flecha sale del tamanio de una celda en
+   pixeles. Con un ancho por duelo, la fuerza que uno aprendio en el duelo 3
+   mentiria en el 4. Lo que cambia entre duelos es el TERRENO, el viento y el
+   rival.
+   Y TODO LO DEL TERRENO SE DERIVA DE XA, XB Y XM: escrito a mano —la torre en
+   la columna 6, la viga de la 5 a la 9— agrandar el mapa deja los obstaculos
+   apilados contra el arquero de la izquierda y el duelo se rompe sin que nada
+   falle.                                                                    */
+const NX = 18, NY = 32, NZ = 5;
+const ZC = 2;              /* el plano por el que vuela la flecha: el del medio */
+const XA = 2, XB = 15;     /* las dos columnas de los arqueros — 13 celdas      */
+const XM = Math.round((XA + XB) / 2);   /* el medio de la arena, para el terreno */
+
+/* EL MAPA CRECIO Y EL ARQUERO NO SE ACHICO, y eso SOLO SE PUEDE con una
+   camara que se mueva. En un marco 9:16 el ancho manda: mostrar trece celdas
+   de separacion con un encuadre fijo dejaria al arquero en 53 px SIEMPRE.
+   Con la camara en reposo abierta y CERRANDOSE sobre la flecha en vuelo, lo
+   unico que se achica es el plano de espera —el cuerpo baja de 62 a 53 px— y
+   lo que se AGRANDA es lo que antes no se veia: en vuelo mide 73 px y la
+   flecha 39 contra 33. Es lo que hace Bowmasters.                          */
+
+/* ── LA BALISTICA ─────────────────────────────────────────────────────────
+   LOS NUMEROS NO SE ELIGEN, SE DERIVAN. Se decide que el tiro de 45 grados a
+   fondo llegue COMODAMENTE mas lejos que la separacion —si no, no habria nada
+   que elegir: siempre a fondo— y de ahi sale todo:
+     alcance a 45 = v^2/g = 900/26 = 34,6 celdas contra 11 de separacion,
+     o sea que el tiro justo pide v = raiz(g*d) = 16,9, el 56 % de la barra.
+   Con la barra saturada mucho antes del tope, la mitad de arriba sirve para
+   los tiros tensos y la de abajo para las parabolas altas: hay DOS soluciones
+   para casi cualquier blanco y elegir entre ellas es el juego.              */
+const G = 26;              /* celdas/s^2 */
+const V_MAX = 30;          /* celdas/s   */
+const PASO_F = 1 / 240;    /* la flecha se integra fino: a 30 celdas/s un paso
+                              de 1/60 son media celda y una viga de una celda
+                              se atraviesa sin tocarla */
+const ARR_MAX_PX = 0.42;   /* fraccion del ancho del marco que satura la fuerza */
+
+const VIDA_MAX = 100;
+const DANO_CUERPO = 30, DANO_CABEZA = 55, V_REF = 22;
+const CRATER_R = 1.45;     /* lo que se lleva el impacto */
+const PROTEGE_R = 1;       /* columnas de meseta que no se rompen: sin esto,
+                              dos tiros cortos le vuelan el piso al rival y se
+                              cae — perder por el suelo no es perder un duelo.
+                              Y protege SOLO la tapa (`y >= piso-1`): mas abajo
+                              el crater sigue comiendo, asi que la meseta se
+                              queda flotando y eso se ve — que es justamente lo
+                              que uno quiere ver despues de cuatro tiros.    */
+
+const DUELOS = 12;
+
+/* LAS TRES CALIDADES CAMBIAN LO QUE CUESTA, NO LO QUE EL JUEGO ES. En un
+   lienzo 2D lo unico que siempre se paga es RELLENAR PIXELES, asi que la
+   palanca de verdad es `px` —cuantos pixeles de verdad tiene el lienzo— y
+   no una lista de efectos que apagar. `det` es cuanta marca de textura, de
+   brizna y de particula se dibuja: es lo unico que se puede sacar sin que
+   el mundo cambie de forma.                                              */
+const CALIDADES = {
+  baja:  { px: 1.0, det: 0 },
+  media: { px: 1.4, det: 1 },
+  alta:  { px: 2.0, det: 2 },
+};
+
+/* ══════════════════════ IDIOMAS ══════════════════════ */
+const LANGS = {
+  es: {
+    sub: 'dos arqueros · un viento · un dedo',
+    jugar: 'JUGAR', tuto: 'CÓMO SE JUEGA', duelos: 'DUELOS', ajustes: 'AJUSTES',
+    volver: 'VOLVER', seguir: 'SEGUIR', reiniciar: 'REINICIAR', salir: 'SALIR AL MENÚ',
+    siguiente: 'SIGUIENTE', pausa: 'PAUSA', pausaSub: 'el viento te espera',
+    duelosSub: 'tocá uno para pelearlo',
+    gana: '¡GANASTE!', ganaSub: 'el otro no se levanta',
+    pierde: 'PERDISTE', pierdeSub: 'te dieron primero',
+    datos: '{0} flechas · {1} al blanco',
+    ajTit: 'AJUSTES', musica: 'MÚSICA', efectos: 'SONIDOS', idioma: 'IDIOMA',
+    calidad: 'GRÁFICOS', borrar: 'BORRAR EL PROGRESO', borrado: 'BORRADO',
+    calB: 'BAJOS', calM: 'MEDIOS', calA: 'ALTOS',
+    duelo: 'DUELO {0}', de: '{0} de {1} ganados',
+    vos: 'VOS', viento: 'VIENTO', calma: 'CALMA',
+    tuTurno: 'TU TURNO', suTurno: 'TIRA {0}',
+    pistaTira: 'arrastrá para atrás y soltá',
+    pistaRival: 'tira el rival…',
+    pistaFuerza: 'cuanto más lejos tirás del dedo, más fuerte',
+    falla: 'AFUERA', cabezazo: '¡EN LA CABEZA!',
+    pie: 'sin un solo asset · todo dibujado por código', cargando: 'CARGANDO',
+    tutTit: 'TUTORIAL',
+    tut1: 'arrastrá para atrás como si tensaras el arco',
+    tut2: 'más largo el arrastre, más fuerte el tiro',
+    tut3: 'soltá y mirá dónde cae',
+    tut4: 'el viento la empuja · corregí y dale de nuevo',
+    tutGana: '¡ESO ES TODO!', tutGanaSub: 'ya sabés tirar',
+    tutDatos: 'arrastrar, soltar, corregir · nada más',
+  },
+  en: {
+    sub: 'two archers · one wind · one finger',
+    jugar: 'PLAY', tuto: 'HOW TO PLAY', duelos: 'DUELS', ajustes: 'SETTINGS',
+    volver: 'BACK', seguir: 'RESUME', reiniciar: 'RESTART', salir: 'BACK TO MENU',
+    siguiente: 'NEXT', pausa: 'PAUSED', pausaSub: 'the wind will wait',
+    duelosSub: 'tap one to fight it',
+    gana: 'YOU WIN!', ganaSub: 'the other one is down',
+    pierde: 'YOU LOSE', pierdeSub: 'they got you first',
+    datos: '{0} arrows · {1} on target',
+    ajTit: 'SETTINGS', musica: 'MUSIC', efectos: 'SOUNDS', idioma: 'LANGUAGE',
+    calidad: 'GRAPHICS', borrar: 'ERASE PROGRESS', borrado: 'ERASED',
+    calB: 'LOW', calM: 'MEDIUM', calA: 'HIGH',
+    duelo: 'DUEL {0}', de: '{0} of {1} won',
+    vos: 'YOU', viento: 'WIND', calma: 'CALM',
+    tuTurno: 'YOUR TURN', suTurno: '{0} SHOOTS',
+    pistaTira: 'drag backwards and let go',
+    pistaRival: 'rival is shooting…',
+    pistaFuerza: 'the further you pull, the harder it flies',
+    falla: 'MISS', cabezazo: 'HEADSHOT!',
+    pie: 'not one asset · all drawn in code', cargando: 'LOADING',
+    tutTit: 'TUTORIAL',
+    tut1: 'drag backwards, like drawing a bowstring',
+    tut2: 'the longer the drag, the harder the shot',
+    tut3: 'let go and watch where it lands',
+    tut4: 'the wind pushes it · correct and shoot again',
+    tutGana: "THAT'S ALL!", tutGanaSub: 'you know how to shoot',
+    tutDatos: 'drag, release, correct · nothing else',
+  },
+  pt: {
+    sub: 'dois arqueiros · um vento · um dedo',
+    jugar: 'JOGAR', tuto: 'COMO SE JOGA', duelos: 'DUELOS', ajustes: 'AJUSTES',
+    volver: 'VOLTAR', seguir: 'CONTINUAR', reiniciar: 'REINICIAR', salir: 'SAIR AO MENU',
+    siguiente: 'PRÓXIMO', pausa: 'PAUSA', pausaSub: 'o vento espera',
+    duelosSub: 'toque em um para lutar',
+    gana: 'VOCÊ VENCEU!', ganaSub: 'o outro não levanta',
+    pierde: 'VOCÊ PERDEU', pierdeSub: 'acertaram você primeiro',
+    datos: '{0} flechas · {1} no alvo',
+    ajTit: 'AJUSTES', musica: 'MÚSICA', efectos: 'SONS', idioma: 'IDIOMA',
+    calidad: 'GRÁFICOS', borrar: 'APAGAR O PROGRESSO', borrado: 'APAGADO',
+    calB: 'BAIXOS', calM: 'MÉDIOS', calA: 'ALTOS',
+    duelo: 'DUELO {0}', de: '{0} de {1} vencidos',
+    vos: 'VOCÊ', viento: 'VENTO', calma: 'CALMA',
+    tuTurno: 'SUA VEZ', suTurno: '{0} ATIRA',
+    pistaTira: 'arraste para trás e solte',
+    pistaRival: 'o rival vai atirar…',
+    pistaFuerza: 'quanto mais puxa, mais forte o tiro',
+    falla: 'ERROU', cabezazo: 'NA CABEÇA!',
+    pie: 'sem um único asset · tudo desenhado em código', cargando: 'CARREGANDO',
+    tutTit: 'TUTORIAL',
+    tut1: 'arraste para trás como se tensasse o arco',
+    tut2: 'quanto mais longo o arrasto, mais forte',
+    tut3: 'solte e veja onde cai',
+    tut4: 'o vento empurra · corrija e atire de novo',
+    tutGana: 'É SÓ ISSO!', tutGanaSub: 'você já sabe atirar',
+    tutDatos: 'arrastar, soltar, corrigir · nada mais',
+  },
+};
+let LANG = 'en';
+/* `TX` Y NO `t`: una funcion global de una letra la pisa cualquier cosa que
+   comparta la pagina, y cuando se pisa no falla el idioma — falla TODO.    */
+function TX(k, ...a) {
+  let s = (LANGS[LANG] && LANGS[LANG][k]) != null ? LANGS[LANG][k] : (LANGS.es[k] || k);
+  for (let i = 0; i < a.length; i++) s = s.split('{' + i + '}').join(a[i]);
+  return s;
+}
+
+/* ══════════════════════ EL GUARDADO ══════════════════════
+   En una ventana privada `localStorage` TIRA: todo va envuelto.            */
+const PROG = { lang: null, hechos: [], vol: 0.5, fx: 0.8, cal: 'media', visto: 0 };
+function cargaProg() {
+  try {
+    const s = localStorage.getItem('arco');
+    if (!s) return false;
+    const o = JSON.parse(s);
+    if (o && typeof o === 'object') Object.assign(PROG, o);
+    /* EL TUTORIAL SE VE CADA VEZ QUE SE ABRE EL JUEGO, y por eso la marca
+       NO SOBREVIVE A UNA RECARGA. Pedido textual: «cada vez que inicie en
+       cada juego, siempre hay un tutorial». Se pone en cero DESPUES de leer
+       el disco, asi que sigue valiendo DENTRO de la sesion —terminado una
+       vez, no vuelve a dispararse entre partida y partida— y lo unico que
+       se pierde es que un jugador viejo se lo saltee de entrada. Es el
+       unico dato del guardado que se descarta a proposito: el resto
+       —idioma, niveles, monedas, ajustes— sigue igual.                   */
+    PROG.visto = 0;
+    if (PROG.lang) LANG = PROG.lang;
+    return !!PROG.lang;
+  } catch (e) { return false; }
+}
+function guardaProg() { try { PROG.lang = LANG; localStorage.setItem('arco', JSON.stringify(PROG)); } catch (e) {} }
+function borraProg() {
+  PROG.hechos = []; PROG.visto = 0;
+  try { localStorage.removeItem('arco'); } catch (e) {}
+}
+/* «el siguiente al ultimo ganado, mas uno de gracia»: con el siguiente y nada
+   mas, un rival que a alguien no le sale le cierra el juego entero.        */
+function abierto(n) {
+  if (n === 0) return true;
+  let m = -1;
+  for (const h of PROG.hechos) if (h > m) m = h;
+  return n <= m + 2;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   C · EL MUNDO DE VOXELES Y LOS DOCE DUELOS
+
+   El mundo es una silueta 2D en XY extruida NZ celdas en profundidad, y la
+   flecha vuela por el plano del medio. Eso no es una concesion: en un tiro
+   parabolico lo unico que importa son dos ejes, y hacerlo tridimensional de
+   verdad obligaria al jugador a acertar una PROFUNDIDAD, que es exactamente
+   lo que una pantalla plana y un dedo no pueden dar. Lo tridimensional es el
+   dibujo — el volumen de los bloques, el canto de las mesetas, la sombra —
+   no la mecanica.                                                          */
+
+function nuevoMundo(nx, ny, nz) {
+  return { nx, ny, nz, v: new Uint8Array(nx * ny * nz) };
+}
+const iM = (M, x, y, z) => (y * M.nz + z) * M.nx + x;
+function en(M, x, y, z) {
+  if (x < 0 || y < 0 || z < 0 || x >= M.nx || y >= M.ny || z >= M.nz) return VACIO;
+  return M.v[iM(M, x, y, z)];
+}
+function pon(M, x, y, z, t) {
+  if (x < 0 || y < 0 || z < 0 || x >= M.nx || y >= M.ny || z >= M.nz) return;
+  M.v[iM(M, x, y, z)] = t;
+}
+/* la altura de una columna: la primera celda vacia contando desde arriba */
+function altura(M, x) {
+  for (let y = M.ny - 1; y >= 0; y--) if (en(M, x, y, ZC) !== VACIO) return y + 1;
+  return 0;
+}
+
+/* ── LOS BIOMAS ───────────────────────────────────────────────────────── */
+const BIOMAS = {
+  pradera:  { base: TIERRA, sup: PASTO, pal: 0 },
+  desierto: { base: ARENA,  sup: ARENA, pal: 1 },
+  monte:    { base: PIEDRA, sup: NIEVE, pal: 2 },
+  bosque:   { base: TIERRA, sup: PASTO, pal: 3 },
+};
+
+/* ── LOS DOCE DUELOS ──────────────────────────────────────────────────────
+   Lo que sube no es «la vida del rival» sino TRES cosas que cambian lo que
+   hay que decidir: cuanto empuja el viento, cuanto tapa el terreno y cuanto
+   acierta el otro. Subir vida nada mas alarga el duelo sin agregar una sola
+   decision — y este juego dura lo que dura un duelo.                       */
+const DUELO = [
+  { sem: 1101, bio: 'pradera',  forma: 'llano',   viento: 0,    prec: 0.26, rival: 'TITO'    },
+  { sem: 2207, bio: 'pradera',  forma: 'escalon', viento: 0,    prec: 0.34, rival: 'LULA'    },
+  { sem: 3313, bio: 'desierto', forma: 'llano',   viento: 2.2,  prec: 0.40, rival: 'NANO'    },
+  { sem: 4419, bio: 'desierto', forma: 'valle',   viento: -2.8, prec: 0.46, rival: 'PILA'    },
+  { sem: 5527, bio: 'bosque',   forma: 'bosque',  viento: 1.6,  prec: 0.52, rival: 'CHINO'   },
+  { sem: 6631, bio: 'bosque',   forma: 'torre',   viento: -3.4, prec: 0.57, rival: 'ZORRO'   },
+  { sem: 7741, bio: 'monte',    forma: 'mesa',    viento: 3.0,  prec: 0.62, rival: 'BRUMA'   },
+  { sem: 8849, bio: 'monte',    forma: 'pico',    viento: -4.0, prec: 0.68, rival: 'CACHO'   },
+  { sem: 9953, bio: 'pradera',  forma: 'viga',    viento: 2.6,  prec: 0.74, rival: 'NIEBLA'  },
+  { sem: 1063, bio: 'desierto', forma: 'torre',   viento: -4.6, prec: 0.80, rival: 'FIERRO'  },
+  { sem: 1171, bio: 'monte',    forma: 'valle',   viento: 5.0,  prec: 0.86, rival: 'RAYO'    },
+  { sem: 1283, bio: 'bosque',   forma: 'pico',    viento: -5.0, prec: 0.92, rival: 'EL VIEJO'},
+];
+
+/* ── EL PERFIL DEL TERRENO ────────────────────────────────────────────────
+   Devuelve la altura de cada columna. Las dos mesetas de los arqueros se
+   APLANAN DESPUES, siempre: una forma que deje al arquero en una pendiente
+   lo deja parado en el canto de un bloque, y ahi el arco se dibuja medio
+   metido en la tierra.                                                     */
+function perfilDe(forma, rnd) {
+  const h = new Array(NX);
+  const ondas = (x, a, b) => 0.5 * a * Math.sin(x * 0.55 + b) + 0.4 * a * Math.sin(x * 1.31 + b * 2.1);
+  const f1 = rnd() * 6.28, f2 = rnd() * 6.28;
+  for (let x = 0; x < NX; x++) h[x] = 7;
+
+  if (forma === 'llano' || forma === 'bosque' || forma === 'torre' || forma === 'viga') {
+    for (let x = 0; x < NX; x++) h[x] = Math.round(7 + ondas(x, 1.6, f1));
+  } else if (forma === 'escalon') {
+    for (let x = 0; x < NX; x++) {
+      const k = cl((x - (XA + 3)) / (XB - XA - 4), 0, 1);
+      h[x] = Math.round(mez(6, 12, k * k * (3 - 2 * k)) + ondas(x, 0.9, f2));
+    }
+  } else if (forma === 'valle') {
+    for (let x = 0; x < NX; x++) {
+      const d = cl(Math.abs(x - (XA + XB) / 2) / ((XB - XA) / 2 + 2), 0, 1);
+      h[x] = Math.round(mez(2, 10, d * d) + ondas(x, 0.8, f1));
+    }
+  } else if (forma === 'mesa') {
+    for (let x = 0; x < NX; x++) {
+      const cerca = Math.min(Math.abs(x - XA), Math.abs(x - XB));
+      h[x] = cerca <= 2 ? Math.round(11 + ondas(x, 0.7, f1)) : Math.round(1 + rnd() * 1.4);
+    }
+  } else if (forma === 'pico') {
+    for (let x = 0; x < NX; x++) {
+      const d = cl(Math.abs(x - (XA + XB) / 2) / ((XB - XA) / 2 + 2), 0, 1);
+      h[x] = Math.round(mez(15, 6, Math.pow(d, 0.85)) + ondas(x, 0.7, f2));
+    }
+  }
+  for (let x = 0; x < NX; x++) h[x] = cl(h[x], 1, NY - 12);
+  /* las dos mesetas: tres columnas planas a la altura de la del arquero */
+  for (const X of [XA, XB]) {
+    const hh = h[X];
+    for (let d = -1; d <= 1; d++) { const x = X + d; if (x >= 0 && x < NX) h[x] = hh; }
+  }
+  return h;
+}
+
+/* ── ARMAR EL MUNDO ───────────────────────────────────────────────────────
+   EL OBSTACULO SE BAJA HASTA QUE EL DUELO SE PUEDA JUGAR, y esto no es una
+   red de seguridad de mas: `armaMundo` tiraba torres de 16 y 17 celdas de
+   alto a tres columnas del arquero, y con V_MAX 30 desde la boca del arco no
+   hay parabola que las pase — medido, la mas barata que las cruza pide 39,7.
+   Los duelos 6 y 10 salian IMPOSIBLES en los dos sentidos y nada avisaba:
+   desde afuera se ve igual que un jugador que no sabe apuntar.
+
+   Asi que el generador PROPONE y el resolvedor —el mismo que usa el rival—
+   DISPONE: se baja el obstaculo de a un 11 % hasta que haya tiro limpio en
+   los dos sentidos. Es determinista (la semilla se rehace en cada intento),
+   asi que el duelo n sigue siendo siempre el mismo duelo.                 */
+function generaMundo(n) {
+  let M = null;
+  for (let i = 0; i < 9; i++) {
+    M = armaMundo(n, 1 - i * 0.11);
+    if (resuelve(M, 0, M.viento) && resuelve(M, 1, M.viento)) { M.oc = 1 - i * 0.11; return M; }
+  }
+  M.oc = 0;
+  return M;
+}
+
+function armaMundo(n, oc) {
+  const D = DUELO[n % DUELO.length];
+  const B = BIOMAS[D.bio];
+  const rnd = azar(D.sem);
+  const M = nuevoMundo(NX, NY, NZ);
+  M.n = n; M.paleta = B.pal; M.bio = D.bio; M.forma = D.forma;
+  M.viento = D.viento; M.rival = D.rival; M.prec = D.prec;
+
+  const h = perfilDe(D.forma, rnd);
+  M.h = h;
+  for (let x = 0; x < NX; x++) for (let y = 0; y < h[x]; y++) {
+    const t = (y === h[x] - 1) ? B.sup : B.base;
+    for (let z = 0; z < NZ; z++) pon(M, x, y, z, t);
+  }
+
+  /* LOS OBSTACULOS VAN LEJOS DE LOS DOS ARQUEROS. Uno pegado al arco tapa la
+     salida de la flecha y el duelo se vuelve imposible sin que nada avise —
+     y encima no se ve, porque desde la camara queda detras del arquero.    */
+  const libre = x => Math.abs(x - XA) > 2.5 && Math.abs(x - XB) > 2.5;
+  if (D.forma === 'torre') {
+    /* LA TORRE VA EN EL MEDIO EXACTO Y NO SE MUEVE. Mide dos bloques, asi
+       que x0 = XM-1 la deja ocupando [8,10] con su centro en 9,0, que es el
+       medio entre los dos arqueros. Corrida una celda —que es lo que hacia
+       el sorteo— la tiene mas cerca uno de los dos, y lo que ya varia es la
+       altura, que es lo que de verdad cambia el tiro.                     */
+    const x0 = XM - 1;
+    const alt = h[x0] + Math.max(2, Math.round((8 + Math.floor(rnd() * 3)) * oc));
+    for (let x = x0; x <= x0 + 1; x++) for (let y = h[x]; y < alt; y++)
+      for (let z = 0; z < NZ; z++) pon(M, x, y, z, LADRILLO);
+    /* la cornisa de metal: es lo unico que los craters no se llevan, asi que
+       la torre puede perder ladrillos y seguir siendo una torre */
+    for (let x = x0 - 1; x <= x0 + 2; x++) for (let z = 0; z < NZ; z++) pon(M, x, alt, z, METAL);
+  } else if (D.forma === 'viga') {
+    const y0 = Math.round(h[XM - 1] + Math.max(2, (9 + Math.floor(rnd() * 3)) * oc));
+    for (let x = XM - 2; x <= XM + 1; x++) for (let z = 0; z < NZ; z++) pon(M, x, y0, z, METAL);
+  } else if (D.forma === 'bosque') {
+    for (let x = XA + 2; x < NX - 3; x++) {
+      if (!libre(x) || rnd() > 0.34) continue;
+      const t0 = h[x], alt = 4 + Math.floor(rnd() * 3);
+      for (let y = t0; y < t0 + alt; y++) for (let z = 1; z < NZ - 1; z++) pon(M, x, y, z, MADERA);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = 0; dy <= 2; dy++)
+        for (let z = 0; z < NZ; z++) {
+          if (Math.abs(dx) + Math.abs(dy - 1) > 2) continue;
+          if (en(M, x + dx, t0 + alt + dy - 1, z) === VACIO) pon(M, x + dx, t0 + alt + dy - 1, z, HOJA);
+        }
+      x += 2;
+    }
+  }
+
+  M.pisoA = altura(M, XA);
+  M.pisoB = altura(M, XB);
+  return M;
+}
+
+/* ── EL CRATER ────────────────────────────────────────────────────────────
+   SE LLEVA LA COLUMNA ENTERA EN z Y NO UNA ESFERA. Con esfera, un impacto en
+   la cara de adelante deja un hueco de una celda de hondo y desde la camara
+   —que mira casi de frente— eso se lee a mancha, no a agujero. Con cilindro
+   se ve el hueco de lado a lado y el terreno cambia de verdad.
+   Y LAS DOS MESETAS NO SE ROMPEN: dos tiros cortos al pie del rival le
+   volarian el piso, y perder por caerse no es perder un duelo de arcos.   */
+function crater(M, cx, cy, r) {
+  let n = 0;
+  const r2 = r * r;
+  const R = Math.ceil(r);
+  for (let x = Math.floor(cx) - R; x <= Math.floor(cx) + R; x++) {
+    if (x < 0 || x >= M.nx) continue;
+    const prot = (Math.abs(x - XA) <= PROTEGE_R) ? M.pisoA
+               : (Math.abs(x - XB) <= PROTEGE_R) ? M.pisoB : -1;
+    for (let y = Math.floor(cy) - R; y <= Math.floor(cy) + R; y++) {
+      if (y < 0 || y >= M.ny) continue;
+      if (prot >= 0 && y >= prot - 1) continue;
+      const dx = (x + 0.5) - cx, dy = (y + 0.5) - cy;
+      if (dx * dx + dy * dy > r2) continue;
+      for (let z = 0; z < M.nz; z++) {
+        const t = M.v[iM(M, x, y, z)];
+        if (t !== VACIO && BLOQ[t].rompe === 1) { M.v[iM(M, x, y, z)] = VACIO; n++; }
+      }
+    }
+  }
+  return n;
+}
+
+/* de donde sale la flecha: la mano del arco. Sale de UNA funcion porque la
+   usan el tiro del jugador, el del rival, el resolvedor balistico y el brazo
+   que se dibuja — con cuatro cuentas, la flecha saldria de un sitio distinto
+   del que se ve el arco.
+
+   Y VA MEDIO CUERPO POR DELANTE, no en el eje del arquero. Con la boca en el
+   centro, el arco se dibuja ADENTRO del torso y no se lee ninguno de los dos;
+   y la flecha nace dentro de la caja del propio tirador, o sea que sale viva
+   de milagro y solo porque `vuela` le perdona los primeros 0,30 s. Con 0,62
+   —mas que el medio ancho del cuerpo, que es 0,52— nace al aire.          */
+/* LA BOCA DEL ARCO ES LA MANO ADELANTADA, Y ESTABA A LA ALTURA DE LA PANZA.
+   El hombro esta en 1,82 y el brazo alcanza 0,96: con 0,62 adelante y 1,55 de
+   alto la mano quedaba 27 cm POR DEBAJO del hombro y a 0,68 de el —el 70 % del
+   alcance— o sea el arco agarrado a la cadera y el codo doblado. Un arquero
+   extiende el brazo: 0,84 adelante y 1,70 de alto dejan la mano a 0,85 del
+   hombro (el 89 %) y casi al nivel de los ojos.
+   Y SE MUEVE ACA Y NO EN EL DIBUJO porque de aca sale tambien el origen del
+   vuelo: con dos numeros, la flecha saldria de donde no esta el arco.      */
+const FRENTE_BOCA = 0.84;
+function bocaDe(M, lado) {
+  const X = lado ? XB : XA, piso = lado ? M.pisoB : M.pisoA;
+  const s = lado ? -1 : 1;                 /* el de la derecha mira a -X */
+  return { x: X + 0.5 + s * FRENTE_BOCA, y: piso + 1.70 };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   D · LA BALISTICA, EL CHOQUE, EL RIVAL Y LA AUDITORIA
+
+   UNA SOLA FUNCION VUELA UNA FLECHA, y la usan las CUATRO cosas que necesitan
+   saber donde cae: el tiro del jugador, el tiro del rival, el resolvedor que
+   le dice al rival como apuntar, y la auditoria que comprueba que cada duelo
+   se pueda ganar. Con dos integradores, el rival estaria apuntando a un juego
+   que no existe y la auditoria aprobaria duelos imposibles.                */
+
+/* la caja del arquero: cuerpo y cabeza. Las mismas medidas que dibuja el rig
+   —y por eso viven aca, antes de f.js— porque si el dibujo y el blanco fueran
+   dos cuentas, el jugador le pegaria al aire donde ve un cuerpo.           */
+const ARQ_MED = 0.52;   /* medio ancho del cuerpo    */
+const ARQ_ALTO = 2.10;  /* del piso al cuello        */
+const CAB_MED = 0.42;
+const CAB_ALTO = 0.90;  /* del cuello a la coronilla */
+
+function cajaArq(M, lado) {
+  const X = (lado ? XB : XA) + 0.5, p = lado ? M.pisoB : M.pisoA;
+  return { x: X, p,
+    cx0: X - ARQ_MED, cx1: X + ARQ_MED, cy0: p, cy1: p + ARQ_ALTO,
+    hx0: X - CAB_MED, hx1: X + CAB_MED, hy0: p + ARQ_ALTO, hy1: p + ARQ_ALTO + CAB_ALTO };
+}
+
+/* ── EL VUELO ─────────────────────────────────────────────────────────────
+   Integracion a 240 pasos por segundo y no a 60. A 30 celdas/s un paso de
+   1/60 son media celda: una viga de una celda de espesor se atraviesa sin
+   tocarla y el jugador ve la flecha pasar POR DENTRO del metal.           */
+function vuela(M, x0, y0, vx, vy, w, tirador) {
+  let x = x0, y = y0, t = 0;
+  const pts = [];
+  let acum = 0;
+  const A = cajaArq(M, 0), B = cajaArq(M, 1);
+  for (let i = 0; i < 2400; i++) {
+    /* muestreo para la estela y para la vista previa */
+    if (acum <= 0) { pts.push(x, y); acum = 13; }
+    acum--;
+    const nvx = vx + w * PASO_F, nvy = vy - G * PASO_F;
+    const nx = x + nvx * PASO_F, ny = y + nvy * PASO_F;
+    t += PASO_F; vx = nvx; vy = nvy; x = nx; y = ny;
+
+    if (x < -1.5 || x > NX + 1.5 || y < -2 || t > 9)
+      return { fin: 'fuera', x, y, t, v: Math.hypot(vx, vy), pts };
+
+    /* los arqueros primero: estan APOYADOS en el suelo, asi que su caja no
+       se pisa con ningun bloque y el orden no puede dar dos respuestas */
+    for (const [q, C] of [[0, A], [1, B]]) {
+      if (q === tirador && t < 0.30) continue;
+      if (x >= C.hx0 && x <= C.hx1 && y >= C.hy0 && y <= C.hy1)
+        return { fin: 'arq', quien: q, cab: true, x, y, t, v: Math.hypot(vx, vy), pts };
+      if (x >= C.cx0 && x <= C.cx1 && y >= C.cy0 && y <= C.cy1)
+        return { fin: 'arq', quien: q, cab: false, x, y, t, v: Math.hypot(vx, vy), pts };
+    }
+    const bx = Math.floor(x), by = Math.floor(y);
+    if (by < M.ny) {
+      const tp = en(M, bx, by, ZC);
+      if (tp !== VACIO)
+        return { fin: 'suelo', tipo: tp, x, y, t, v: Math.hypot(vx, vy), pts };
+    }
+  }
+  return { fin: 'fuera', x, y, t, v: Math.hypot(vx, vy), pts };
+}
+
+/* ── EL RESOLVEDOR ────────────────────────────────────────────────────────
+   Fijado el tiempo de vuelo, la velocidad sale de dos ecuaciones y no hay
+   nada que buscar:
+       vx = (dx - w*t^2/2) / t        vy = (dy + g*t^2/2) / t
+   Asi que se barre el TIEMPO y no el angulo. Y cada candidato se VUELA de
+   verdad contra el terreno antes de darlo por bueno: la formula dice donde
+   CAERIA, no si LLEGA — una parabola perfecta que atraviesa una torre es
+   exactamente el tiro que un rival no puede hacer.                        */
+function resuelve(M, desde, w) {
+  const O = bocaDe(M, desde);
+  const C = cajaArq(M, 1 - desde);
+  const tx = C.x, ty = C.p + 0.95;
+  let mejor = null;
+  for (let t = 0.30; t <= 3.20; t += 0.02) {
+    const vx = ((tx - O.x) - w * t * t / 2) / t;
+    const vy = ((ty - O.y) + G * t * t / 2) / t;
+    const v = Math.hypot(vx, vy);
+    if (v > V_MAX) continue;
+    if (mejor && v >= mejor.v) continue;      /* ya tenemos uno mas barato */
+    const r = vuela(M, O.x, O.y, vx, vy, w, desde);
+    if (r.fin !== 'arq' || r.quien === desde) continue;
+    mejor = { vx, vy, v, t };
+  }
+  return mejor;
+}
+
+/* el rival apunta bien y despues se equivoca a proposito. El error va en el
+   ANGULO y en la fuerza por separado: con un solo numero, un rival malo
+   fallaria siempre para el mismo lado y se le aprenderia el sesgo.        */
+function tiroRival(M, prec, rnd) {
+  const s = resuelve(M, 1, M.viento);
+  if (!s) {  /* no hay tiro limpio: tira alto y a la buena de Dios */
+    return { vx: -14 - rnd() * 6, vy: 16 + rnd() * 7 };
+  }
+  const e = 1 - cl(prec, 0, 1);
+  const ang = Math.atan2(s.vy, s.vx) + (rnd() * 2 - 1) * e * 0.30;
+  const vel = cl(s.v * (1 + (rnd() * 2 - 1) * e * 0.22), 3, V_MAX);
+  return { vx: Math.cos(ang) * vel, vy: Math.sin(ang) * vel };
+}
+
+/* ── EL DANO ──────────────────────────────────────────────────────────────
+   Escala con la velocidad de impacto porque si no, una flecha que llega
+   arrastrandose al final de una parabola de tres segundos pega lo mismo que
+   una tensa — y entonces no habria ninguna razon para tirar fuerte.       */
+function danoDe(r) {
+  const k = cl(r.v / V_REF, 0.42, 1.30);
+  return Math.max(6, Math.round((r.cab ? DANO_CABEZA : DANO_CUERPO) * k));
+}
+
+/* ── AUDITORIA ────────────────────────────────────────────────────────────
+   Un duelo del que no se puede llegar al otro no es dificil: es imposible, y
+   desde afuera se ve igual que un jugador que no sabe apuntar. Se comprueba
+   en LOS DOS SENTIDOS —el rival tiene que poder contestar— y ademas que la
+   boca del arco no nazca adentro de un bloque.                            */
+function auditaDuelos() {
+  const malos = [];
+  const filas = [];
+  for (let n = 0; n < DUELOS; n++) {
+    const M = generaMundo(n);
+    const a = resuelve(M, 0, M.viento);
+    const b = resuelve(M, 1, M.viento);
+    const oa = bocaDe(M, 0), ob = bocaDe(M, 1);
+    const libreA = en(M, Math.floor(oa.x), Math.floor(oa.y), ZC) === VACIO;
+    const libreB = en(M, Math.floor(ob.x), Math.floor(ob.y), ZC) === VACIO;
+    const ok = !!a && !!b && libreA && libreB;
+    if (!ok) malos.push({ n, a: !!a, b: !!b, libreA, libreB });
+    filas.push({ n, forma: M.forma, va: a ? +a.v.toFixed(1) : null,
+                 vb: b ? +b.v.toFixed(1) : null, ta: a ? +a.t.toFixed(2) : null,
+                 pisoA: M.pisoA, pisoB: M.pisoB });
+  }
+  return { ok: malos.length === 0, malos, filas };
+}
+
+/* ── AUTO-JUGADOR ─────────────────────────────────────────────────────────
+   Juega el duelo entero por el mismo camino que el dedo: resuelve, mete su
+   propio error, vuela la flecha, aplica el crater y el dano. La separacion
+   entre el honesto y el que tira al azar es lo unico que prueba que hay una
+   decision adentro y no una moneda.                                       */
+function juegaSolo(n, prec, sem) {
+  const M = generaMundo(n);
+  const rnd = azar(sem || (7000 + n * 131));
+  let va = VIDA_MAX, vb = VIDA_MAX, flechas = 0, aciertos = 0, turno = 0;
+  while (va > 0 && vb > 0 && flechas < 60) {
+    const tirador = turno;
+    let d;
+    if (tirador === 0) {
+      if (prec < 0) {                       /* el del azar: angulo y fuerza a ciegas */
+        const ang = rnd() * 1.4 - 0.1, vel = 6 + rnd() * (V_MAX - 6);
+        d = { vx: Math.cos(ang) * vel, vy: Math.sin(ang) * vel };
+      } else {
+        const s = resuelve(M, 0, M.viento);
+        if (!s) d = { vx: 14 + rnd() * 6, vy: 16 + rnd() * 7 };
+        else {
+          const e = 1 - cl(prec, 0, 1);
+          const ang = Math.atan2(s.vy, s.vx) + (rnd() * 2 - 1) * e * 0.30;
+          const vel = cl(s.v * (1 + (rnd() * 2 - 1) * e * 0.22), 3, V_MAX);
+          d = { vx: Math.cos(ang) * vel, vy: Math.sin(ang) * vel };
+        }
+      }
+    } else d = tiroRival(M, M.prec, rnd);
+    const O = bocaDe(M, tirador);
+    const r = vuela(M, O.x, O.y, d.vx, d.vy, M.viento, tirador);
+    flechas++;
+    if (r.fin === 'arq') {
+      const dn = danoDe(r);
+      if (r.quien === 0) va -= dn; else { vb -= dn; if (tirador === 0) aciertos++; }
+    } else if (r.fin === 'suelo') crater(M, r.x, r.y, CRATER_R);
+    turno = 1 - turno;
+  }
+  return { gano: vb <= 0 && va > 0, va: Math.max(0, va), vb: Math.max(0, vb), flechas, aciertos };
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   E · EL DIBUJO EN 2D
+
+   ESTE JUEGO NO ES TRIDIMENSIONAL Y NO TIENE QUE PARECERLO. La referencia
+   —Bowmasters— es vector plano: siluetas saturadas, cantos redondeados, cero
+   perspectiva y cero sombras proyectadas. Lo que da profundidad ahi no es el
+   volumen sino LAS CAPAS: cielo, dos bandas de fondo, el terreno adelante, y
+   cada una de un solo color mas plano y mas frio cuanto mas lejos.
+
+   Y EN UN JUEGO DE TIRO PARABOLICO EL 2D NO ES UNA CONCESION: la unica
+   decision es un vector en un plano, asi que la tercera dimension no aporta
+   una sola eleccion y cuesta el apuntado. Con camara ortografica plana el
+   puente entre el dedo y el mundo es una multiplicacion —error exactamente
+   cero, medido— y no una matriz proyectada que hay que mantener al dia.
+
+   LA UNIDAD ES LA CELDA Y EL LIENZO SE TRANSFORMA UNA VEZ. Todo se dibuja en
+   coordenadas del mundo (x a la derecha, y hacia arriba) adentro de un
+   `scale(PX, -PX)`: asi el dibujo y la fisica hablan el mismo idioma y no hay
+   dos cuentas que se puedan separar. El precio es que los grosores de linea
+   van en celdas, que es como corresponde — un arco no engorda porque la
+   pantalla sea mas grande.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let CV = null, G2 = null;
+let ANCHO = 412, ALTO = 892, DPR = 1;
+let PX = 26, OFX = 0, OFY = 0;
+let ENC_W = 8, ENC_H = 18, MIRA = 16;
+let DIO = null;
+let LLAM = 0, LLAM_ANT = 0;
+let DET = 1;
+
+/* ── LA CAMARA ────────────────────────────────────────────────────────────
+   HAY UNA CAMARA PORQUE EL MAPA CRECIO, y las dos cosas son la misma
+   decision. En un marco 9:16 el ancho manda: mostrar de una las trece celdas
+   que separan a los arqueros deja el cuerpo en 62 px y la flecha en 20 —o
+   sea que la flecha del rival, que cruza el cuadro en cuatro decimas, no se
+   ve—. Con encuadre fijo no hay numero que arregle las dos cosas: agrandar
+   el mapa achica todo lo que hay adentro.
+
+   ASI QUE EL ENCUADRE SE ABRE EN REPOSO Y SE CIERRA SOBRE LA FLECHA. Lo
+   unico que se achica es el plano de espera —el cuerpo del arquero baja de
+   62 a 53 px— y lo que se AGRANDA es justamente lo que antes no se veia: en
+   vuelo el cuerpo mide 73 px y la flecha 39 contra 33. Medido en el marco de
+   412: 25,1 px por celda esperando y 34,9 en vuelo.
+
+   Y APUNTAR NO SE ROMPE, que es lo que hay que comprobar antes de mover una
+   camara en un juego de punteria: `mundoAPant` es una escala UNIFORME, asi
+   que un DELTA pasado por `pantAMundo` conserva la direccion —la escala se
+   divide sola al normalizar— y la fuerza sale de pixeles del marco. Las dos
+   son invariantes al zoom, medido.                                        */
+const CEL_REPOSO = 16.4;   /* celdas de ancho esperando  */
+const CEL_VUELO  = 11.8;   /* celdas de ancho en vuelo   */
+const CAM_VEL = 3.6;       /* con que rapidez sigue      */
+const CAM_ZOOM = 2.8;      /* y con que rapidez cierra   */
+const CAM_ALTO = 7;        /* cuanto puede subir sobre el piso siguiendo la flecha */
+/* EL ENCUADRE SE CENTRA EN LA ARENA, NO EN EL MUNDO: el medio entre los dos
+   arqueros es 8,5 y el del mundo 9, asi que centrando en el mundo el de la
+   derecha queda media celda mas cerca del canto que el de la izquierda. */
+const ENC_CX = (XA + XB) / 2 + 0.5;
+const SUELO_Y = -1.15;     /* la linea del mundo que cae en el canto de abajo */
+const CAM = { cx: ENC_CX, cy: 16, cel: CEL_REPOSO, foco: null };
+/* medio alto visible, en celdas, para un ancho dado */
+const camAlto = cel => ALTO * cel / (2 * ANCHO);
+
+/* ── COLOR ────────────────────────────────────────────────────────────────
+   Todo pasa por aca. Con los colores escritos a mano en cada sitio, subir la
+   saturacion del juego seria tocar cuarenta literales y olvidarse de tres. */
+const cl255 = v => v < 0 ? 0 : (v > 255 ? 255 : v);
+function _h2r(h) { return [(h >> 16) & 255, (h >> 8) & 255, h & 255]; }
+function _r2c(r) { return 'rgb(' + Math.round(cl255(r[0])) + ',' + Math.round(cl255(r[1])) + ',' + Math.round(cl255(r[2])) + ')'; }
+function _rgba(r, a) { return 'rgba(' + Math.round(cl255(r[0])) + ',' + Math.round(cl255(r[1])) + ',' + Math.round(cl255(r[2])) + ',' + a + ')'; }
+function _hsl(r) {
+  const R = r[0] / 255, G = r[1] / 255, B = r[2] / 255;
+  const mx = Math.max(R, G, B), mn = Math.min(R, G, B), d = mx - mn;
+  let h = 0; const l = (mx + mn) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (d !== 0) {
+    if (mx === R) h = ((G - B) / d) % 6; else if (mx === G) h = (B - R) / d + 2; else h = (R - G) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  return [h, s, l];
+}
+function _rgbDe(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; } else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+/* LA SATURACION VA EN UNA FUNCION Y ANTES DEL TINTE, que es la leccion de
+   MEKO: el tinte de paleta existe para DESATURAR hacia el color del aire, y
+   saturando encima el ladrillo del fondo sale rosa chicle.                 */
+const SAT_K = 1.34, SAT_TOPE = 0.78;
+function satura(hex) {
+  const r = typeof hex === 'number' ? _h2r(hex) : hex;
+  const [h, s, l] = _hsl(r);
+  if (s <= 0.004) return r.slice();
+  return _rgbDe(h, Math.min(SAT_TOPE, s * SAT_K), l);
+}
+const mezR = (a, b, k) => [mez(a[0], b[0], k), mez(a[1], b[1], k), mez(a[2], b[2], k)];
+function luz(r, k) {                       /* k>0 aclara, k<0 oscurece */
+  const [h, s, l] = _hsl(r);
+  return _rgbDe(h, s, cl(l + k, 0, 1));
+}
+
+/* ── LAS PALETAS ──────────────────────────────────────────────────────────
+   Cuatro cielos y, con cada uno, los dos colores de las bandas del fondo. No
+   son un degradado del terreno: en vector plano lo que separa una capa de la
+   siguiente es que sean colores DISTINTOS, no el mismo mas claro.          */
+const PALETAS = [
+  { t: 0xdff0ff, k: 0.20, sol: [0.70, 0.19], solc: [255, 248, 216], nub: 18,
+    cielo: ['#2f7fd6', '#4fa6e6', '#8fd2f2', '#d8f0ea'],
+    lejos: [0x4f7fb8, 0x3f7a6a], bruma: 0.30 },
+  { t: 0xffd9a0, k: 0.26, sol: [0.28, 0.30], solc: [255, 226, 168], nub: 9,
+    cielo: ['#c8407f', '#ef7a52', '#f9b268', '#fbe0b0'],
+    lejos: [0x8f4a86, 0xb9625a], bruma: 0.34 },
+  { t: 0xd6ecff, k: 0.24, sol: [0.80, 0.13], solc: [222, 240, 255], nub: 24,
+    cielo: ['#26489c', '#3f74c8', '#7fb2e2', '#cfe6ef'],
+    lejos: [0x5560ab, 0x4a7fa8], bruma: 0.32 },
+  { t: 0xd8ffd0, k: 0.18, sol: [0.40, 0.23], solc: [238, 255, 214], nub: 15,
+    cielo: ['#1f7a86', '#38a58c', '#7ecf9c', '#d2eec6'],
+    lejos: [0x2f6a72, 0x2f7a52], bruma: 0.28 },
+];
+
+/* ── EL CIELO ─────────────────────────────────────────────────────────────
+   ESTE JUEGO TIENE DOS TERCIOS DE CUADRO VACIOS POR GEOMETRIA, y eso no se
+   arregla: los dos arqueros estan a trece celdas uno del otro, asi que en un
+   marco vertical el ANCHO manda y sobra cielo. Lo unico que se puede hacer es
+   que ese cielo tenga algo — y esta escrito como pendiente desde la vuelta
+   159. Lo que va aca es eso.
+
+   SON DOS LIENZOS Y NO UNO, y esa es la decision: un solo lienzo se pega con
+   UN corrimiento, o sea que todas las nubes viajan a la misma velocidad y el
+   cielo queda plano. Con dos capas que se corren a ritmos distintos aparece
+   paralaje, que es lo unico que da profundidad en vector plano.
+
+   Y EL REPARTO DE ALTURAS NO ES ESTETICO, ES PARA NO TAPAR LA FLECHA. Medido
+   con el encuadre de espera —mira 16,6 y encH 17,75 sobre 892 px— la flecha
+   vuela entre el 38 % y el 97 % del alto del cuadro: el apice mas alto del
+   juego (y ~ 21, duelo 6) cae en el 38 %. Asi que las nubes GRANDES y opacas
+   viven por ENCIMA del 32 % —donde no vuela nada nunca— y en la banda del
+   vuelo solo quedan las lejanas, que son chatas y palidas. De paso eso es
+   como se ve un cielo de verdad: cerca del horizonte las nubes se apilan y
+   se achatan, y encima de uno se abren.                                    */
+const CIELOS = [], CIELOS_A = [];
+let CIELO_OX = 0, CIELO_PI = 0;
+/* medio angulo del abanico de rayos: 1,24 rad son 71 grados, o sea que la
+   cuña mas abierta sale casi horizontal y NINGUNA sube.                  */
+const RAYO_ABRE = 1.24;
+
+/* una nube de cinco bolas, con el ancho cayendo hacia las puntas */
+function nubeP(g, cx, cy, s, ancho) {
+  g.beginPath();
+  for (let k = 0; k < 5; k++) {
+    const ex = cx + (k - 2) * 46 * s * ancho, ey = cy + Math.sin(k * 1.9 + cx) * 11 * s;
+    const rw = (74 - Math.abs(k - 2) * 15) * s;
+    g.moveTo(ex + rw, ey); g.arc(ex, ey, rw, 0, 6.2832);
+  }
+  g.fill();
+}
+
+function cieloLienzo(pi) {
+  const key = pi + '|' + ANCHO + '|' + ALTO + '|' + DPR + '|' + DET;
+  if (CIELOS[pi] && CIELOS[pi].key === key) return CIELOS[pi].c;
+  const pal = PALETAS[pi];
+  const W = Math.max(2, Math.round(ANCHO * DPR)), H = Math.max(2, Math.round(ALTO * DPR));
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, H), ps = pal.cielo;
+  gr.addColorStop(0, ps[0]); gr.addColorStop(0.40, ps[1]);
+  gr.addColorStop(0.72, ps[2]); gr.addColorStop(1, ps[3]);
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+
+  const sx = W * pal.sol[0], sy = H * pal.sol[1];
+
+  /* LOS RAYOS VAN ANTES DEL HALO, y no es orden caprichoso: el halo es un
+     radial que tiene que COMER el nacimiento de los rayos, si no cada cuña
+     arranca con un canto recto pegado al disco y se lee a abanico de papel. */
+  if (DET > 0) {
+    const nr = DET > 1 ? 9 : 6, R0 = azar(pi * 811 + 37);
+    g.save(); g.translate(sx, sy);
+    for (let i = 0; i < nr; i++) {
+      /* EL ABANICO VA HACIA ABAJO Y NADA MAS. Repartido en los 360 grados,
+         la mitad de las cuñas sale hacia arriba y corta contra el borde de
+         arriba del cuadro con un canto recto — que es justo lo que un rayo
+         crepuscular no hace: se abre del sol hacia el suelo.              */
+      const a = 1.5708 + (((i + 0.5) / nr) - 0.5) * 2 * RAYO_ABRE + (R0() - 0.5) * 0.18;
+      const an = 0.026 + R0() * 0.042;
+      const lg = H * (0.55 + R0() * 0.80);
+      /* Y SE DIBUJA DOS VECES: una cuña ancha y floja debajo de una angosta.
+         Una sola cuña de alfa pareja tiene canto duro por construccion y se
+         lee a abanico de papel; con las dos, el ancho cae en dos escalones y
+         el borde se deshace.                                              */
+      for (const [mu, ma] of [[2.5, 0.42], [1, 1]]) {
+        const rg = g.createLinearGradient(0, 0, Math.cos(a) * lg, Math.sin(a) * lg);
+        rg.addColorStop(0, _rgba(pal.solc, 0));
+        rg.addColorStop(0.16, _rgba(pal.solc, 0.105 * ma));
+        rg.addColorStop(0.50, _rgba(pal.solc, 0.048 * ma));
+        rg.addColorStop(1, _rgba(pal.solc, 0));
+        g.fillStyle = rg;
+        g.beginPath(); g.moveTo(0, 0);
+        g.lineTo(Math.cos(a - an * mu) * lg, Math.sin(a - an * mu) * lg);
+        g.lineTo(Math.cos(a + an * mu) * lg, Math.sin(a + an * mu) * lg);
+        g.closePath(); g.fill();
+      }
+    }
+    g.restore();
+  }
+
+  for (const off of [-W, 0, W]) {
+    const rg = g.createRadialGradient(sx + off, sy, 0, sx + off, sy, H * 0.55);
+    rg.addColorStop(0, _rgba(pal.solc, 0.95));
+    rg.addColorStop(0.08, _rgba(pal.solc, 0.52));
+    rg.addColorStop(0.36, _rgba(pal.solc, 0.14));
+    rg.addColorStop(1, _rgba(pal.solc, 0));
+    g.fillStyle = rg; g.fillRect(0, 0, W, H);
+  }
+  /* el disco del sol: en vector plano es un circulo y no un resplandor */
+  g.fillStyle = _rgba(pal.solc, 0.90);
+  g.beginPath(); g.arc(sx, sy, H * 0.035, 0, 6.2832); g.fill();
+
+  /* LA BRUMA DEL HORIZONTE. Sin ella las crestas del fondo nacen de un canto
+     recto sobre el degradado y el horizonte se lee a corte de papel; con
+     ella el aire de abajo es mas claro y la cresta se disuelve en el. Es
+     perspectiva aerea, y cuesta un relleno.                                */
+  const bg = g.createLinearGradient(0, H * 0.54, 0, H);
+  bg.addColorStop(0, _rgba(_h2r(pal.t), 0));
+  /* NO ES LINEAL: el aire se acumula, asi que la bruma crece mas rapido cerca
+     del suelo. Con una rampa recta la banda se lee a velo pegado encima.   */
+  bg.addColorStop(0.55, _rgba(_h2r(pal.t), 0.20));
+  bg.addColorStop(1, _rgba(_h2r(pal.t), 0.58));
+  g.fillStyle = bg; g.fillRect(0, H * 0.54, W, H * 0.46);
+
+  /* LAS NUBES SE DIBUJAN TRES VECES —en -W, 0 y +W— porque el lienzo se pega
+     en bucle: sin eso, al correrlas con el viento aparece la costura.      */
+  const R = azar(pi * 1237 + 71);
+  const nn = Math.max(5, Math.round(pal.nub * (DET === 0 ? 0.45 : DET === 1 ? 0.8 : 1)));
+  for (let i = 0; i < nn; i++) {
+    /* LEJANAS: chatas, palidas y en la banda del horizonte. Son las unicas
+       que caen donde vuela la flecha, y por eso son las que casi no estan. */
+    const cx = R() * W, cy = H * (0.40 + R() * 0.30), s = (0.26 + R() * 0.44) * (W / 900);
+    const a = 0.10 + R() * 0.13;
+    g.fillStyle = 'rgba(255,255,255,' + a.toFixed(3) + ')';
+    for (const off of [-W, 0, W]) nubeP(g, cx + off, cy, s, 1.45);
+  }
+  CIELOS[pi] = { key, c };
+  return c;
+}
+
+/* ── LA CAPA ALTA ─────────────────────────────────────────────────────────
+   Transparente, con las nubes grandes, y se pega a 1,75 veces el corrimiento
+   del fondo: esa diferencia ES el paralaje. Vive por encima del 32 % del
+   alto, o sea fuera de la trayectoria de cualquier flecha del juego.      */
+function cieloAlto(pi) {
+  const key = pi + '|' + ANCHO + '|' + ALTO + '|' + DPR + '|' + DET;
+  if (CIELOS_A[pi] && CIELOS_A[pi].key === key) return CIELOS_A[pi].c;
+  const pal = PALETAS[pi];
+  const W = Math.max(2, Math.round(ANCHO * DPR)), H = Math.max(2, Math.round(ALTO * DPR));
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const R = azar(pi * 5171 + 313);
+  const nn = DET === 0 ? 3 : DET === 1 ? 5 : 7;
+  for (let i = 0; i < nn; i++) {
+    const cx = R() * W, cy = H * (0.02 + R() * 0.26), s = (0.85 + R() * 1.1) * (W / 900);
+    const a = 0.22 + R() * 0.20;
+    /* LA PANZA VA MAS OSCURA QUE LA CORONA, y es lo unico que separa una nube
+       de una mancha blanca: una nube de un solo valor no tiene volumen por
+       muchas bolas que tenga. Se dibuja el cuerpo corrido hacia abajo con el
+       tinte de la paleta y encima la corona en blanco.                     */
+    /* GRIS FRIO Y NO EL TINTE DE LA PALETA. Mezclada hacia `pal.t` la panza
+       sale del color del propio cielo —en el atardecer, marron— y eso no se
+       lee a sombra sino a mancha. Lo que corresponde es un gris apenas
+       teñido: una nube en sombra recibe cielo, no sol.                     */
+    g.fillStyle = _rgba(mezR(mezR([255, 255, 255], [146, 160, 184], 0.62), _h2r(pal.t), 0.20), a * 0.80);
+    /* y la panza se corre 26 y no 10: con diez la media luna mide un septimo
+       del radio y se lee a borde sucio en vez de a volumen.               */
+    for (const off of [-W, 0, W]) nubeP(g, cx + off, cy + 20 * s, s, 1);
+    g.fillStyle = 'rgba(255,255,255,' + a.toFixed(3) + ')';
+    for (const off of [-W, 0, W]) nubeP(g, cx + off, cy, s, 1);
+  }
+  CIELOS_A[pi] = { key, c };
+  return c;
+}
+
+/* ── LOS PAJAROS ──────────────────────────────────────────────────────────
+   Lo mas barato que existe para que un cielo vacio deje de estarlo, y encima
+   INFORMAN: van con el viento, que es el unico dato del duelo que el terreno
+   no muestra. Se dibujan en vivo y no horneados porque aletean, y aletear es
+   la mitad de que se lean a pajaro y no a marca de lapiz.
+
+   Van en la banda 0,16..0,34 del alto: por debajo de las nubes altas y por
+   encima del apice del vuelo, asi que no cruzan por delante de la flecha.  */
+const PAJ = [];
+(function () {
+  const R = azar(4523);
+  for (let b = 0; b < 3; b++) {
+    const n = 4 + ((R() * 4) | 0), P = [];
+    for (let i = 0; i < n; i++) {
+      const k = i - (n - 1) / 2;
+      P.push([Math.abs(k) * (14 + R() * 6), k * (11 + R() * 5), R() * 6.2832]);
+    }
+    PAJ.push({ x: R(), y: 0.16 + R() * 0.18, v: 0.55 + R() * 0.5, s: 1.12 + R() * 0.52, P });
+  }
+})();
+let PAJ_T = 0;
+function pajarosPaso(dt, w) {
+  PAJ_T += dt;
+  for (const b of PAJ) {
+    b.x += (w === undefined ? 1 : (w || 0) * 0.4 + 0.5) * b.v * dt * 0.012;
+    if (b.x > 1.25) b.x -= 1.5; if (b.x < -0.25) b.x += 1.5;
+  }
+}
+function pajarosDibuja(g) {
+  if (DET === 0) return 0;
+  g.save();
+  g.strokeStyle = 'rgba(34,44,62,.36)'; g.lineCap = 'round'; g.lineJoin = 'round';
+  let n = 0;
+  for (const b of PAJ) {
+    const bx = b.x * ANCHO, by = b.y * ALTO, s = b.s * (ANCHO / 412);
+    g.lineWidth = 1.45 * s;
+    g.beginPath();
+    for (const [ox, oy, f] of b.P) {
+      const x = bx + ox * s, y = by + oy * s;
+      /* el aleteo es UN seno por pajaro con su propia fase: en fase los seis
+         suben y bajan juntos y se lee a un solo objeto que late.           */
+      const al = 2.3 * s * (0.30 + 0.70 * Math.sin(PAJ_T * 7.4 + f));
+      g.moveTo(x - 4.9 * s, y + al);
+      g.quadraticCurveTo(x - 2.1 * s, y - al * 0.30, x, y);
+      g.quadraticCurveTo(x + 2.1 * s, y - al * 0.30, x + 4.9 * s, y + al);
+    }
+    g.stroke(); n++;
+  }
+  g.restore();
+  return n;
+}
+
+/* ── EL MARCO Y LA CAMARA ─────────────────────────────────────────────────
+   No hay camara: hay una escala y dos corrimientos. `pantAMundo` es la
+   inversa EXACTA de `mundoAPant` porque las dos son la misma division.    */
+function encuadra() {
+  PX = ANCHO / CAM.cel;
+  ENC_W = ANCHO / (2 * PX);
+  ENC_H = ALTO / (2 * PX);
+  OFX = ANCHO / 2 - CAM.cx * PX;
+  OFY = ALTO / 2 + CAM.cy * PX;
+  MIRA = CAM.cy;
+}
+/* a donde quiere ir la camara AHORA. Sin foco, al plano de espera. */
+function camObj() {
+  if (!CAM.foco) return { x: ENC_CX, y: SUELO_Y + camAlto(CEL_REPOSO), cel: CEL_REPOSO };
+  const y0 = SUELO_Y + camAlto(CEL_VUELO);
+  /* la x se topa DENTRO de las alas del terreno (tres celdas a cada lado),
+     asi que por mucho que la flecha se vaya de la arena no aparece el vacio
+     de mas alla del mundo */
+  return { x: cl(CAM.foco.x, XA + 1, XB - 1), y: cl(CAM.foco.y, y0, y0 + CAM_ALTO), cel: CEL_VUELO };
+}
+function camFoco(x, y) { CAM.foco = { x, y }; }
+function camSuelta() { CAM.foco = null; }
+function camPlanta() { const o = camObj(); CAM.cx = o.x; CAM.cy = o.y; CAM.cel = o.cel; encuadra(); }
+function camPaso(dt) {
+  const o = camObj();
+  const kr = 1 - Math.exp(-dt * CAM_VEL), kz = 1 - Math.exp(-dt * CAM_ZOOM);
+  CAM.cx += (o.x - CAM.cx) * kr;
+  CAM.cy += (o.y - CAM.cy) * kr;
+  CAM.cel += (o.cel - CAM.cel) * kz;
+  /* EL PISO DE LA CAMARA SE MIDE CON EL ZOOM DEL CUADRO Y NO CON EL DE
+     DESTINO: durante el cierre, la altura visible baja mas despacio que la
+     camara, y sin este piso aparece una franja de vacio debajo del terreno.
+     Con el, la camara solo puede bajar al ritmo al que se cierra.        */
+  CAM.cy = Math.max(CAM.cy, SUELO_Y + camAlto(CAM.cel));
+  encuadra();
+}
+function mundoAPant(x, y) { return { x: OFX + x * PX, y: OFY - y * PX }; }
+function pantAMundo(dpx, dpy) { return { x: dpx / PX, y: -dpy / PX }; }
+
+function escInit() {
+  CV = $('cv');
+  G2 = CV.getContext('2d', { alpha: false });
+  aplicaCalidad();
+}
+/* LAS TRES CALIDADES CAMBIAN LO QUE CUESTA, NO LO QUE EL JUEGO ES: la misma
+   partida, el mismo terreno y los mismos duelos en las tres.              */
+function aplicaCalidad() {
+  const C = CALIDADES[PROG.cal] || CALIDADES.media;
+  DPR = Math.min(window.devicePixelRatio || 1, C.px);
+  DET = C.det;
+  CIELOS.length = 0;
+  medir();
+}
+function medir() {
+  const m = $('marco').getBoundingClientRect();
+  ANCHO = Math.max(1, Math.round(m.width)); ALTO = Math.max(1, Math.round(m.height));
+  document.documentElement.style.setProperty('--mw', ANCHO + 'px');
+  if (CV) { CV.width = Math.round(ANCHO * DPR); CV.height = Math.round(ALTO * DPR); }
+  if (CAM.foco) encuadra(); else camPlanta();
+  if (DIO) rayasArma(DIO.M ? DIO.M.viento : 0);
+}
+
+/* ── LA CELDA CON LAS ESQUINAS REDONDEADAS ────────────────────────────────
+   ES LO QUE SACA AL TERRENO DE PARECER MINECRAFT. Una reja de cuadrados se
+   lee a voxel por muchos colores que tenga; redondeando SOLO las esquinas
+   expuestas —las que tienen los dos lados al aire— la union de doscientas
+   celdas sale con silueta continua y cantos blandos, que es la forma de
+   cualquier plataforma de vector plano.
+
+   Y EL RADIO ESTA TOPADO EN 0,26 A PROPOSITO: es dibujo sobre una fisica que
+   sigue siendo cuadrada, asi que la diferencia entre lo que se ve y lo que
+   choca no puede pasar de un cuarto de celda. Mas redondo se veria mejor y
+   mentiria donde este juego no puede mentir.                              */
+const RCOR = 0.26;
+function celdaP(p, x, y, nD, nI, nA, nB) {
+  const r = RCOR;
+  const ti = !nI && !nA, td = !nD && !nA, bd = !nD && !nB, bi = !nI && !nB;
+  p.moveTo(x + (bi ? r : 0), y);
+  if (bd) { p.lineTo(x + 1 - r, y); p.quadraticCurveTo(x + 1, y, x + 1, y + r); }
+  else p.lineTo(x + 1, y);
+  if (td) { p.lineTo(x + 1, y + 1 - r); p.quadraticCurveTo(x + 1, y + 1, x + 1 - r, y + 1); }
+  else p.lineTo(x + 1, y + 1);
+  if (ti) { p.lineTo(x + r, y + 1); p.quadraticCurveTo(x, y + 1, x, y + 1 - r); }
+  else p.lineTo(x, y + 1);
+  if (bi) { p.lineTo(x, y + r); p.quadraticCurveTo(x, y, x + r, y); }
+  else p.lineTo(x, y);
+  p.closePath();
+}
+
+/* ── EL TERRENO ───────────────────────────────────────────────────────────
+   Un `Path2D` por material, armado UNA VEZ y redibujado tal cual en cada
+   cuadro: el terreno solo cambia cuando un crater lo cambia, y ahi se rehace
+   entero. Con las celdas dibujadas de a una serian doscientas ordenes por
+   cuadro para poner siempre lo mismo.                                     */
+const CAPA = 0.30;         /* el alto de la tapa: lo que en vector plano
+                              separa una plataforma de un rectangulo */
+function terrArma(M) {
+  const pal = PALETAS[(M.paleta || 0) % PALETAS.length];
+  const tin = _h2r(pal.t);
+  const solido = (x, y) => {
+    if (y < 0) return true;
+    if (x < 0) x = 0; else if (x >= M.nx) x = M.nx - 1;   /* el mundo sigue
+       fuera del marco: tratando el borde como aire, el terreno aparece
+       cortado en vertical justo en el canto de la pantalla. */
+    if (y >= M.ny) return false;
+    return en(M, x, y, ZC) !== VACIO;
+  };
+  const capas = new Map();
+  const dame = t => {
+    let o = capas.get(t);
+    if (!o) {
+      const base = mezR(satura(BLOQ[t].col), tin, pal.k * pal.bruma * 0.5);
+      const tapa = mezR(satura(BLOQ[t].top), tin, pal.k * pal.bruma * 0.5);
+      o = { t, fill: new Path2D(), cap: new Path2D(), lin: new Path2D(),
+            col: base, cap0: tapa, borde: luz(base, -0.16), det: luz(base, -0.10) };
+      capas.set(t, o);
+    }
+    return o;
+  };
+  /* las dos alas: el mundo se prolonga tres celdas para cada lado con la
+     columna del borde, asi el terreno llega hasta el canto del marco */
+  for (const [xa, xb, xs] of [[-3, -1, 0], [M.nx, M.nx + 2, M.nx - 1]]) {
+    for (let x = xa; x <= xb; x++) for (let y = 0; y < M.ny; y++) {
+      const t = en(M, xs, y, ZC); if (t === VACIO) continue;
+      const o = dame(t);
+      celdaP(o.fill, x, y, solido(x + 1, y) || x >= M.nx, solido(x - 1, y) || x < 0, solido(xs, y + 1), true);
+    }
+  }
+  for (let y = 0; y < M.ny; y++) for (let x = 0; x < M.nx; x++) {
+    const t = en(M, x, y, ZC); if (t === VACIO) continue;
+    const o = dame(t);
+    const nD = solido(x + 1, y), nI = solido(x - 1, y), nA = solido(x, y + 1), nB = solido(x, y - 1);
+    celdaP(o.fill, x, y, nD, nI, nA, nB);
+  }
+  /* LA TAPA SE ARMA APARTE Y CON SU PROPIA REDONDEZ: metida en el mismo
+     bucle que el relleno habria que inventarle vecinos, y una tapa con la
+     esquina cuadrada al lado de un cuerpo redondeado se ve peor que las dos
+     cuadradas.                                                            */
+  for (let y = 0; y < M.ny; y++) for (let x = -3; x < M.nx + 3; x++) {
+    const xs = cl(x, 0, M.nx - 1);
+    const t = en(M, xs, y, ZC); if (t === VACIO) continue;
+    if (solido(x, y + 1)) continue;
+    const o = dame(t);
+    const rd = solido(x + 1, y) && !solido(x + 1, y + 1);
+    const ri = solido(x - 1, y) && !solido(x - 1, y + 1);
+    const p = o.cap, y0 = y + 1 - CAPA, r = Math.min(RCOR, CAPA);
+    p.moveTo(x, y0); p.lineTo(x + 1, y0);
+    if (!rd && !solido(x + 1, y)) { p.lineTo(x + 1, y + 1 - r); p.quadraticCurveTo(x + 1, y + 1, x + 1 - r, y + 1); }
+    else p.lineTo(x + 1, y + 1);
+    if (!ri && !solido(x - 1, y)) { p.lineTo(x + r, y + 1); p.quadraticCurveTo(x, y + 1, x, y + 1 - r); }
+    else p.lineTo(x, y + 1);
+    p.closePath();
+  }
+  /* la textura: son marcas, no una foto. Van con el color del propio bloque
+     un escalon mas oscuro, asi el material se lee y el cuadro no se ensucia */
+  if (DET > 0) for (let y = 0; y < M.ny; y++) for (let x = 0; x < M.nx; x++) {
+    const t = en(M, x, y, ZC); if (t === VACIO) continue;
+    if (en(M, x, y + 1, ZC) === VACIO && (t === PASTO || t === NIEVE)) continue;
+    const o = dame(t), p = o.lin, R = azar((x * 733) ^ (y * 199) ^ (t * 37));
+    if (t === LADRILLO || t === PIEDRA) {
+      const off = (y % 2) * 0.5;
+      p.moveTo(x, y + 0.5); p.lineTo(x + 1, y + 0.5);
+      p.moveTo(x + off, y); p.lineTo(x + off, y + 0.5);
+      p.moveTo(x + (off + 0.5) % 1, y + 0.5); p.lineTo(x + (off + 0.5) % 1, y + 1);
+    } else if (t === MADERA) {
+      p.moveTo(x, y + 0.34); p.lineTo(x + 1, y + 0.34);
+      p.moveTo(x, y + 0.70); p.lineTo(x + 1, y + 0.70);
+    } else if (t === METAL) {
+      for (const [dx, dy] of [[0.22, 0.22], [0.78, 0.22], [0.22, 0.78], [0.78, 0.78]]) {
+        p.moveTo(x + dx + 0.06, y + dy); p.arc(x + dx, y + dy, 0.06, 0, 6.2832);
+      }
+    } else {
+      /* TIERRA, ARENA Y PASTO TAMBIEN SE MARCAN EN MEDIA, y no es un lujo: el
+         terreno de este juego baja de la plataforma hasta el canto de abajo,
+         o sea que un cuarto de la pantalla es ese material. Sin una sola
+         marca eso no se lee a tierra, se lee a un rectangulo marron —medido
+         en la captura de la pradera, la banda de abajo salia lisa de punta a
+         punta mientras la de piedra, que si tiene junta, se leia a muro.    */
+      const nm = DET > 1 ? 3 : 2;
+      for (let i = 0; i < nm; i++) {
+        const ax = x + 0.15 + R() * 0.7, ay = y + 0.15 + R() * 0.7, s = 0.06 + R() * 0.09;
+        p.moveTo(ax - s, ay); p.lineTo(ax + s, ay);
+      }
+    }
+  }
+  /* el pasto y la nieve: briznas en la tapa, que es lo unico que dice de que
+     esta hecha la superficie sobre la que se para el arquero */
+  const brizna = new Path2D();
+  let hayBr = false, brCol = null;
+  if (DET > 0) for (let x = -3; x < M.nx + 3; x++) {
+    const xs = cl(x, 0, M.nx - 1);
+    const hy = altura(M, xs); if (hy <= 0) continue;
+    const t = en(M, xs, hy - 1, ZC);
+    if (t !== PASTO && t !== HOJA) continue;
+    hayBr = true;
+    const o = dame(t); brCol = luz(o.cap0, 0.10);
+    const R = azar((x * 977) ^ 61);
+    const nb = DET > 1 ? 5 : 3;
+    for (let i = 0; i < nb; i++) {
+      const ax = x + 0.08 + R() * 0.84, al = 0.16 + R() * 0.22, dx = (R() - 0.5) * 0.18;
+      brizna.moveTo(ax, hy); brizna.quadraticCurveTo(ax + dx * 0.5, hy + al * 0.6, ax + dx, hy + al);
+    }
+  }
+  return { capas: [...capas.values()], brizna, hayBr, brCol };
+}
+function terrDibuja(g, T2) {
+  for (const o of T2.capas) {
+    g.fillStyle = _r2c(o.col); g.fill(o.fill); LLAM++;
+    g.fillStyle = _r2c(o.cap0); g.fill(o.cap); LLAM++;
+    if (DET > 0) {
+      g.strokeStyle = _rgba(o.borde, 0.34); g.lineWidth = 0.045; g.stroke(o.lin); LLAM++;
+    }
+  }
+  if (T2.hayBr) {
+    g.strokeStyle = _r2c(T2.brCol); g.lineWidth = 0.055; g.lineCap = 'round';
+    g.stroke(T2.brizna); LLAM++;
+  }
+}
+
+/* ── EL FONDO ─────────────────────────────────────────────────────────────
+   DOS BANDAS Y NADA MAS. En vector plano la profundidad es cuantas capas hay
+   y de que color, no cuanto detalle tiene cada una: una banda con arboles
+   dibujados uno por uno se lee mas cerca que el terreno.                  */
+function crestaP(rnd, base, amp, freq, punta) {
+  const p = new Path2D();
+  const x0 = -4, x1 = NX + 4, paso = 0.5;
+  const f1 = rnd() * 6.28, f2 = rnd() * 6.28;
+  p.moveTo(x0, -4);
+  for (let x = x0; x <= x1 + 0.01; x += paso) {
+    let n = Math.sin(x * freq + f1) * 0.62 + Math.sin(x * freq * 2.3 + f2) * 0.38;
+    if (punta) n = Math.pow(Math.abs(n), 0.62) * Math.sign(n);
+    p.lineTo(x, base + n * amp);
+  }
+  p.lineTo(x1, -4); p.closePath();
+  return p;
+}
+function arbolesP(rnd, base, n, alto, conif) {
+  const p = new Path2D();
+  for (let i = 0; i < n; i++) {
+    const x = -3 + rnd() * (NX + 6), h = alto * (0.7 + rnd() * 0.6), w = h * (conif ? 0.34 : 0.52);
+    const y = base + (rnd() - 0.5) * 1.2;
+    if (conif) {
+      for (let k = 0; k < 3; k++) {
+        const kk = k / 3, yy = y + h * kk, ww = w * (1 - kk * 0.55), hh = h * 0.52;
+        p.moveTo(x - ww, yy); p.lineTo(x, yy + hh); p.lineTo(x + ww, yy); p.closePath();
+      }
+    } else {
+      p.moveTo(x + w, y + h * 0.55); p.arc(x, y + h * 0.55, w, 0, 6.2832);
+      p.rect(x - w * 0.13, y, w * 0.26, h * 0.6);
+    }
+  }
+  return p;
+}
+function fondoArma(M) {
+  const pal = PALETAS[(M.paleta || 0) % PALETAS.length];
+  const rnd = azar((M.n + 3) * 4517 + 19);
+  const tin = _h2r(pal.t);
+  const c1 = mezR(satura(pal.lejos[0]), tin, pal.bruma * 1.25);
+  const c2 = mezR(satura(pal.lejos[1]), tin, pal.bruma * 0.60);
+  const L = [];
+  if (M.bio === 'monte') {
+    L.push({ p: crestaP(rnd, 15, 6.2, 0.34, true), c: c1 });
+    if (DET > 0) L.push({ p: crestaP(rnd, 10, 4.0, 0.52, true), c: c2 });
+  } else if (M.bio === 'desierto') {
+    L.push({ p: crestaP(rnd, 11, 3.0, 0.26, false), c: c1 });
+    if (DET > 0) L.push({ p: crestaP(rnd, 7.5, 2.2, 0.42, false), c: c2 });
+  } else if (M.bio === 'bosque') {
+    L.push({ p: crestaP(rnd, 11, 2.4, 0.30, false), c: c1 });
+    if (DET > 0) {
+      L.push({ p: arbolesP(rnd, 10, DET > 1 ? 16 : 9, 4.6, true), c: c1 });
+      L.push({ p: crestaP(rnd, 8, 1.8, 0.46, false), c: c2 });
+    }
+  } else {
+    L.push({ p: crestaP(rnd, 12, 3.4, 0.28, false), c: c1 });
+    if (DET > 0) {
+      L.push({ p: crestaP(rnd, 8.5, 2.2, 0.44, false), c: c2 });
+      L.push({ p: arbolesP(rnd, 8.2, DET > 1 ? 9 : 5, 3.0, false), c: c2 });
+    }
+  }
+  return L;
+}
+
+/* ══════════════════════ EL MUNDO DIBUJADO ══════════════════════ */
+function fondoDe(pi) {
+  const pal = PALETAS[pi % PALETAS.length];
+  /* el degradado de CSS no se va: es lo que se ve mientras el modulo carga y
+     en el primer cuadro, antes de que haya nada dibujado. */
+  $('marco').style.background = 'linear-gradient(180deg,' + pal.cielo[0] + ' 0%,' +
+    pal.cielo[1] + ' 40%,' + pal.cielo[2] + ' 72%,' + pal.cielo[3] + ' 100%)';
+  CIELO_PI = pi % PALETAS.length;
+}
+function soltaMundo() { DIO = null; }
+
+function construyeMundo(M) {
+  const pi = (M.paleta || 0) % PALETAS.length;
+  fondoDe(pi);
+  DIO = {
+    M, pi,
+    terr: terrArma(M),
+    fondo: fondoArma(M),
+    fl: null,                       /* la flecha en vuelo */
+    pv: null,                       /* la vista previa */
+    cla: [],                        /* las clavadas */
+    eqD: new Float32Array(26 * 5), eqN: 0, eqC: [200, 200, 200],
+    raD: new Float32Array(30 * 3), raN: 0,
+    esD: new Float32Array(EST_N * 2), esI: 0, esN: 0,   /* la estela */
+  };
+  rayasArma(M.viento);
+}
+function rehaceTerreno() { if (DIO) DIO.terr = terrArma(DIO.M); }
+
+/* ── LA FLECHA ────────────────────────────────────────────────────────────
+   El rumbo sale de la VELOCIDAD y no de restar dos posiciones: en el apice
+   vy cruza el cero y con posiciones la flecha pega un tiron justo ahi.    */
+/* ── LA ESTELA ────────────────────────────────────────────────────────────
+   ES LO QUE HACE VISIBLE LA FLECHA DEL RIVAL. Su vuelo dura unas cuatro
+   decimas y la flecha mide 33 px: mirando el cuadro suelto no hay nada que
+   ver, porque lo que la delata no es su forma sino su RECORRIDO. Catorce
+   posiciones guardadas —siete celdas de cola a velocidad de crucero— y todas
+   en UN solo trazo: son puntos que se achican, igual que la vista previa, y
+   eso no es coqueteria — con una polilinea que se afina harian falta trece
+   llamadas de dibujo por cuadro sobre un cuadro que cuesta setenta y cinco.
+   Y de paso las dos cosas hablan el mismo idioma: puntos blancos = camino de
+   la flecha, antes y despues de soltarla.                                 */
+const EST_N = 14;
+function flechaPon(x, y, vx, vy) {
+  if (!DIO) return;
+  DIO.fl = { x, y, a: Math.atan2(vy, vx) };
+  DIO.esD[DIO.esI * 2] = x; DIO.esD[DIO.esI * 2 + 1] = y;
+  DIO.esI = (DIO.esI + 1) % EST_N;
+  if (DIO.esN < EST_N) DIO.esN++;
+}
+function flechaOculta() { if (DIO) { DIO.fl = null; DIO.esN = 0; DIO.esI = 0; } }
+function previaPon(pts, n) {
+  if (!DIO) return;
+  const c = Math.min(n, Math.floor(pts.length / 2));
+  DIO.pv = { pts, n: c };
+}
+function previaOculta() { if (DIO) DIO.pv = null; }
+function clavaFlecha(x, y, ang) {
+  if (!DIO) return;
+  DIO.cla.push({ x, y, a: ang });
+  if (DIO.cla.length > 14) DIO.cla.shift();
+}
+function limpiaClavadas() { if (DIO) DIO.cla.length = 0; }
+
+const FL_L = 0.95;
+function flechaP(g, x, y, a, col, pl) {
+  g.save(); g.translate(x, y); g.rotate(a);
+  g.lineCap = 'round';
+  g.strokeStyle = col; g.lineWidth = 0.085;
+  g.beginPath(); g.moveTo(-FL_L, 0); g.lineTo(0, 0); g.stroke(); LLAM++;
+  g.fillStyle = col;
+  g.beginPath(); g.moveTo(0.16, 0); g.lineTo(-0.10, 0.13); g.lineTo(-0.10, -0.13); g.closePath(); g.fill(); LLAM++;
+  g.fillStyle = pl;
+  g.beginPath();
+  g.moveTo(-FL_L, 0); g.lineTo(-FL_L + 0.26, 0.15); g.lineTo(-FL_L + 0.20, 0); g.lineTo(-FL_L + 0.26, -0.15);
+  g.closePath(); g.fill(); LLAM++;
+  g.restore();
+}
+
+/* ── EL ESTALLIDO ────────────────────────────────────────────────────────
+   Cinco datos por esquirla en un solo Float32Array: con un objeto por
+   particula, veintiseis objetos nuevos por impacto son basura para el
+   recolector justo en el cuadro del golpe.                                */
+function estalla(x, y, tp, fuerza) {
+  if (!DIO) return;
+  const B = BLOQ[tp] || BLOQ[PIEDRA];
+  DIO.eqC = satura(B.col);
+  const n = DET === 0 ? 14 : (DET === 1 ? 20 : 26);
+  const R = azar(((x * 977) | 0) ^ ((y * 613) | 0) ^ 7);
+  for (let i = 0; i < n; i++) {
+    const a = R() * 6.2832, v = (2.4 + R() * 6.0) * fuerza;
+    DIO.eqD[i * 5] = x; DIO.eqD[i * 5 + 1] = y;
+    DIO.eqD[i * 5 + 2] = Math.cos(a) * v;
+    DIO.eqD[i * 5 + 3] = Math.abs(Math.sin(a)) * v * 1.15 + 1.5;
+    DIO.eqD[i * 5 + 4] = 0.45 + R() * 0.42;
+  }
+  DIO.eqN = n;
+}
+
+/* ── LAS RAYAS DEL VIENTO ─────────────────────────────────────────────── */
+/* LA BANDA DE LAS RAYAS ES FIJA Y NO SALE DEL ENCUADRE: con la camara
+   moviendose, sembrarlas contra el alto visible del momento las dejaria
+   apiladas en la franja del ultimo `medir()` — y encima habria que
+   resembrarlas por cuadro, que es justo lo que este arreglo no hace. */
+const RAYA_ALTO = 34;
+function rayasArma(w) {
+  if (!DIO) return;
+  const n = Math.abs(w) < 0.4 ? 0 : (DET === 0 ? 12 : DET === 1 ? 20 : 30);
+  const R = azar(((w * 100) | 0) + 991);
+  for (let i = 0; i < n; i++) {
+    DIO.raD[i * 3] = R() * (NX + 8) - 4;
+    DIO.raD[i * 3 + 1] = 4 + R() * RAYA_ALTO;
+    DIO.raD[i * 3 + 2] = 0.5 + R() * 1.2;
+  }
+  DIO.raN = n;
+}
+
+function escPaso(dt, w) {
+  camPaso(dt);
+  if (!DIO) return;
+  CIELO_OX -= (w || 0) * dt * 1.9;
+  pajarosPaso(dt, w);
+  if (DIO.eqN > 0) {
+    let vivas = 0;
+    for (let i = 0; i < DIO.eqN; i++) {
+      const b = i * 5;
+      if (DIO.eqD[b + 4] <= 0) continue;
+      DIO.eqD[b + 4] -= dt;
+      DIO.eqD[b + 3] -= 26 * dt;
+      DIO.eqD[b] += DIO.eqD[b + 2] * dt;
+      DIO.eqD[b + 1] += DIO.eqD[b + 3] * dt;
+      if (DIO.eqD[b + 4] > 0) vivas++;
+    }
+    if (!vivas) DIO.eqN = 0;
+  }
+  if (DIO.raN > 0) {
+    const v = (w || 0) * 0.85;
+    for (let i = 0; i < DIO.raN; i++) {
+      const b = i * 3;
+      DIO.raD[b] += v * dt;
+      if (DIO.raD[b] > NX + 5) DIO.raD[b] -= NX + 10;
+      if (DIO.raD[b] < -5) DIO.raD[b] += NX + 10;
+    }
+  }
+}
+
+/* ══════════════════════ EL CUADRO ══════════════════════ */
+function escDibuja() {
+  if (!G2) return;
+  LLAM = 0;
+  const g = G2;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  /* EL CIELO SON DOS CAPAS A RITMOS DISTINTOS, y esa diferencia es todo el
+     paralaje: pegadas al mismo corrimiento el cielo queda plano por mucha
+     nube que tenga. Cada una se pega dos veces por la costura del bucle.  */
+  const cie = cieloLienzo(CIELO_PI);
+  let ox = CIELO_OX % ANCHO; if (ox > 0) ox -= ANCHO;
+  g.imageSmoothingEnabled = true;
+  g.drawImage(cie, ox, 0, ANCHO, ALTO); LLAM++;
+  g.drawImage(cie, ox + ANCHO, 0, ANCHO, ALTO); LLAM++;
+  if (DET > 0) {
+    const alt = cieloAlto(CIELO_PI);
+    let oa = (CIELO_OX * 1.75) % ANCHO; if (oa > 0) oa -= ANCHO;
+    g.drawImage(alt, oa, 0, ANCHO, ALTO); LLAM++;
+    g.drawImage(alt, oa + ANCHO, 0, ANCHO, ALTO); LLAM++;
+  }
+  /* LOS PAJAROS VAN EN PIXELES DE PANTALLA Y ANTES DEL `translate`: viven en
+     el cielo, que no se mueve con la camara — metidos en el mundo, cerrar el
+     encuadre sobre la flecha se los traeria encima.                        */
+  LLAM += pajarosDibuja(g);
+
+  if (!DIO) { LLAM_ANT = LLAM; return; }
+
+  g.save();
+  g.translate(OFX, OFY); g.scale(PX, -PX);
+  g.lineJoin = 'round'; g.lineCap = 'round';
+
+  for (const l of DIO.fondo) { g.fillStyle = _r2c(l.c); g.fill(l.p); LLAM++; }
+
+  if (DIO.raN > 0) {
+    g.strokeStyle = 'rgba(255,255,255,.34)'; g.lineWidth = 0.055;
+    g.beginPath();
+    for (let i = 0; i < DIO.raN; i++) {
+      const b = i * 3;
+      g.moveTo(DIO.raD[b], DIO.raD[b + 1]);
+      g.lineTo(DIO.raD[b] + DIO.raD[b + 2] * Math.sign(DIO.M.viento || 1), DIO.raD[b + 1]);
+    }
+    g.stroke(); LLAM++;
+  }
+
+  terrDibuja(g, DIO.terr);
+
+  /* las clavadas van DEBAJO de los arqueros: una flecha clavada en la meseta
+     tapando la pierna se lee a que le entro por el pie */
+  if (DIO.cla.length) for (const c of DIO.cla) flechaP(g, c.x, c.y, c.a, '#5a4130', '#e8e2d4');
+
+  arqDibuja(g, ARQ[0]); arqDibuja(g, ARQ[1]);
+
+  if (DIO.pv) {
+    g.fillStyle = 'rgba(255,255,255,.72)';
+    g.beginPath();
+    for (let i = 0; i < DIO.pv.n; i++) {
+      const x = DIO.pv.pts[i * 2], y = DIO.pv.pts[i * 2 + 1], r = 0.115 * (1 - i * 0.085);
+      g.moveTo(x + r, y); g.arc(x, y, r, 0, 6.2832);
+    }
+    g.fill(); LLAM++;
+  }
+  if (DIO.fl && DIO.esN > 1) {
+    const n = DIO.esN;
+    g.fillStyle = 'rgba(255,255,255,.36)';
+    g.beginPath();
+    for (let k = 0; k < n; k++) {
+      const i = (DIO.esI - n + k + EST_N * 2) % EST_N;
+      const u = (k + 1) / n, r = 0.105 * u * u;
+      const x = DIO.esD[i * 2], y = DIO.esD[i * 2 + 1];
+      g.moveTo(x + r, y); g.arc(x, y, r, 0, 6.2832);
+    }
+    g.fill(); LLAM++;
+  }
+  if (DIO.fl) flechaP(g, DIO.fl.x, DIO.fl.y, DIO.fl.a, '#4a3222', '#f2ece0');
+
+  if (DIO.eqN > 0) {
+    g.fillStyle = _r2c(DIO.eqC);
+    g.beginPath();
+    for (let i = 0; i < DIO.eqN; i++) {
+      const b = i * 5; if (DIO.eqD[b + 4] <= 0) continue;
+      const k = cl(DIO.eqD[b + 4] / 0.6, 0, 1), s = 0.13 * k;
+      g.rect(DIO.eqD[b] - s, DIO.eqD[b + 1] - s, s * 2, s * 2);
+    }
+    g.fill(); LLAM++;
+  }
+
+  g.restore();
+  LLAM_ANT = LLAM;
+}
+
+function escCosto() {
+  return { llamadas: LLAM_ANT, triangulos: 0, cal: PROG.cal,
+           px: +DPR.toFixed(2), w: ANCHO, h: ALTO, det: DET,
+           encW: +ENC_W.toFixed(2), encH: +ENC_H.toFixed(2), mira: +MIRA.toFixed(2),
+           celda: +PX.toFixed(2),
+           cam: { cx: +CAM.cx.toFixed(2), cy: +CAM.cy.toFixed(2), cel: +CAM.cel.toFixed(2),
+                  foco: !!CAM.foco,
+                  arqPx: +(ARQ_ALTO * PX).toFixed(1), flePx: +((FL_L + 0.16) * PX).toFixed(1),
+                  bajo: +(CAM.cy - ENC_H).toFixed(3), izq: +(CAM.cx - ENC_W).toFixed(2),
+                  der: +(CAM.cx + ENC_W).toFixed(2) } };
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   F · LOS DOS ARQUEROS, EN VECTOR PLANO
+
+   EL DIBUJO Y EL BLANCO SON LOS MISMOS NUMEROS. `ARQ_MED`, `ARQ_ALTO`,
+   `CAB_MED` y `CAB_ALTO` viven en `d.js` —donde esta el choque— y este
+   archivo los LEE. Con dos juegos de medidas, el jugador le pegaria al aire
+   donde ve un cuerpo, o al reves: le acertaria a una nada. En un juego cuyo
+   unico verbo es apuntar, eso no es un detalle de dibujo.
+
+   Y LA MANO DEL ARCO ES `bocaDe()`, la misma que usan la balistica, el
+   resolvedor y el rival. La flecha sale exactamente de donde se ve el arco.
+
+   EL BRAZO SIGUE A LA MANO, NO AL REVES. Lo natural seria pivotar el brazo
+   desde el hombro y dejar que la mano caiga donde caiga — y ahi la boca del
+   arco se mueve con la pose y deja de coincidir con `bocaDe()`. Aca la mano
+   esta clavada en su punto y el codo se RESUELVE (`codoDe`, dos huesos): el
+   dibujo se deriva de la fisica y no puede separarse de ella.
+
+   EL RIVAL ES EL MISMO DIBUJO ESPEJADO EN X. Todo lo de abajo esta escrito
+   en el marco local del arquero —x hacia adelante, y desde los pies— asi
+   que no hay una sola cuenta aparte para el de la derecha. Y el espejo es
+   una transformacion del lienzo, no un segundo juego de coordenadas.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const HOMBRO_Y = 1.82, BRAZO_L = 0.90;
+const CADERA_Y = 0.88, PIERNA_L = 0.88;
+/* dos huesos por brazo. La suma pasa apenas de BRAZO_L: con la suma justa,
+   el codo se estira en linea recta al llegar al limite y el brazo se lee a
+   palo en la pose que mas se mira, que es la de apuntar.                  */
+const BR1 = 0.50, BR2 = 0.46;
+
+/* ── EL TUMBO ─────────────────────────────────────────────────────────────
+   ES DIBUJO Y NADA MAS, Y ESO NO ES UNA CONCESION: `cajaArq` —el blanco— vive
+   clavada en la columna del arquero, en `d.js`, y de ella dependen el
+   resolvedor, la auditoria de los doce duelos y el auto-jugador. Un cuerpo
+   que se lleva su propia caja mientras rueda convertiria «apuntarle al
+   arquero» en apuntarle a donde estaba hace medio segundo, y la auditoria
+   aprobaria duelos que no se pueden pelear.
+   Y NO HACE FALTA que la caja se mueva, porque los turnos son alternos: el
+   unico momento en que un cuerpo esta fuera de su puesto es justo despues de
+   recibir un flechazo, y ahi le toca tirar A EL. Por eso `espera` no pasa el
+   turno mientras haya alguien en el piso (`arqCayendo`).
+
+   EL CUERPO ES UN SOLIDO Y LOS MIEMBROS SON RESORTES. Con el cuerpo entero
+   girando en bloque se lee a tabla que cae; lo que dice «esto es un cuerpo
+   sin fuerzas» es que los brazos y las piernas lleguen TARDE — cada uno con
+   su muelle subamortiguado apuntando a colgar hacia abajo en el MUNDO, o sea
+   a `-rot` en el marco del arquero.                                        */
+const G_RAG = 18;              /* la gravedad del tumbo, en celdas/s^2      */
+/* EL IMPULSO ESTA CALIBRADO CONTRA EL TOPE, y el primer valor no lo estaba:
+   con 2,4 y 3,2 el cuerpo llegaba al canto de la meseta y al maximo de giro
+   TAMBIEN con un golpe de cuerpo, asi que un rozon y un cabezazo terminaban
+   en la misma pose — el clamp se comia justo la diferencia que el empujon
+   existe para mostrar. Medido el PICO —muestreando cada 16 ms el tumbo
+   entero, porque una sola lectura a los 200 ms agarra a los dos a mitad de
+   camino y devuelve el mismo numero— el cuerpo se va 0,755 celdas y gira
+   80 grados, y la cabeza pega en el tope: 1,05 celdas y 93 grados, o sea
+   1,4 veces mas lejos y boca arriba contra tumbado.                       */
+const RAG_VX = 1.2, RAG_VY = 3.5, RAG_VR = 2.3;
+/* EL TOPE SALE DE LA MESETA MEDIDA, no de un numero comodo: el aplanado de
+   `c.js` va de X-1 a X+1, asi que el piso plano del rival llega a x=17 y el
+   arquero esta en 15,5. Con 1,35 el cuerpo tumbado quedaba con el hombro
+   colgando del canto Y ademas cortado por el borde del cuadro en reposo.  */
+const RAG_XMIN = -1.05, RAG_XMAX = 0.15;
+const RAG_ROT_MAX = 1.62;      /* boca arriba y no mas: no rueda de espaldas */
+const RAG_K = 140, RAG_C = 11; /* muelle de miembro: zeta ~ 0,46            */
+const RAG_LEV = 0.55;          /* lo que tarda en volver a ponerse de pie   */
+
+/* un muelle subamortiguado, integrado en subpasos: con dt de 0,05 y K de 140
+   el producto K*dt pasa de 1 y el integrador explota — el muelle sale
+   disparado y el brazo desaparece de la pantalla. */
+function muelle(a, k, obj, dt) {
+  const v = k + 'v';
+  const ns = Math.max(1, Math.ceil(dt * 120)), h = dt / ns;
+  for (let i = 0; i < ns; i++) {
+    a[v] += ((obj - a[k]) * RAG_K - a[v] * RAG_C) * h;
+    a[k] += a[v] * h;
+  }
+}
+const suave = u => u * u * (3 - 2 * u);
+
+/* el perfil de media limba, de la empunadura a la punta. Es UNA curva y no
+   cuatro tramos rectos: a los ~40 px que mide el arco en pantalla, lo unico
+   que dice «esto es un arco» es que la silueta se curve hacia el blanco.
+
+   Y ESTABA DADO VUELTA. Las puntas caian en x = +0,34, o sea DELANTE de la
+   empunadura, asi que la cuerda —que va de punta a punta— pasaba por encima
+   del puno y entre el arquero y el blanco. Un arco de verdad es al reves:
+   target <- empunadura <- cuerda <- arquero, y la separacion entre las dos
+   ES el brace height. Con la empunadura adelante (x = +0,02) y las puntas
+   atras (-0,30) la curva bombea hacia el blanco, que es lo que hace una
+   limba, y la cuerda queda del lado del que tira.                         */
+const ARCO_PT = [0.02, 0.20, -0.03, 0.60, -0.30, 0.98];  /* p0, control, p1 */
+const ARCO_PUNTA = [-0.30, 0.98];
+
+/* EL NOCK: donde esta la cuerda. En reposo cae en la linea de las dos puntas
+   —o sea recta— y al tensar viaja hacia atras por la linea de la flecha.
+   0,85 sobre un arquero de 2,10 son unos 71 cm de apertura a escala de
+   persona, que es lo que mide un tiro de verdad. */
+const NOCK_0 = -0.30, NOCK_1 = -0.85;
+
+const ARQ_COL = [
+  /* 0 = el jugador. Los otros son los rivales, uno por duelo (se repiten a
+     partir del 6): dos rivales del mismo color se leen a la misma persona. */
+  { piel: 0xe0a878, ropa: 0x2f7fa8, det: 0xdfe6ea, arco: 0x8a5a2e, pelo: 0x3a2b22 },
+  { piel: 0xd9a070, ropa: 0x8a4a3a, det: 0xe8d7b0, arco: 0x6f4a28, pelo: 0x241a14 },
+  { piel: 0xe8c090, ropa: 0x4a7a3a, det: 0xd8e0c0, arco: 0x7a5230, pelo: 0x4a3a20 },
+  { piel: 0xc98f66, ropa: 0x6a4a8a, det: 0xe0d8ee, arco: 0x5f4230, pelo: 0x1e1a24 },
+  { piel: 0xf0c8a0, ropa: 0xb08030, det: 0xf0e6c8, arco: 0x8a6234, pelo: 0x6a4a20 },
+  { piel: 0xb98a68, ropa: 0x2f5f6a, det: 0xcfe0e4, arco: 0x4f3a28, pelo: 0x2a2420 },
+];
+
+const ARQ = [null, null];
+
+/* ── LOS COLORES DE UN ARQUERO ────────────────────────────────────────────
+   Se resuelven UNA vez al crearlo y no por cuadro: `satura` pasa por HSL y
+   volver a hacer esa cuenta doce veces por arquero y sesenta veces por
+   segundo es trabajo puro para obtener siempre lo mismo.                  */
+function arqPaleta(C) {
+  const p = {};
+  for (const k of ['piel', 'ropa', 'det', 'arco', 'pelo']) p[k] = satura(C[k]);
+  p.ropaS = luz(p.ropa, -0.10);        /* la sombra del torso */
+  p.ropaO = luz(p.ropa, -0.19);        /* la manga, para que el hombro no se funda */
+  p.pielS = luz(p.piel, -0.11);
+  p.arcoO = luz(p.arco, -0.14);
+  p.borde = luz(p.ropa, -0.30);
+  p.cuerda = [242, 238, 226];
+  p.metal = [216, 221, 224];
+  for (const k in p) if (Array.isArray(p[k])) p[k] = _r2c(p[k]);
+  return p;
+}
+
+/* ── DIBUJO: PIEZAS ──────────────────────────────────────────────────────
+   Todo son capsulas y rectangulos redondeados. No hay una sola linea recta
+   con canto vivo en el cuerpo, y eso no es coqueteria: en vector plano el
+   canto redondeado es lo que separa un personaje de una caja de prueba.  */
+function capsu(g, x0, y0, x1, y1, w, col) {
+  g.strokeStyle = col; g.lineWidth = w;
+  g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); LLAM++;
+}
+function rredon(g, x, y, w, h, r, col) {
+  const rr = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  g.fillStyle = col; g.beginPath();
+  if (g.roundRect) g.roundRect(x, y, w, h, rr);
+  else {
+    g.moveTo(x + rr, y); g.lineTo(x + w - rr, y);
+    g.quadraticCurveTo(x + w, y, x + w, y + rr); g.lineTo(x + w, y + h - rr);
+    g.quadraticCurveTo(x + w, y + h, x + w - rr, y + h); g.lineTo(x + rr, y + h);
+    g.quadraticCurveTo(x, y + h, x, y + h - rr); g.lineTo(x, y + rr);
+    g.quadraticCurveTo(x, y, x + rr, y);
+  }
+  g.fill(); LLAM++;
+}
+function disco(g, x, y, r, col) {
+  g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill(); LLAM++;
+}
+
+/* ── EL CODO ─────────────────────────────────────────────────────────────
+   Dos huesos y una circunferencia: el codo es uno de los dos cortes entre
+   la esfera del hombro y la de la mano, y `s` elige cual. Sin esto el brazo
+   es una capsula recta, y una capsula recta del hombro a la boca del arco
+   no se lee a brazo: se lee a puntero.                                    */
+function codoDe(sx, sy, hx, hy, s) {
+  const dx = hx - sx, dy = hy - sy;
+  let d = Math.hypot(dx, dy);
+  const max = BR1 + BR2 - 0.004;
+  if (d < 1e-4) { d = 1e-4; }
+  const dd = Math.min(d, max);
+  const ux = dx / d, uy = dy / d;
+  const a = (dd * dd + BR1 * BR1 - BR2 * BR2) / (2 * dd);
+  const h = Math.sqrt(Math.max(0, BR1 * BR1 - a * a));
+  return [sx + ux * a + uy * h * s, sy + uy * a - ux * h * s];
+}
+/* EL NOCK NO PUEDE IRSE MAS ATRAS DE LO QUE EL BRAZO ALCANZA. Tensar es
+   llevar el puno hasta `nock` sobre la linea de la flecha, y a angulos altos
+   ese punto se va a metro y pico del hombro contra los 0,96 que mide el
+   brazo: `codoDe` recorta la distancia pero sigue DIBUJANDO la mano donde se
+   la pidieron, asi que el antebrazo se estira ocho pixeles sobre un arquero
+   de cincuenta y tres. Se corta la linea contra la esfera del alcance — o
+   sea que el arquero tensa lo que puede y no lo que se le pidio.
+   (t^2 + 2t(P.d) + |P|^2 = R^2 con P = boca - hombro; se toma la raiz de
+   atras, que es el punto mas lejos al que el puno todavia llega.)         */
+const ALC_R = BR1 + BR2 - 0.02;
+function nockTope(bx, by, ang, n) {
+  const px = bx, py = by - HOMBRO_Y;
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  const pd = px * dx + py * dy, p2 = px * px + py * py;
+  const disc = pd * pd - p2 + ALC_R * ALC_R;
+  if (disc <= 0) return n;              /* la boca ya esta fuera: no hay corte */
+  return Math.max(n, -pd - Math.sqrt(disc));
+}
+
+function brazoDib(g, P, sx, sy, hx, hy, s, manga) {
+  const [ex, ey] = codoDe(sx, sy, hx, hy, s);
+  capsu(g, sx, sy, ex, ey, 0.25, manga ? P.ropaO : P.pielS);
+  capsu(g, ex, ey, hx, hy, 0.20, P.piel);
+  disco(g, hx, hy, 0.125, P.piel);
+}
+
+/* ── EL ARQUERO ──────────────────────────────────────────────────────────
+   El orden es de atras hacia adelante y no es negociable: la pierna y el
+   brazo de atras, el cuerpo, la cabeza, y recien despues el arco y el brazo
+   que lo sostiene. Con el arco debajo del torso, el unico objeto que dice
+   de que se trata el juego queda tapado por una camiseta.                */
+function arqDibuja(g, a) {
+  if (!a || !a.puesto) return;
+  const P = a.pal, S = a.P;
+  g.save();
+  g.translate(a.x, a.piso);
+  if (a.lado) g.scale(-1, 1);
+  /* EL TUMBO VA ANTES QUE TODO Y DESPUES DEL ESPEJO: escrito en el marco
+     local, `-x` es «hacia atras» para los dos arqueros, y el espejo da vuelta
+     el eje Y EL SENTIDO DEL GIRO a la vez, asi que los dos caen para el lado
+     contrario al que les tiraron sin una sola cuenta aparte. Y pivota en la
+     CADERA, no en los pies: un cuerpo que gira desde los tobillos se lee a
+     poste que se cae, no a persona que sale despedida.                    */
+  if (a.rag) {
+    g.translate(a.rx, a.ry + CADERA_Y); g.rotate(a.rot); g.translate(0, -CADERA_Y);
+  }
+  g.lineCap = 'round'; g.lineJoin = 'round';
+
+  const resp = S.resp, tr = S.torsoR + a.incl;
+  const hy = HOMBRO_Y + resp;
+
+  /* PIERNAS. Pivotan en la cadera; el pie es un ovalo aparte porque una
+     capsula sola termina en punta y el arquero parece flotar.            */
+  for (const [ang, zz] of [[S.piTR, 1], [S.piFR, 0]]) {
+    const kx = Math.sin(ang) * PIERNA_L, ky = -Math.cos(ang) * PIERNA_L;
+    const px = kx, py = CADERA_Y + resp * 0.4 + ky;
+    capsu(g, 0, CADERA_Y + resp * 0.4, px, py, zz ? 0.28 : 0.30, zz ? P.ropaS : P.ropa);
+    rredon(g, px - 0.13, py - 0.10, 0.42, 0.20, 0.09, zz ? '#2e2f38' : '#22232a');
+  }
+
+  /* BRAZO DE LA CUERDA: DE QUE LADO DEL TORSO VA LO DECIDE DONDE ESTA LA
+     MANO, no una constante. Iba SIEMPRE detras, y eso valia cuando el puno
+     estaba escrito a mano por detras del hombro; desde que el puno sale del
+     nock —o sea de la linea de la flecha— a angulos de subida cae DELANTE
+     del pecho, y dibujado atras el brazo entero desaparece adentro de la
+     camiseta: el arquero tensa con un brazo que no se ve.                */
+  const manoAdel = S.manoTx > -0.05;
+  const braT = () => brazoDib(g, P, 0, hy, S.manoTx, S.manoTy + resp, -1, true);
+  if (!manoAdel) braT();
+
+  /* EL CARCAJ, antes del torso: cruzado a la espalda dice «este tipo tira
+     flechas» sin un solo rotulo, y de perfil es la silueta que lo separa
+     de un muneco cualquiera.                                             */
+  g.save();
+  g.translate(-0.20, CADERA_Y + 0.62 + resp); g.rotate(tr + 0.22);
+  rredon(g, -0.14, -0.44, 0.28, 0.96, 0.11, P.arcoO);
+  for (let k = 0; k < 3; k++) {
+    capsu(g, -0.06 + k * 0.06, 0.40, -0.06 + k * 0.06, 0.74, 0.05, P.arco);
+    capsu(g, -0.06 + k * 0.06, 0.74, -0.06 + k * 0.06, 0.86, 0.10, P.metal);
+  }
+  g.restore();
+
+  /* TORSO. Se inclina desde la cadera, no desde el centro: un cuerpo que
+     pivota por la panza se lee a muneco de resorte.                      */
+  g.save();
+  g.translate(0, CADERA_Y + resp * 0.4); g.rotate(tr);
+  const th = ARQ_ALTO - CADERA_Y + resp * 0.6;
+  rredon(g, -0.43, -0.06, 0.86, th + 0.06, 0.26, P.ropa);
+  /* la pechera clara: lo unico que separa el frente de la espalda de lejos */
+  rredon(g, 0.06, th * 0.30, 0.33, th * 0.52, 0.13, P.det);
+  /* la sombra del costado de atras, que es todo el volumen que este dibujo
+     necesita: en vector plano dos tonos leen mas que un degradado.       */
+  rredon(g, -0.43, -0.06, 0.24, th + 0.06, 0.20, P.ropaS);
+  rredon(g, -0.45, -0.02, 0.90, 0.19, 0.08, P.pelo);          /* el cinto */
+  g.restore();
+
+  /* CABEZA. Va en el cuello, que es justo donde empieza su caja de choque. */
+  g.save();
+  g.translate(Math.sin(tr) * -(ARQ_ALTO - CADERA_Y), ARQ_ALTO + resp);
+  g.rotate(S.cabR + tr);
+  rredon(g, -CAB_MED, 0.02, CAB_MED * 2, CAB_ALTO - 0.02, 0.30, P.piel);
+  /* la nariz sale sobre el eje del tiro: es lo unico que dice para donde
+     mira, y de perfil es lo que mas se lee */
+  rredon(g, CAB_MED - 0.04, CAB_ALTO * 0.36, 0.17, 0.17, 0.07, P.piel);
+  /* el pelo tapa la coronilla y baja por la nuca */
+  g.fillStyle = P.pelo; g.beginPath();
+  g.moveTo(-CAB_MED - 0.03, CAB_ALTO * 0.34);
+  g.lineTo(-CAB_MED - 0.03, CAB_ALTO * 0.80);
+  g.quadraticCurveTo(-CAB_MED - 0.03, CAB_ALTO + 0.06, 0, CAB_ALTO + 0.06);
+  g.quadraticCurveTo(CAB_MED + 0.02, CAB_ALTO + 0.06, CAB_MED + 0.02, CAB_ALTO * 0.66);
+  g.lineTo(CAB_MED * 0.34, CAB_ALTO * 0.74);
+  g.lineTo(-CAB_MED * 0.10, CAB_ALTO * 0.62);
+  g.closePath(); g.fill(); LLAM++;
+  /* LA BANDA OSCURA DE LOS OJOS Y NO DOS PUNTITOS: a treinta pixeles de
+     alto, un ojo de tres pixeles no existe; una franja si, y encima es la
+     cara de la referencia.                                               */
+  rredon(g, -0.10, CAB_ALTO * 0.50, CAB_MED + 0.16, 0.17, 0.07, '#22232a');
+  disco(g, CAB_MED * 0.52, CAB_ALTO * 0.585, 0.048, '#f4f6f8');
+  capsu(g, -0.02, CAB_ALTO * 0.30, CAB_MED * 0.62, CAB_ALTO * 0.30, 0.06, P.pielS);
+  g.restore();
+
+  /* EL ARCO. Cuelga de la boca, asi que girarlo apunta el arco sin mover la
+     boca ni un milimetro — que es lo que garantiza que la flecha salga de
+     donde se ve.                                                          */
+  if (S.arcoVis) {
+    g.save();
+    g.translate(S.bocaX, S.bocaY + resp); g.rotate(S.arcoAng);
+    const [p0x, p0y, cx, cy, p1x, p1y] = ARCO_PT;
+    g.strokeStyle = P.arco; g.lineWidth = 0.105;
+    g.beginPath();
+    g.moveTo(p1x, -p1y); g.quadraticCurveTo(cx, -cy, p0x, -p0y);
+    g.lineTo(p0x, p0y); g.quadraticCurveTo(cx, cy, p1x, p1y);
+    g.stroke(); LLAM++;
+    rredon(g, -0.09, -0.25, 0.20, 0.50, 0.08, P.pelo);        /* la empunadura */
+    /* LA CUERDA VA APARTE Y SE MUEVE: tensar es tirar el nock hacia atras,
+       y con la cuerda dibujada fija la unica senal de la tension serian
+       los pies del arquero. La V del arco tensado sale sola.             */
+    g.strokeStyle = P.cuerda; g.lineWidth = 0.045;
+    g.beginPath();
+    g.moveTo(ARCO_PUNTA[0], ARCO_PUNTA[1]);
+    g.lineTo(S.nockX, 0); g.lineTo(ARCO_PUNTA[0], -ARCO_PUNTA[1]);
+    g.stroke(); LLAM++;
+    if (S.flVis) {
+      /* LARGO DE FLECHA DE VERDAD: 1,02 sobre un arquero de 2,10 son unos
+         85 cm, y con la apertura llena la punta queda justo pasando la
+         empunadura — que es como se ve un arco tensado. Con los 0,94 de
+         antes la punta se quedaba corta y la flecha parecia un palito. */
+      capsu(g, S.nockX, 0, S.nockX + 0.88, 0, 0.06, '#8a6034');
+      g.fillStyle = _r2c([216, 221, 224]); g.beginPath();
+      g.moveTo(S.nockX + 1.02, 0); g.lineTo(S.nockX + 0.84, 0.078);
+      g.lineTo(S.nockX + 0.84, -0.078); g.closePath(); g.fill(); LLAM++;
+      /* el emplumado: dos trazos al lado del nock. Sin ellos la flecha es
+         una linea, y una linea saliendo de la cuerda no se lee a flecha. */
+      capsu(g, S.nockX + 0.05, 0, S.nockX + 0.22, 0.085, 0.028, P.det);
+      capsu(g, S.nockX + 0.05, 0, S.nockX + 0.22, -0.085, 0.028, P.det);
+    }
+    g.restore();
+  }
+
+  if (manoAdel) braT();
+  /* BRAZO DE ADELANTE: el que sostiene el arco. Ultimo, por encima de todo. */
+  brazoDib(g, P, 0, hy, S.bocaX, S.bocaY + resp, 1, true);
+  g.restore();
+}
+
+/* ── ENTRADA ──────────────────────────────────────────────────────────── */
+function arqEntra(M) {
+  for (let l = 0; l < 2; l++) {
+    if (!ARQ[l]) {
+      const C = l === 0 ? ARQ_COL[0] : ARQ_COL[1 + ((JU && JU.n >= 0 ? JU.n : 0) % (ARQ_COL.length - 1))];
+      ARQ[l] = { lado: l, col: C, pal: arqPaleta(C), P: {} };
+    }
+    const a = ARQ[l];
+    a.puesto = true;
+    const piso = l ? M.pisoB : M.pisoA;
+    a.piso = piso;
+    a.x = (l ? XB : XA) + 0.5;
+    a.est = 'quieto'; a.t = 0; a.k = 0; a.ang = 0.7;
+    a.ocio = Math.random() * 5; a.sac = 0; a.incl = 0; a.inclObj = 0;
+    ragCero(a);
+    a.boca = bocaDe(M, l);
+    arqPose(a, 0);
+  }
+}
+function arqPiso(l, p) { const a = ARQ[l]; if (a) a.piso = p; }
+
+/* al cambiar de duelo el rival cambia de color, y eso obliga a rehacerlo: un
+   rival nuevo con la ropa del anterior se lee al mismo tipo otra vez */
+function arqSuelta() {
+  for (let l = 0; l < 2; l++) if (ARQ[l]) ARQ[l].puesto = false;
+  ARQ[1] = null;      /* el jugador se queda; el rival se rehace por duelo */
+}
+
+/* ── ESTADOS ──────────────────────────────────────────────────────────────
+   Cada uno dura lo que dura la cosa, y no hay dos que puedan estar puestos a
+   la vez: `arqPose` es el UNICO sitio que escribe la pose, asi que no hay
+   forma de que una animacion pise a la otra a mitad de camino.             */
+function arqApunta(l, angMundo, k) {
+  const a = ARQ[l]; if (!a) return;
+  if (a.est === 'caido' || a.est === 'levanta' || a.est === 'gana' || a.est === 'pierde') return;
+  a.est = 'apunta'; a.t = 0;
+  /* el rival se dibuja espejado en x, asi que el angulo hay que llevarlo al
+     marco local: PI menos el de mundo es su reflejo */
+  a.ang = l ? Math.PI - angMundo : angMundo;
+  if (a.ang > Math.PI) a.ang -= 6.2832;
+  a.k = cl(k, 0, 1);
+}
+function arqTira(l) {
+  const a = ARQ[l]; if (!a) return;
+  a.est = 'tira'; a.t = 0;
+}
+function ragCero(a) {
+  a.rag = false; a.muere = false;
+  a.rx = 0; a.ry = 0; a.rot = 0;
+  a.rvx = 0; a.rvy = 0; a.rvr = 0;
+  a.mPiF = 0.10; a.mPiFv = 0; a.mPiT = -0.14; a.mPiTv = 0;
+  a.mCab = 0; a.mCabv = 0; a.mBrF = 0; a.mBrFv = 0; a.mBrT = 0; a.mBrTv = 0;
+  a.r0x = 0; a.r0y = 0; a.r0r = 0; a.tocado = false;
+}
+/* EL EMPUJON SALE DEL DANO Y NO DE UNA CONSTANTE: un rozon de veinte y un
+   cabezazo de setenta tienen que verse distinto, porque el numero que sube
+   en la barra ya lo dice y el cuerpo no puede contradecirlo. Medido, un
+   cuerpo se va 0,755 celdas y una cabeza pega en el tope de la meseta.   */
+function arqRecibe(l, cab, dn, mata) {
+  const a = ARQ[l]; if (!a) return;
+  const f = (cab ? 1.5 : 1.0) * cl((dn || DANO_CUERPO) / DANO_CUERPO, 0.75, 1.25);
+  a.est = 'caido'; a.t = 0; a.rag = true; a.muere = !!mata; a.tocado = false;
+  a.rx = 0; a.ry = 0; a.rot = 0;
+  a.rvx = -RAG_VX * f; a.rvy = RAG_VY * f; a.rvr = RAG_VR * f;
+  a.mBrFv = -9 * f; a.mBrTv = -7 * f; a.mCabv = -6 * f;
+}
+function arqFin(l, gano) {
+  const a = ARQ[l]; if (!a) return;
+  /* AL QUE LO MATARON SE QUEDA EN EL PISO: devolverlo al puesto para que
+     haga la pose de perder deshace el unico golpe que decidio el duelo. */
+  if (a.est === 'caido' && a.muere) return;
+  a.rag = false; ragCero(a);
+  a.est = gano ? 'gana' : 'pierde'; a.t = 0;
+}
+function arqQuieto(l) {
+  const a = ARQ[l]; if (!a) return;
+  if (a.est === 'gana' || a.est === 'pierde') return;
+  if (a.est === 'caido' || a.est === 'levanta') return;
+  a.est = 'quieto'; a.t = 0; a.k = 0;
+}
+
+/* ── LA POSE ─────────────────────────────────────────────────────────────
+   Todo esta escrito en el marco LOCAL del arquero (x hacia adelante, y desde
+   los pies), asi que el rival —espejado— sale correcto sin una sola cuenta
+   aparte. Y no escribe en el lienzo: deja los numeros en `a.P` y quien
+   dibuja los lee. Asi una sonda puede leer la pose sin dibujar un cuadro. */
+function arqPose(a, dt) {
+  const e = a.est;
+  a.t += dt;
+
+  /* la boca del arco esta clavada: es `bocaDe` menos la posicion del arquero */
+  const bx = Math.abs(a.boca.x - a.x);
+  const by = a.boca.y - a.piso;
+
+  let manoTx = -0.22, manoTy = 1.20;    /* la mano de la cuerda, en reposo */
+  let torsoY = 0, torsoR = 0, cabR = 0, piFR = 0.10, piTR = -0.14, resp = 0;
+  let arcoVis = true, flVis = false, arcoAng = a.ang, bocaX = bx, bocaY = by;
+  let nock = NOCK_0;
+
+  if (e === 'quieto') {
+    a.ocio += dt;
+    resp = Math.sin(a.ocio * 1.7) * 0.012;
+    /* QUIETO NO ES UNA POSE: respira y cada tanto mira al otro. Un muneco
+       clavado durante el turno del rival se lee a que el juego se colgo. */
+    const g = a.ocio % 6.8;
+    cabR = g < 1.0 ? Math.sin(g * Math.PI / 1.0) * 0.22 : 0;
+    manoTx = -0.20 + Math.sin(a.ocio * 1.7) * 0.02; manoTy = 1.18 + resp;
+    /* EN REPOSO EL ARCO CUELGA CASI VERTICAL, no cruzado en diagonal por
+       delante del cuerpo: con -0,95 la punta de abajo caia en (-0,18 · 0,76),
+       o sea DENTRO del torso y de las piernas, y lo que se veia era un palo
+       atravesado. Casi a plomo, la punta de abajo roza el piso detras de los
+       pies y la de arriba llega a la altura de los ojos. */
+    arcoAng = -0.18;
+    bocaX = 0.42; bocaY = 1.10;
+  } else if (e === 'apunta') {
+    /* la cuerda se tira hasta el menton y el cuerpo se echa atras: la
+       tension es lo unico que dice cuanta fuerza lleva el tiro */
+    const k = a.k;
+    /* LA MANO DE LA CUERDA NO SE ESCRIBE: SE DERIVA DEL NOCK. Estaban los
+       dos por separado, asi que el puno terminaba en un sitio y la cuerda
+       en otro — o sea que el arquero tensaba el aire. Con el nock como
+       unico dato, cuerda, flecha y puno son EL MISMO PUNTO por construccion. */
+    nock = nockTope(bocaX, bocaY, arcoAng, mez(NOCK_0, NOCK_1, k));
+    manoTx = bocaX + nock * Math.cos(arcoAng);
+    manoTy = bocaY + nock * Math.sin(arcoAng);
+    torsoR = -0.06 * k; piFR = 0.10 + 0.16 * k; piTR = -0.14 - 0.10 * k;
+    flVis = true;
+  } else if (e === 'tira') {
+    /* el retroceso: 0,42 s. La mano de la cuerda vuelve de golpe y el torso
+       se sacude — sin eso, soltar se ve como que la flecha aparecio sola. */
+    const u = cl(a.t / 0.42, 0, 1);
+    const g = Math.exp(-u * 7) * Math.sin(u * 26);
+    torsoR = 0.10 * g; cabR = -0.14 * g; resp = -0.02 * Math.abs(g);
+    arcoAng = a.ang + 0.16 * g;
+    /* la cuerda vuelve de golpe y la mano con ella, por el mismo camino */
+    nock = nockTope(bocaX, bocaY, arcoAng, mez(NOCK_1, NOCK_0, Math.min(1, u * 5)));
+    manoTx = bocaX + nock * Math.cos(arcoAng);
+    manoTy = bocaY + nock * Math.sin(arcoAng);
+    if (u >= 1) { a.est = 'quieto'; a.ocio = 0; }
+  } else if (e === 'caido' || e === 'levanta') {
+    if (e === 'caido') {
+      /* el solido: gravedad, un rebote y roce contra el piso */
+      a.rvy -= G_RAG * dt;
+      a.rx += a.rvx * dt; a.ry += a.rvy * dt; a.rot += a.rvr * dt;
+      /* LA ALTURA DEL SUELO DEPENDE DE CUANTO ESTA GIRADO: acostado, la
+         cadera queda a media panza del piso y no a los 0,88 de estar de
+         pie. Con una altura fija, el cuerpo horizontal flota. */
+      const hc = -(CADERA_Y - 0.30) * Math.abs(Math.sin(a.rot));
+      if (a.ry <= hc) {
+        a.ry = hc;
+        if (a.rvy < -0.9) {
+          a.rvy = -a.rvy * 0.32; a.rvx *= 0.62; a.rvr *= 0.55;
+          if (!a.tocado) { a.tocado = true; son('tumbo'); }
+        } else {
+          a.rvy = 0;
+          const r = Math.max(0, 1 - dt * 7);
+          a.rvx *= r; a.rvr *= Math.max(0, 1 - dt * 6);
+          if (!a.tocado) { a.tocado = true; son('tumbo'); }
+        }
+      }
+      /* NO SE SALE DE LA MESETA: son tres columnas planas y mas alla hay
+         pendiente. Un cuerpo que se desliza al vacio se lee a defecto. */
+      a.rx = cl(a.rx, RAG_XMIN, RAG_XMAX);
+      a.rot = cl(a.rot, -0.25, RAG_ROT_MAX);
+      if (!a.muere && a.t > 0.9 && Math.abs(a.rvy) < 0.35 && Math.abs(a.rvr) < 0.9) {
+        a.est = 'levanta'; a.t = 0;
+        a.r0x = a.rx; a.r0y = a.ry; a.r0r = a.rot;
+      }
+    } else {
+      /* SE LEVANTA VOLVIENDO AL PUESTO, y la caja de choque no se entera
+         nunca porque nunca se movio: al terminar, el cuerpo esta otra vez
+         exactamente donde el resolvedor cree que esta. */
+      const u = cl(a.t / RAG_LEV, 0, 1), k = suave(u);
+      a.rx = a.r0x * (1 - k); a.ry = a.r0y * (1 - k); a.rot = a.r0r * (1 - k);
+      if (u >= 1) { a.rag = false; ragCero(a); a.est = 'quieto'; a.ocio = 0; }
+    }
+
+    /* LOS MIEMBROS CUELGAN HACIA ABAJO EN EL MUNDO, o sea a `-rot` en este
+       marco — y llegan TARDE, que es lo unico que separa un cuerpo sin
+       fuerzas de un maniqui girando en bloque. */
+    const o = -a.rot;
+    muelle(a, 'mPiF', o + 0.26, dt);
+    muelle(a, 'mPiT', o - 0.30, dt);
+    muelle(a, 'mCab', o * 0.80, dt);
+    muelle(a, 'mBrF', o - 0.22, dt);
+    muelle(a, 'mBrT', o + 0.30, dt);
+
+    torsoR = -a.rot * 0.22; cabR = a.mCab - torsoR; resp = 0;
+    piFR = a.mPiF; piTR = a.mPiT;
+    const hyR = HOMBRO_Y;
+    manoTx = Math.sin(a.mBrT) * BRAZO_L * 0.92;
+    manoTy = hyR - Math.cos(a.mBrT) * BRAZO_L * 0.92;
+    bocaX = Math.sin(a.mBrF) * BRAZO_L * 0.92;
+    bocaY = hyR - Math.cos(a.mBrF) * BRAZO_L * 0.92;
+    arcoAng = -1.35 - a.rot;   /* el arco cuelga de la mano, tambien sin fuerza */
+    flVis = false;
+  } else if (e === 'gana') {
+    /* los brazos arriba y saltitos: el arco se guarda, que es lo que hace
+       cualquiera que dejo de tener a quien tirarle */
+    const s = Math.sin(a.t * 7.2);
+    resp = Math.abs(s) * 0.16;
+    manoTx = -0.30; manoTy = 2.55 + s * 0.08;
+    bocaX = 0.32; bocaY = 2.60 + s * 0.08; arcoAng = 1.35; flVis = false;
+    cabR = s * 0.10; piFR = 0.06; piTR = -0.08;
+  } else if (e === 'pierde') {
+    const u = cl(a.t / 0.9, 0, 1), k = u * u * (3 - 2 * u);
+    torsoR = -0.55 * k; cabR = -0.62 * k; resp = -0.42 * k;
+    manoTx = 0.10; manoTy = mez(1.20, 0.55, k);
+    arcoVis = k < 0.4; bocaX = bx; bocaY = by - 0.7 * k;
+    piFR = 0.55 * k; piTR = -0.55 * k;
+  }
+
+  /* el arquero se inclina hacia el tiro cuando apunta alto o bajo — es la
+     unica pista de la INTENCION antes de que la flecha salga */
+  a.inclObj = (e === 'apunta') ? cl(a.ang * 0.10, -0.14, 0.14) : 0;
+  a.incl += (a.inclObj - a.incl) * Math.min(1, dt * 9);
+
+  /* EL NOCK ES EL MISMO PUNTO PARA LA CUERDA Y PARA LA FLECHA, asi que la
+     flecha nunca puede quedar despegada de la cuerda por mucho que se tense */
+  const P = a.P;
+  P.resp = resp; P.torsoR = torsoR; P.cabR = cabR;
+  P.piFR = piFR; P.piTR = piTR;
+  P.manoTx = manoTx; P.manoTy = manoTy;
+  P.arcoVis = arcoVis; P.flVis = flVis; P.arcoAng = arcoAng;
+  P.bocaX = bocaX; P.bocaY = bocaY;
+  P.nockX = nock;
+}
+
+function arqPaso(dt) {
+  for (const a of ARQ) if (a && a.puesto) arqPose(a, dt);
+}
+const arqOcupado = a => !a || a.est === 'tira' || a.est === 'caido' || a.est === 'levanta';
+const arqLibre = () => !ARQ[0] || (!arqOcupado(ARQ[0]) && (!ARQ[1] || !arqOcupado(ARQ[1])));
+/* EL TURNO NO PASA MIENTRAS HAY ALGUIEN EN EL PISO — y el que se murio no
+   cuenta, porque ese no se levanta nunca y el duelo se quedaria esperando. */
+/* EL PLANO DEL REMATE ES EL CUERPO, NO EL PUESTO. Al terminar el duelo la
+   camara se suelta y vuelve al reposo, y ahi el encuadre de espera —16,4
+   celdas de ancho— NO ALCANZA para un cuerpo tumbado: acostado a 63 grados
+   la cabeza del rival llega a x 17,19 contra un borde en 17,20, asi que el
+   muerto salia CORTADO por el canto en la ultima imagen del duelo. Enfocando
+   el cuerpo, el encuadre de vuelo lo deja con dos celdas y media de aire. */
+const arqMuerto = () => {
+  for (const a of ARQ) if (a && a.puesto && a.muere) return { x: a.x, y: a.piso + 1.0 };
+  return null;
+};
+const arqCayendo = () => {
+  for (const a of ARQ) {
+    if (!a || !a.puesto) continue;
+    if (a.est === 'levanta') return true;
+    if (a.est === 'caido' && !a.muere) return true;
+  }
+  return false;
+};
+/* ══════════════════════════════════════════════════════════════════════════
+   G · EL AUDIO, PROCEDURAL
+   Ni un byte de asset. Lo que suena en un juego de arcos son golpes cortos
+   —la cuerda, el impacto, la madera que se parte— y VIENTO, que no se acaba
+   nunca. Las dos cosas se escriben mejor de lo que se graban: un golpe corto
+   grabado pesa mas que todo esto junto, y un bucle de viento tiene una vuelta
+   que se escucha en cada pasada.
+
+   Y EL VIENTO NO ES AMBIENTE: es la mecanica. El duelo 12 tira con cinco
+   celdas por segundo cuadrado en contra, y si eso solo se leyera en un
+   numero del HUD, el jugador se enteraria despues de fallar. Aca la cama
+   sopla mas fuerte cuanto mas viento hay, asi que se oye antes de tirar.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let AC = null, MAE = null, BMUS = null, BFX = null, ANA = null, RUIDO = null;
+let MUS_ON = false, MUS_T = 0, MUS_RAIZ = 110, MUS_REL = null, PAD = [];
+let VTO = null, VTO_W = 0;
+
+/* pentatonica menor: el mismo puñado de sonidos suena cien veces por partida,
+   y la escala en la que cualquier nota pega con cualquier otra es la
+   diferencia entre musica y tortura */
+const PENTA = [0, 3, 5, 7, 10, 12, 15, 17];
+const RAICES = [110.0, 98.0, 130.81, 116.54];
+
+function auDesp() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  const C = window.AudioContext || window.webkitAudioContext;
+  if (!C) return;
+  AC = new C();
+  MAE = AC.createGain(); MAE.gain.value = 1;
+  ANA = AC.createAnalyser(); ANA.fftSize = 2048;
+  MAE.connect(ANA); MAE.connect(AC.destination);
+  /* DOS BUSES Y NO UNO: con todo colgado del maestro, bajar «la musica»
+     bajaria tambien los golpes y las dos perillas de ajustes describirian la
+     misma cosa. El viento va en el de musica: es cama, no acontecimiento. */
+  BMUS = AC.createGain(); BFX = AC.createGain();
+  BMUS.connect(MAE); BFX.connect(MAE);
+  auVol();
+  const n = AC.sampleRate;
+  RUIDO = AC.createBuffer(1, n, n);
+  const d = RUIDO.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  musArma(); vtoArma();
+  if (AC.state === 'suspended') AC.resume();
+}
+function auVol() {
+  if (!AC) return;
+  BMUS.gain.setTargetAtTime(PROG.vol * 0.40, AC.currentTime, 0.05);
+  BFX.gain.setTargetAtTime(PROG.fx, AC.currentTime, 0.05);
+}
+
+/* ── LA CAMA ──────────────────────────────────────────────────────────────
+   Cuatro senos DOBLADOS Y DESAFINADOS dos milesimas: dos senos identicos
+   suenan a tono de prueba y dos que baten cada pocos segundos suenan a
+   instrumento. El pasabajos da una vuelta cada veintiun segundos, que es lo
+   que hace que respire en vez de zumbar.                                   */
+function musArma() {
+  const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 520; f.Q.value = 0.6;
+  const g = AC.createGain(); g.gain.value = 0.16;
+  f.connect(g); g.connect(BMUS);
+  const lfo = AC.createOscillator(), lg = AC.createGain();
+  lfo.frequency.value = 1 / 21; lg.gain.value = 240;
+  lfo.connect(lg); lg.connect(f.frequency); lfo.start();
+  PAD = [];
+  for (const r of [1, 1.5, 2, 2.25]) for (const dt of [1, 1.0021]) {
+    const o = AC.createOscillator(); o.type = 'sine';
+    const og = AC.createGain(); og.gain.value = r === 1 ? 0.34 : 0.19;
+    o.connect(og); og.connect(f); o.start();
+    PAD.push({ o, r, dt });
+  }
+  musRaiz(MUS_RAIZ);
+  MUS_REL = setInterval(musPlanea, 140);
+}
+function musRaiz(hz) {
+  MUS_RAIZ = hz;
+  if (!AC) return;
+  for (const p of PAD) p.o.frequency.setTargetAtTime(hz * p.r * p.dt, AC.currentTime, 1.4);
+}
+/* LA AGENDA CUELGA DEL RELOJ DE AUDIO Y NO DE UN rAF: un cuadro se atrasa y
+   se pausa en segundo plano, y ahi la campana caeria fuera de tiempo o no
+   caeria nunca. */
+function musPlanea() {
+  if (!AC || !MUS_ON) return;
+  const ahora = AC.currentTime;
+  if (MUS_T < ahora) MUS_T = ahora + 0.2;
+  while (MUS_T < ahora + 0.6) {
+    campana(MUS_T, MUS_RAIZ * 4 * Math.pow(2, PENTA[(Math.random() * PENTA.length) | 0] / 12));
+    MUS_T += 2.4 + Math.random() * 3.0;
+  }
+}
+function campana(t, hz) {
+  const o = AC.createOscillator(); o.type = 'triangle'; o.frequency.value = hz;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.10, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0006, t + 2.1);
+  o.connect(g); g.connect(BMUS); o.start(t); o.stop(t + 2.2);
+}
+function musVer(v) { MUS_ON = v; if (AC) BMUS.gain.setTargetAtTime(v ? PROG.vol * 0.40 : 0, AC.currentTime, 0.5); }
+
+/* ── EL VIENTO ────────────────────────────────────────────────────────────
+   Ruido pasabajos con la ganancia y el corte atados a |viento|, mas un
+   segundo LFO lento para que sople a rachas: un viento parejo se oye a
+   estatica de radio y a los diez segundos el oido lo deja de escuchar.    */
+function vtoArma() {
+  const s = AC.createBufferSource(); s.buffer = RUIDO; s.loop = true;
+  const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 300; f.Q.value = 0.9;
+  const g = AC.createGain(); g.gain.value = 0;
+  s.connect(f); f.connect(g); g.connect(BMUS); s.start();
+  const lfo = AC.createOscillator(), lg = AC.createGain();
+  lfo.frequency.value = 0.13; lg.gain.value = 0.35;
+  lfo.connect(lg); lg.connect(g.gain); lfo.start();
+  VTO = { f, g, base: 0 };
+  auViento(0);
+}
+function auViento(w) {
+  VTO_W = w;
+  if (!AC || !VTO) return;
+  const k = Math.min(1, Math.abs(w) / 5);
+  VTO.base = 0.035 + k * 0.10;
+  VTO.g.gain.setTargetAtTime(VTO.base, AC.currentTime, 0.8);
+  VTO.f.frequency.setTargetAtTime(240 + k * 900, AC.currentTime, 0.8);
+}
+
+/* ── LOS GOLPES ───────────────────────────────────────────────────────────
+   LA ESCALA ESTA ELEGIDA: el impacto en un cuerpo es lo mas fuerte del juego
+   despues de ganar, y la cuerda tensandose lo mas flojo — porque la cuerda
+   suena en cada tiro y un impacto decide el duelo.                        */
+function ruidito(t, dur, hz, q, vol) {
+  const s = AC.createBufferSource(); s.buffer = RUIDO;
+  s.loop = true; s.playbackRate.value = 0.9 + Math.random() * 0.2;
+  const f = AC.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = hz; f.Q.value = q;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0004, t + dur);
+  s.connect(f); f.connect(g); g.connect(BFX);
+  s.start(t); s.stop(t + dur + 0.02);
+}
+function tono(t, dur, h0, h1, vol, tipo) {
+  const o = AC.createOscillator(); o.type = tipo || 'sine';
+  o.frequency.setValueAtTime(h0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(20, h1), t + dur);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0004, t + dur);
+  o.connect(g); g.connect(BFX); o.start(t); o.stop(t + dur + 0.02);
+}
+
+/* cada material suena distinto AL CLAVARSE, y eso no es adorno: de noche o de
+   lejos, el sonido es lo unico que dice contra que pego la flecha.         */
+const CLAVA = {
+  [TIERRA]:   [0.16, 320, 1.0, 0.24], [PASTO]:    [0.16, 300, 1.0, 0.22],
+  [ARENA]:    [0.14, 260, 0.8, 0.20], [NIEVE]:    [0.18, 220, 0.7, 0.16],
+  [PIEDRA]:   [0.11, 1700, 3.4, 0.30], [LADRILLO]: [0.12, 1300, 3.0, 0.28],
+  [MADERA]:   [0.15, 700, 2.2, 0.30], [HOJA]:     [0.13, 2600, 1.6, 0.16],
+  [METAL]:    [0.30, 2400, 8.0, 0.34],
+};
+
+function son(k, a) {
+  if (!AC) return;
+  const t = AC.currentTime + 0.001;
+  if (k === 'tensa')      { ruidito(t, 0.07, 420 + (a || 0) * 700, 5.0, 0.055); }
+  else if (k === 'tira')  { ruidito(t, 0.09, 1800, 1.6, 0.26); tono(t, 0.10, 420, 120, 0.16, 'triangle'); }
+  else if (k === 'vuela') { ruidito(t, 0.34, 900, 0.9, 0.09); }
+  else if (k === 'clava') {
+    const c = CLAVA[a] || CLAVA[TIERRA];
+    ruidito(t, c[0], c[1], c[2], c[3]);
+    if (a === METAL) tono(t, 0.42, 2100, 1400, 0.12, 'triangle');
+    else tono(t, c[0], 180, 90, 0.10);
+  }
+  else if (k === 'rompe') { ruidito(t, 0.26, 1100, 0.8, 0.30); ruidito(t + 0.05, 0.30, 2600, 1.2, 0.18); tono(t, 0.18, 150, 60, 0.16); }
+  else if (k === 'pega')  { ruidito(t, 0.18, 380, 1.0, 0.38); tono(t, 0.20, 220, 70, 0.30); }
+  else if (k === 'cabeza'){ ruidito(t, 0.20, 420, 1.0, 0.40); tono(t, 0.22, 260, 80, 0.32);
+                            tono(t + 0.05, 0.55, 1320, 1320, 0.20, 'triangle'); }
+  else if (k === 'tumbo') { ruidito(t, 0.22, 170, 0.9, 0.34); tono(t, 0.24, 120, 52, 0.24); }
+  else if (k === 'falla') { tono(t, 0.16, 300, 190, 0.11, 'square'); }
+  else if (k === 'turno') { tono(t, 0.14, 520, 660, 0.13, 'triangle'); }
+  else if (k === 'ui')    { ruidito(t, 0.045, 1500, 2.2, 0.10); }
+  else if (k === 'gana') {
+    const b = MUS_RAIZ * 4;
+    [0, 5, 7, 12].forEach((s, i) => tono(t + i * 0.10, 0.55, b * Math.pow(2, s / 12), b * Math.pow(2, s / 12), 0.26, 'triangle'));
+    tono(t + 0.30, 0.9, b * 2, b * 2, 0.16, 'sine');
+  }
+  else if (k === 'pierde') {
+    const b = MUS_RAIZ * 2;
+    [0, -2, -5].forEach((s, i) => tono(t + i * 0.16, 0.7, b * Math.pow(2, s / 12), b * Math.pow(2, s / 12), 0.20, 'triangle'));
+  }
+}
+
+/* la cuerda cruje MIENTRAS se tensa, y el crujido va atado a la tension y no
+   a un temporizador: son el mismo numero, asi que el sonido no se puede
+   separar de lo que el dedo esta haciendo */
+let TENSA_ANT = -1;
+function auTensa(k) {
+  const n = Math.floor(cl(k, 0, 1) * 7);
+  if (n !== TENSA_ANT) { if (n > TENSA_ANT && n > 0) son('tensa', k); TENSA_ANT = n; }
+}
+function auTensaCero() { TENSA_ANT = -1; }
+
+function auNivel(ms) {
+  return new Promise(r => {
+    if (!AC || !ANA) { r({ pico: 0, rms: 0 }); return; }
+    const buf = new Float32Array(ANA.fftSize);
+    let pico = 0, sum = 0, n = 0;
+    const t0 = performance.now();
+    const paso = () => {
+      ANA.getFloatTimeDomainData(buf);
+      for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > pico) pico = v; sum += buf[i] * buf[i]; n++; }
+      if (performance.now() - t0 < (ms || 700)) requestAnimationFrame(paso);
+      else r({ pico: +pico.toFixed(4), rms: +Math.sqrt(sum / Math.max(1, n)).toFixed(4) });
+    };
+    paso();
+  });
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   H · EL DUELO, EL HUD Y LOS PANELES
+
+   TODO EL TURNO PASA POR UNA MAQUINA DE CUATRO ESTADOS —apunta · vuela ·
+   espera · fin— y por una sola funcion de tiro (`tira`). El jugador y el
+   rival entran por AHI los dos: con dos caminos, el rival estaria jugando un
+   juego que no existe y la auditoria aprobaria duelos que no se pueden
+   pelear. Es la misma regla que el resolvedor y el choque ya comparten.
+
+   Y LA FLECHA QUE SE VE ES LA QUE SE VOLO. `vuela()` devuelve el recorrido
+   muestreado; la animacion lo INTERPOLA en vez de volver a integrar. Con dos
+   integradores, la flecha dibujada podria caer en un sitio y el dano
+   aplicarse en otro — y eso no falla ruidosamente: se ve como punteria mala.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const JU = {
+  n: 0, M: null, va: VIDA_MAX, vb: VIDA_MAX, turno: 0,
+  est: 'apunta', t: 0, flechas: 0, aciertos: 0,
+  fin: false, tuto: false, paso: 0, pausa: false,
+};
+const VU = { on: false, pts: null, r: null, t: 0, dur: 0, vx: 0, vy: 0, w: 0, quien: 0 };
+const RIV = { d: null, k: 0 };      /* el tiro del rival, resuelto una sola vez */
+const RIV_TENSA = 0.72;             /* lo que tarda en tensar, a la vista */
+const DT_PTS = 13 * PASO_F;
+
+/* ── PANELES ────────────────────────────────────────────────────────────── */
+let PAN = null;
+/* `on` MUESTRA Y `abre` ES OTRA COSA: `abre` es el velo partido —cerrado
+   arriba y abajo, abierto en el medio— que sólo lleva el menú, para que el
+   duelo se vea correr detrás. Toggleando `abre` como si fuera la
+   visibilidad, ningún panel llegaba a `display:grid` y la interfaz entera
+   quedaba invisible; lo cantó el banco: el click al idioma no encontraba
+   nada que tocar.                                                         */
+function verPanel(id) {
+  for (const p of document.querySelectorAll('.pan')) p.classList.toggle('on', p.id === id);
+  PAN = id;
+  document.body.classList.toggle('conPanel', !!id);
+  /* Y ACA SE AJUSTA EL TITULO, no al escribirlo: un elemento en display:none
+     mide cero, asi que `pintaFin` —que corre ANTES de abrir el panel— no
+     tiene con que medir y se rinde. Medido: el titulo quedaba en 55,62 px
+     con la palabra pidiendo 455 y la caja dando 419.                      */
+  if (id) titTodos();
+}
+
+/* ── EL HUD ───────────────────────────────────────────────────────────────
+   Se escribe SOLO CUANDO CAMBIA. Escribir en el DOM cada cuadro obliga al
+   navegador a recalcular el layout sesenta veces por segundo para poner el
+   mismo texto — y en la barra de vida eso es el 90 % de los cuadros.      */
+let HUD_ANT = '';
+function pintaHud() {
+  const M = JU.M; if (!M) return;
+  const a = Math.max(0, JU.va), b = Math.max(0, JU.vb);
+  const w = M.viento;
+  const firma = a + '|' + b + '|' + JU.turno + '|' + JU.est + '|' + LANG + '|' + JU.n + '|' + (JU.tuto ? 1 : 0);
+  if (firma === HUD_ANT) return;
+  HUD_ANT = firma;
+  $('vIzq').querySelector('i').style.width = (a / VIDA_MAX * 100) + '%';
+  $('vDer').querySelector('i').style.width = (b / VIDA_MAX * 100) + '%';
+  $('vIzq').querySelector('b').textContent = a;
+  $('vDer').querySelector('b').textContent = b;
+  $('nIzq').textContent = TX('vos');
+  $('nDer').textContent = JU.tuto ? '—' : (M.rival || '');
+  /* el viento con su FLECHA: un numero con signo hay que leerlo y traducirlo
+     a un lado; una flecha se ve de reojo mientras se apunta */
+  $('viento').innerHTML = Math.abs(w) < 0.2
+    ? '<u>' + TX('calma') + '</u>'
+    : '<u>' + TX('viento') + '</u> ' + (w > 0 ? '▶' : '◀') + ' ' + Math.abs(w).toFixed(1);
+  $('duelo').textContent = JU.tuto ? TX('tutTit') : TX('duelo', JU.n + 1);
+  /* Y EL TURNO DEL RIVAL SE ANUNCIA. Estaba en blanco: el rival se tomaba
+     casi un segundo pensando sin una sola senial en pantalla, asi que desde
+     afuera el juego se veia trabado y despues aparecia una flecha de la
+     nada. Lo que faltaba no era la flecha, era saber que le tocaba a el. */
+  const pi = JU.tuto ? TX('tut' + Math.min(4, JU.paso + 1))
+    : (JU.turno === 0
+        ? (JU.est === 'apunta' ? TX('pistaTira') : '')
+        : ((JU.est === 'piensa' || JU.est === 'vuela') ? TX('pistaRival') : ''));
+  /* la pista arranca en `opacity:0` y la enciende su clase: escribiendo sólo
+     el texto, los cuatro pasos del tutorial no se leen en ninguna parte */
+  $('pista').textContent = pi;
+  $('pista').classList.toggle('on', !!pi);
+  $('nIzq').classList.toggle('act', JU.turno === 0);
+  $('nDer').classList.toggle('act', JU.turno === 1);
+}
+function avisa(tx, ms) {
+  const e = $('aviso'); e.textContent = tx; e.classList.add('on');
+  clearTimeout(avisa._t); avisa._t = setTimeout(() => e.classList.remove('on'), ms || 1300);
+}
+/* el numero del dano SALE DEL PUNTO DEL IMPACTO, proyectado con la misma
+   camara: puesto en un sitio fijo del HUD no diria a quien le pegaron.    */
+/* Y SE REPINTA CADA CUADRO MIENTRAS DURA: con la camara moviendose, un
+   numero colocado una sola vez se despega del sitio donde pego la flecha. */
+const GOL = { on: false, x: 0, y: 0 };
+function golpeEn(x, y, tx, cab) {
+  const e = $('golpe');
+  e.textContent = tx; e.className = cab ? 'cab on' : 'on';
+  GOL.on = true; GOL.x = x; GOL.y = y; golpeMueve();
+  clearTimeout(golpeEn._t);
+  golpeEn._t = setTimeout(() => { e.className = ''; GOL.on = false; }, 1000);
+}
+function golpeMueve() {
+  if (!GOL.on) return;
+  const p = mundoAPant(GOL.x, GOL.y), e = $('golpe');
+  e.style.left = p.x + 'px'; e.style.top = p.y + 'px';
+}
+
+/* ── IDIOMA ───────────────────────────────────────────────────────────────
+   Repinta TODO: el menu, los paneles, la reja de duelos, el HUD y la pista.
+   Sin el HUD y la pista, cambiar de idioma en partida deja la mitad de la
+   pantalla en el anterior — ya costo una vuelta en MEKO.                  */
+/* EL TITULO SE MIDE Y SE ACHICA HASTA QUE ENTRA, y no es coqueteria: el h1
+   sale de `--mw * 0.135` con espaciado de 0,22em, o sea unos 47 px por letra
+   en un marco de 412. Medido en la captura del final, «¡GANASTE!» —nueve
+   letras— pedia 420 px de los 379 que tiene la caja: la palabra salia CORTADA
+   por el canto derecho y, peor, al desbordar un flex con align-items:center
+   arrastraba los tres botones fuera del eje. Y no se arregla con un numero
+   mas chico porque el largo cambia con el idioma: «VOCE VENCEU!» son doce.
+   Una sola pasada alcanza —el ancho del texto es lineal en el cuerpo de la
+   letra, porque el espaciado va en em— asi que se mide, se divide y listo. */
+/* EL ANCHO DISPONIBLE SALE DEL MARCO Y NO DEL PADRE, y eso no es un detalle:
+   `.caja` es un item de grilla, o sea `min-width:auto`, asi que NO PUEDE
+   ACHICARSE POR DEBAJO DEL CONTENIDO — con el titulo en nowrap el padre crece
+   hasta contenerlo y medirlo contra el padre devuelve «entra» siempre. Es un
+   lazo: la cosa que se quiere medir mueve la regla. El marco no se mueve.  */
+function titAjusta(el) {
+  if (!el || !el.textContent) return;
+  el.style.fontSize = '';
+  el.style.whiteSpace = 'nowrap';
+  const mm = $('marco');
+  const hay = Math.min(430, ((mm ? mm.clientWidth : 412) - 40) * 0.92);
+  if (hay <= 0) return;
+  const base = parseFloat(getComputedStyle(el).fontSize) || 0;
+  const w = el.scrollWidth;
+  if (!base || !w || w <= hay) return;
+  el.style.fontSize = (base * hay / w).toFixed(2) + 'px';
+}
+function titTodos() { for (const el of document.querySelectorAll('h1')) titAjusta(el); }
+
+function pintaIdioma() {
+  $('mSub').textContent = TX('sub');
+  $('bJugar').textContent = TX('jugar');
+  $('bTuto').textContent = TX('tuto');
+  $('bDuelos').textContent = TX('duelos');
+  $('bAjustes').textContent = TX('ajustes');
+  $('mPie').textContent = TX('pie');
+  $('dTit').textContent = TX('duelos');
+  $('dSub').textContent = TX('duelosSub');
+  $('dVolver').textContent = TX('volver');
+  $('aTit').textContent = TX('ajTit');
+  $('aMusL').textContent = TX('musica');
+  $('aFxL').textContent = TX('efectos');
+  $('aIdiL').textContent = TX('idioma');
+  $('aCalL').textContent = TX('calidad');
+  $('aBorrar').textContent = TX('borrar');
+  $('aVolver').textContent = TX('volver');
+  $('pTit').textContent = TX('pausa');
+  $('pSub').textContent = TX('pausaSub');
+  $('bSigo').textContent = TX('seguir');
+  $('bReini2').textContent = TX('reiniciar');
+  $('bSalir').textContent = TX('salir');
+  $('fRe').textContent = TX('reiniciar');
+  $('fMenu').textContent = TX('salir');
+  $('cSub').textContent = TX('cargando');
+  pintaCal(); pintaDuelos();
+  HUD_ANT = ''; pintaHud();
+  if (PAN === 'pFin') pintaFin();
+  titTodos();
+}
+function pintaCal() {
+  const c = $('aCal'); c.innerHTML = '';
+  for (const k of ['baja', 'media', 'alta']) {
+    const b = document.createElement('button');
+    b.className = 'bt' + (PROG.cal === k ? ' sel' : '');
+    b.textContent = TX(k === 'baja' ? 'calB' : k === 'media' ? 'calM' : 'calA');
+    b.onclick = () => { PROG.cal = k; guardaProg(); aplicaCalidad(); pintaCal(); son('ui'); };
+    c.appendChild(b);
+  }
+  const i = $('aIdi'); i.innerHTML = '';
+  for (const k of ['es', 'en', 'pt']) {
+    const b = document.createElement('button');
+    b.className = 'bt' + (LANG === k ? ' sel' : '');
+    b.textContent = k.toUpperCase();
+    b.onclick = () => { LANG = k; guardaProg(); pintaIdioma(); son('ui'); };
+    i.appendChild(b);
+  }
+}
+function pintaDuelos() {
+  const g = $('gDue'); if (!g) return;
+  g.innerHTML = '';
+  for (let n = 0; n < DUELOS; n++) {
+    const b = document.createElement('button');
+    const ab = abierto(n), he = PROG.hechos.indexOf(n) >= 0;
+    b.className = 'nb' + (he ? ' hecho' : '') + (ab ? '' : ' trabado');
+    b.innerHTML = (n + 1) + '<i>' + (he ? '✓' : ab ? '' : '·') + '</i>';
+    if (ab) b.onclick = () => { son('ui'); cargaDuelo(n); };
+    g.appendChild(b);
+  }
+  const he = PROG.hechos.length;
+  $('dSub').textContent = TX('duelosSub') + ' · ' + TX('de', he, DUELOS);
+}
+function pintaFin() {
+  const g = JU.tuto ? true : JU.vb <= 0;
+  $('fTit').textContent = JU.tuto ? TX('tutGana') : (g ? TX('gana') : TX('pierde'));
+  $('fSub').textContent = JU.tuto ? TX('tutGanaSub') : (g ? TX('ganaSub') : TX('pierdeSub'));
+  $('fDatos').textContent = JU.tuto ? TX('tutDatos') : TX('datos', JU.flechas, JU.aciertos);
+  const hay = !JU.tuto && g && JU.n + 1 < DUELOS;
+  $('fSig').style.display = hay ? '' : 'none';
+  $('fSig').textContent = TX('siguiente');
+  titAjusta($('fTit'));
+}
+
+/* ── CARGA ────────────────────────────────────────────────────────────────
+   El tutorial pasa por la MISMA carga que un duelo y lo unico que cambia es
+   de donde sale el mundo: con una carga propia, cada cosa que se agregue a
+   `cargaDuelo` hay que acordarse de agregarla dos veces.                  */
+function arranca(M, tuto) {
+  JU.M = M; JU.tuto = !!tuto;
+  JU.va = JU.vb = VIDA_MAX; JU.turno = 0; JU.est = 'apunta'; JU.t = 0;
+  JU.flechas = 0; JU.aciertos = 0; JU.fin = false; JU.paso = 0; JU.pausa = false;
+  VU.on = false;
+  construyeMundo(M);
+  arqEntra(M);
+  RIV.d = null; RIV.k = 0;
+  flechaOculta(); previaOculta(); limpiaClavadas();
+  /* la camara se PLANTA y no lerpea: viniendo del duelo anterior, el primer
+     medio segundo del duelo nuevo seria un viaje que nadie pidio */
+  camSuelta(); camPlanta();
+  musRaiz(RAICES[(M.paleta || 0) % RAICES.length]);
+  auViento(M.viento);
+  verPanel(null);
+  HUD_ANT = ''; pintaHud();
+  document.body.classList.add('jugando');
+}
+function cargaDuelo(n) {
+  JU.n = n;
+  $('carga').classList.remove('ido');
+  $('cBarra').style.width = '18%';
+  verPanel(null);
+  setTimeout(() => {
+    arqSuelta();
+    const M = generaMundo(n);
+    $('cBarra').style.width = '78%';
+    arranca(M, false);
+    $('cBarra').style.width = '100%';
+    setTimeout(() => $('carga').classList.add('ido'), 60);
+  }, 40);
+}
+
+/* ── EL TIRO ──────────────────────────────────────────────────────────────
+   UNA sola funcion, y la usan el dedo y el rival. */
+function tira(l, vx, vy) {
+  const M = JU.M;
+  const O = bocaDe(M, l);
+  const r = vuela(M, O.x, O.y, vx, vy, M.viento, l);
+  VU.on = true; VU.pts = r.pts; VU.r = r; VU.t = 0; VU.dur = r.t;
+  VU.vx = vx; VU.vy = vy; VU.w = M.viento; VU.quien = l;
+  JU.est = 'vuela'; JU.t = 0;
+  JU.flechas++;
+  arqTira(l); son('tira'); son('vuela');
+  previaOculta();
+  auTensaCero();
+  if (l === 0) tutAvanza('tira');
+}
+
+/* ── EL IMPACTO ──────────────────────────────────────────────────────────
+   El crater se cava MEDIA CELDA MAS ALLA del punto de impacto, en la
+   direccion del vuelo: cavado en el punto justo, la flecha clavada queda
+   flotando en el aire que ella misma acaba de abrir. Asi queda en el labio,
+   que es donde de verdad se clavaria una punta que entro y estallo.       */
+function impacto(r) {
+  const M = JU.M;
+  camFoco(r.x, r.y);      /* la camara se queda donde pego */
+  if (r.fin === 'arq') {
+    const dn = danoDe(r);
+    if (r.quien === 0) JU.va -= dn; else { JU.vb -= dn; if (VU.quien === 0) JU.aciertos++; }
+    /* SI EL GOLPE MATA SE SABE ACA Y NO EN `termina`: el que se muere se
+       queda en el piso, y para eso el tumbo tiene que enterarse en el mismo
+       cuadro — enterandose despues, el cuerpo ya se levanto. */
+    arqRecibe(r.quien, r.cab, dn, (r.quien === 0 ? JU.va : JU.vb) <= 0);
+    son(r.cab ? 'cabeza' : 'pega');
+    golpeEn(r.x, r.y, '-' + dn, r.cab);
+    if (r.cab) avisa(TX('cabezazo'), 1100);
+    estalla(r.x, r.y, LADRILLO, r.cab ? 1.3 : 0.9);
+    flechaOculta();
+  } else if (r.fin === 'suelo') {
+    const dur = !esRompeT(r.tipo);
+    const ang = Math.atan2(VU.vy - G * r.t, VU.vx + VU.w * r.t);
+    if (dur) { son('clava', r.tipo); clavaFlecha(r.x, r.y, ang); }
+    else {
+      son('rompe');
+      estalla(r.x, r.y, r.tipo, 1);
+      const n = crater(M, r.x + Math.cos(ang) * 0.5, r.y + Math.sin(ang) * 0.5, CRATER_R);
+      if (n > 0) rehaceTerreno();
+      clavaFlecha(r.x, r.y, ang);
+      /* los dos arqueros pueden haber quedado mas abajo: la meseta esta
+         protegida, pero un crater al lado le cambia el piso a nadie — se
+         relee igual, que cuesta dos lecturas y no puede desincronizarse */
+      for (let l = 0; l < 2; l++) if (ARQ[l]) {
+        const p = l ? M.pisoB : M.pisoA;
+        arqPiso(l, p); ARQ[l].boca = bocaDe(M, l);
+      }
+    }
+    flechaOculta();
+  } else {
+    son('falla'); avisa(TX('falla'), 900);
+    flechaOculta();
+  }
+  if (r.fin !== 'arq' || r.quien === VU.quien) tutAvanza('falla');
+  HUD_ANT = '';
+}
+
+/* ── EL PASO DEL DUELO ───────────────────────────────────────────────────*/
+function duePaso(dt) {
+  const M = JU.M; if (!M || JU.pausa) return;
+  JU.t += dt;
+  golpeMueve();
+
+  if (JU.est === 'vuela') {
+    VU.t += dt;
+    const u = Math.min(VU.t, VU.dur);
+    const i = u / DT_PTS, i0 = Math.min(VU.pts.length / 2 - 1, Math.floor(i));
+    const i1 = Math.min(VU.pts.length / 2 - 1, i0 + 1), k = cl(i - i0, 0, 1);
+    const x = mez(VU.pts[i0 * 2], VU.pts[i1 * 2], k);
+    const y = mez(VU.pts[i0 * 2 + 1], VU.pts[i1 * 2 + 1], k);
+    /* el rumbo sale de la VELOCIDAD en forma cerrada, no de restar dos
+       posiciones dibujadas: en el apice vy cruza el cero y con posiciones la
+       flecha pega un tiron justo ahi. */
+    flechaPon(x, y, VU.vx + VU.w * u, VU.vy - G * u);
+    camFoco(x, y);
+    if (VU.t >= VU.dur) {
+      VU.on = false;
+      impacto(VU.r);
+      JU.est = 'espera'; JU.t = 0;
+    }
+  } else if (JU.est === 'espera') {
+    /* un respiro DESPUES del impacto: cortando al turno siguiente en el
+       mismo cuadro, el golpe no se llega a ver y el duelo se lee a una
+       sucesion de numeros. */
+    if (JU.t < 0.95) return;
+    /* EL TURNO NO PASA CON ALGUIEN EN EL PISO: el que acaba de recibir es
+       justo el que tiene que tirar, y la caja de choque esta clavada en su
+       columna — tirando desde el suelo, el dibujo y el blanco dirian cosas
+       distintas. El que se murio no cuenta: ese no se levanta. */
+    if (arqCayendo()) return;
+    if (JU.va <= 0 || JU.vb <= 0) { termina(); return; }
+    /* EN EL TUTORIAL EL TURNO NO PASA Y UN SOLO ACIERTO ALCANZA: el rival
+       esta ahi de blanco, no de rival, y tres impactos para terminar de
+       aprender a arrastrar el dedo son dos de mas. */
+    if (JU.tuto) {
+      if (JU.vb < VIDA_MAX) { termina(); return; }
+      JU.est = 'apunta'; JU.t = 0; HUD_ANT = ''; arqQuieto(0); return;
+    }
+    JU.turno = 1 - JU.turno;
+    JU.est = JU.turno === 0 ? 'apunta' : 'piensa';
+    JU.t = 0; HUD_ANT = '';
+    camSuelta();          /* la camara se abre otra vez al plano de espera */
+    son('turno');
+    if (JU.turno === 0) arqQuieto(0); else { RIV.d = null; RIV.k = 0; }
+  } else if (JU.est === 'piensa') {
+    /* EL RIVAL TENSA A LA VISTA, y eso no es adorno: antes apuntaba y
+       soltaba EN EL MISMO CUADRO, o sea que el unico aviso de que la flecha
+       venia era la flecha. Ahora el tiro se resuelve UNA vez —volver a
+       resolverlo por cuadro daria un rival distinto en cada uno— y la
+       tension sube de cero a fondo mientras el arco se llena. */
+    if (!RIV.d) { RIV.d = tiroRival(M, M.prec, Math.random); RIV.k = 0; }
+    RIV.k = Math.min(1, RIV.k + dt / RIV_TENSA);
+    const ang = Math.atan2(RIV.d.vy, RIV.d.vx);
+    arqApunta(1, ang, RIV.k * 0.9);
+    if (RIV.k >= 1 && JU.t >= RIV_TENSA + 0.18) { const d = RIV.d; RIV.d = null; tira(1, d.vx, d.vy); }
+  }
+  pintaHud();
+}
+
+function termina() {
+  JU.fin = true; JU.est = 'fin';
+  const gano = JU.vb <= 0 && JU.va > 0;
+  arqFin(0, gano); arqFin(1, !gano);
+  /* EL ORDEN IMPORTA: `arqFin` es quien decide si el perdedor se queda en el
+     piso, asi que preguntar por el muerto ANTES devuelve siempre null.     */
+  const mu = arqMuerto();
+  if (mu) camFoco(mu.x, mu.y); else camSuelta();
+  son(gano ? 'gana' : 'pierde');
+  if (gano && !JU.tuto && PROG.hechos.indexOf(JU.n) < 0) { PROG.hechos.push(JU.n); guardaProg(); }
+  clearTimeout(termina._t);
+  termina._t = setTimeout(() => { pintaFin(); verPanel('pFin'); }, 1500);
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   I · EL TUTORIAL
+
+   SE ENTRA ACA Y NO AL MENU AL ABRIR EL JUEGO. El unico verbo de este es
+   arrastrar el dedo hacia atras, y nada en la pantalla dice que se pueda
+   hacer eso: un cartel en el menu se saltea, y lo que se saltea es
+   exactamente lo que despues no se entiende.
+
+   CUATRO PASOS Y CADA UNO ESPERA A QUE SE HAGA LA COSA. No se pasan leyendo:
+   el 2 no aparece hasta que el arrastre paso de la mitad, el 3 hasta que la
+   flecha salio, y el 4 hasta que fallo la primera. Es la misma regla que ya
+   ordeno los tutoriales de ECO, RECREO, DUNA y MEKO.
+
+   Y EL RIVAL NO TIRA. Un tutorial en el que se puede perder ensena miedo y
+   no la mecanica: el jugador sale corriendo antes de entender que el viento
+   empuja. Esta parado ahi porque hace falta un blanco, y nada mas.
+
+   EL MUNDO ESTA ESCRITO A MANO Y NO GENERADO, y es la unica pieza del juego
+   que lo esta: cada paso nombra una cosa concreta —el viento, la distancia—
+   y una geometria que cambia cada vez no se puede nombrar. Llano y sin un
+   solo obstaculo, porque lo que se ensena es el arco y no el terreno.     */
+
+const TUT_VIENTO = 2.4;   /* se ve y se oye, y no alcanza para hacer imposible el tiro */
+
+function mundoTuto() {
+  const M = nuevoMundo(NX, NY, NZ);
+  const B = BIOMAS.pradera;
+  M.n = -1; M.paleta = B.pal; M.bio = 'pradera'; M.forma = 'llano';
+  M.viento = TUT_VIENTO; M.rival = '—'; M.prec = 0;
+  const h = [];
+  for (let x = 0; x < NX; x++) h.push(6);
+  M.h = h;
+  for (let x = 0; x < NX; x++) for (let y = 0; y < 6; y++) {
+    const t = (y === 5) ? B.sup : B.base;
+    for (let z = 0; z < NZ; z++) pon(M, x, y, z, t);
+  }
+  M.pisoA = altura(M, XA);
+  M.pisoB = altura(M, XB);
+  return M;
+}
+
+function cargaTuto() {
+  JU.n = -1;
+  $('carga').classList.remove('ido');
+  $('cBarra').style.width = '18%';
+  verPanel(null);
+  setTimeout(() => {
+    arqSuelta();
+    const M = mundoTuto();
+    $('cBarra').style.width = '78%';
+    arranca(M, true);
+    PROG.visto = 1; guardaProg();
+    $('cBarra').style.width = '100%';
+    setTimeout(() => $('carga').classList.add('ido'), 60);
+  }, 40);
+}
+
+/* el paso avanza con lo que el jugador HIZO, no con un reloj. Y el orden no
+   importa: si alguien tira fuerte de una, los pasos 1 y 2 ya estan hechos. */
+function tutAvanza(ev, k) {
+  if (!JU.tuto || JU.fin) return;
+  const p = JU.paso;
+  if (ev === 'arrastra') {
+    if (p < 1) { JU.paso = 1; HUD_ANT = ''; }
+    if (p < 2 && k > 0.5) { JU.paso = 2; HUD_ANT = ''; }
+  } else if (ev === 'tira') {
+    if (p < 3) { JU.paso = 3; HUD_ANT = ''; }
+  } else if (ev === 'falla') {
+    if (p < 4) { JU.paso = 4; HUD_ANT = ''; }
+  }
+}
+
+/* auditoria: un tutorial que no se puede terminar es peor que ninguno, y la
+   unica forma de saberlo es resolverlo con el mismo resolvedor que los doce
+   duelos. Comprueba ademas que el viento del tutorial NO lo haga imposible
+   —barriendo con y sin viento— y que la boca del arco nazca al aire.     */
+function auditaTuto() {
+  const M = mundoTuto();
+  const a = resuelve(M, 0, M.viento);
+  const sinV = resuelve(M, 0, 0);
+  const O = bocaDe(M, 0);
+  const libre = en(M, Math.floor(O.x), Math.floor(O.y), ZC) === VACIO;
+  return { ok: !!a && !!sinV && libre, v: a ? +a.v.toFixed(2) : null,
+           ang: a ? +(Math.atan2(a.vy, a.vx) * 180 / Math.PI).toFixed(1) : null,
+           libre, viento: M.viento, pisoA: M.pisoA, pisoB: M.pisoB };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Z · EL DEDO, LA UI Y EL BUCLE
+
+   UN SOLO VERBO Y UN SOLO GESTO: se arrastra hacia atras y se suelta. Todo lo
+   que el jugador decide entra por aca, y por eso el arrastre no se convierte
+   a mano: pasa por `pantAMundo`, que es la INVERSA EXACTA de la matriz con la
+   que la camara proyecta. Escrita a mano seria una segunda cuenta que hay que
+   mantener igual a la primera, y el dia que se toque la guiñada de la camara
+   el jugador apuntaria a un sitio y la flecha saldria hacia otro — y eso no
+   falla en voz alta: se lee a que uno no sabe apuntar.
+
+   LA DIRECCION SALE DE LA MATRIZ Y LA FUERZA DE LOS PIXELES, y son dos cosas
+   distintas a proposito. La direccion tiene que ser la de la pantalla —lo que
+   se ve es hacia donde va— pero la fuerza tiene que medir lo mismo tirando
+   para arriba que para el costado, y el mundo esta apenas comprimido en x
+   (3,4 % por la guiñada): con la fuerza sacada del mundo, el mismo arrastre
+   pegaria mas fuerte en vertical que en horizontal sin que nada lo diga.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let ARR = null;                 /* el arrastre en curso, o null */
+const ARR_MIN = 0.055;          /* por debajo de esto es un toque y no un tiro */
+
+const puedeTirar = () => !!DIO && !!JU.M && !JU.fin && !JU.pausa && !PAN
+  && JU.est === 'apunta' && JU.turno === 0 && arqLibre();
+
+function relXY(ev) {
+  const r = $('marco').getBoundingClientRect();
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+}
+
+/* de un arrastre en pixeles al vector de salida de la flecha */
+function tiroDe(dpx, dpy) {
+  const maxPx = ARR_MAX_PX * ANCHO;
+  const len = Math.hypot(dpx, dpy);
+  const k = cl(len / maxPx, 0, 1);
+  if (len < 1e-4) return { vx: 0, vy: 0, k: 0, ang: 0 };
+  /* hacia atras: la flecha sale al reves del dedo */
+  const w = pantAMundo(-dpx, -dpy);
+  const wl = Math.hypot(w.x, w.y) || 1e-9;
+  const v = k * V_MAX;
+  return { vx: w.x / wl * v, vy: w.y / wl * v, k, ang: Math.atan2(w.y, w.x) };
+}
+
+function arrastreEmpieza(ev) {
+  if (!puedeTirar()) return;
+  const p = relXY(ev);
+  ARR = { id: ev.pointerId, x0: p.x, y0: p.y, k: 0 };
+  auTensaCero();
+  try { $('cv').setPointerCapture(ev.pointerId); } catch (e) {}
+  $('fuerza').classList.add('on');
+}
+
+function arrastreMueve(ev) {
+  if (!ARR || ev.pointerId !== ARR.id) return;
+  const p = relXY(ev);
+  const d = tiroDe(p.x - ARR.x0, p.y - ARR.y0);
+  ARR.k = d.k; ARR.vx = d.vx; ARR.vy = d.vy;
+  $('fuerza').querySelector('i').style.width = (d.k * 100) + '%';
+  arqApunta(0, d.ang, d.k);
+  auTensa(d.k);
+  tutAvanza('arrastra', d.k);
+  /* LA VISTA PREVIA MUESTRA EL ARRANQUE Y NO LA PARABOLA ENTERA. Con la
+     parabola completa el juego se contesta solo y el viento deja de ser una
+     decision; con los primeros siete puntos —0,38 s de vuelo— alcanza para
+     leer el angulo y no para saber donde cae.                            */
+  if (d.k > 0.04) {
+    const O = bocaDe(JU.M, 0);
+    const r = vuela(JU.M, O.x, O.y, d.vx, d.vy, JU.M.viento, 0);
+    previaPon(r.pts, 7);
+  } else previaOculta();
+}
+
+function arrastreTermina(ev) {
+  if (!ARR || (ev && ev.pointerId !== ARR.id)) return;
+  const a = ARR; ARR = null;
+  $('fuerza').classList.remove('on');
+  $('fuerza').querySelector('i').style.width = '0%';
+  previaOculta(); auTensaCero();
+  if (!puedeTirar()) { arqQuieto(0); return; }
+  if (a.k < ARR_MIN) { arqQuieto(0); avisa(TX('pistaFuerza'), 1200); return; }
+  tira(0, a.vx, a.vy);
+}
+
+function enganchaDedo() {
+  const cv = $('cv');
+  cv.addEventListener('pointerdown', e => { auDesp(); arrastreEmpieza(e); e.preventDefault(); });
+  cv.addEventListener('pointermove', arrastreMueve);
+  cv.addEventListener('pointerup', arrastreTermina);
+  /* `pointercancel` tambien suelta: sin esto, un gesto que el navegador se
+     lleva —la barra de arriba, una llamada— deja el arrastre puesto y el
+     arquero apuntando para siempre a donde quedo el dedo.                */
+  cv.addEventListener('pointercancel', arrastreTermina);
+  window.addEventListener('blur', () => arrastreTermina(null));
+}
+
+/* ── LA UI ────────────────────────────────────────────────────────────────
+   Todos los botones pasan por `b()`: despiertan el audio y suenan. Repartido
+   boton por boton, el proximo que se agregue queda mudo o sin despertar el
+   contexto, y en un navegador eso es un juego que arranca sin sonido.     */
+function enganchaUI() {
+  const b = (id, f) => { const e = $(id); if (e) e.onclick = () => { auDesp(); son('ui'); f(); }; };
+
+  for (const e of document.querySelectorAll('#pIdioma [data-lang]'))
+    e.onclick = () => {
+      auDesp(); son('ui');
+      LANG = e.dataset.lang; guardaProg(); pintaIdioma();
+      if (!PROG.visto) cargaTuto(); else verPanel('pMenu');
+    };
+
+  /* JUGAR va al primer duelo que falta y no al 1: ganado el 5, tocar JUGAR y
+     volver al 1 obliga a pasar por la reja de duelos cada vez.            */
+  b('bJugar', () => {
+    let n = 0;
+    while (n < DUELOS - 1 && PROG.hechos.indexOf(n) >= 0) n++;
+    cargaDuelo(n);
+  });
+  b('bTuto', () => cargaTuto());
+  b('bDuelos', () => { pintaDuelos(); verPanel('pDuelos'); });
+  b('bAjustes', () => verPanel('pAjustes'));
+  b('dVolver', () => verPanel('pMenu'));
+  b('aVolver', () => verPanel('pMenu'));
+  b('aBorrar', () => { borraProg(); pintaIdioma(); pintaDuelos(); avisa(TX('borrado'), 1200); });
+
+  b('bPausa', () => { JU.pausa = true; arrastreTermina(null); verPanel('pPausa'); });
+  b('bSigo', () => { JU.pausa = false; verPanel(null); });
+  const reinicia = () => { JU.pausa = false; if (JU.tuto) cargaTuto(); else cargaDuelo(JU.n); };
+  b('bReinicia', reinicia);
+  b('bReini2', reinicia);
+  const alMenu = () => {
+    JU.pausa = false; JU.fin = true; VU.on = false;
+    arrastreTermina(null);
+    document.body.classList.remove('jugando');
+    pintaDuelos(); verPanel('pMenu');
+  };
+  b('bSalir', alMenu);
+  b('fMenu', alMenu);
+  b('fRe', reinicia);
+  b('fSig', () => cargaDuelo(Math.min(DUELOS - 1, JU.n + 1)));
+
+  const sl = (id, k, f) => {
+    const e = $(id); if (!e) return;
+    e.value = Math.round(PROG[k] * 100);
+    e.oninput = () => { auDesp(); PROG[k] = e.value / 100; auVol(); guardaProg(); if (f) f(); };
+  };
+  sl('aMus', 'vol');
+  sl('aFx', 'fx', () => son('ui'));
+}
+
+/* ── EL BUCLE ─────────────────────────────────────────────────────────────
+   El `requestAnimationFrame` va en la PRIMERA linea: con la llamada al final,
+   una excepcion en el medio no rompe un cuadro, rompe el juego entero. Y el
+   `dt` se topa en 0,05: una pestaña que estuvo dormida no puede devolver un
+   salto de treinta segundos a la fisica.                                  */
+window.__errs = [];
+window.addEventListener('error', e => window.__errs.push('' + (e.message || e)));
+window.addEventListener('unhandledrejection', e => window.__errs.push('' + (e.reason || e)));
+
+let T_ANT = 0;
+function bucle(ts) {
+  requestAnimationFrame(bucle);
+  const dt = T_ANT ? Math.min(0.05, (ts - T_ANT) / 1000) : 0;
+  T_ANT = ts;
+  if (!G2) return;
+  duePaso(dt);
+  arqPaso(dt);
+  escPaso(dt, JU.M ? JU.M.viento : 0);
+  escDibuja();
+}
+
+/* ── ARRANQUE ─────────────────────────────────────────────────────────────
+   EL TUTORIAL ES LA PRIMERA PANTALLA Y NO EL MENU. El unico verbo del juego
+   no esta escrito en ninguna parte de la pantalla: entrar al menu la primera
+   vez es ofrecerle a alguien JUGAR sin haberle dicho que se arrastra.     */
+function inicia() {
+  cargaProg();
+  const hab = !!PROG.lang;
+  if (hab) LANG = PROG.lang;
+  else LANG = (navigator.language || 'en').slice(0, 2).toLowerCase();
+  if (!LANGS[LANG]) LANG = 'en';
+
+  escInit();
+  /* Y EL TITULO SE VUELVE A MEDIR AL CAMBIAR DE TAMANIO: `titAjusta` escribe
+     un cuerpo de letra EN PIXELES, asi que sin esto un giro de telefono deja
+     la palabra con el tamanio del marco anterior — chica en apaisado y
+     cortada volviendo a vertical.                                         */
+  const remedir = () => { medir(); titTodos(); };
+  medir();
+  window.addEventListener('resize', remedir);
+  window.addEventListener('orientationchange', () => setTimeout(remedir, 120));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', remedir);
+
+  pintaIdioma();
+  enganchaUI();
+  enganchaDedo();
+  requestAnimationFrame(bucle);
+
+  $('carga').classList.add('ido');
+  if (!hab) verPanel('pIdioma');
+  else if (!PROG.visto) { verPanel(null); setTimeout(cargaTuto, 30); }
+  else verPanel('pMenu');
+}
+
+/* ── SONDAS ───────────────────────────────────────────────────────────────
+   `apunta` y `dispara` entran por LAS MISMAS funciones que el dedo, asi que
+   lo que mide el banco es el juego y no un atajo. `avanza` corre la fisica
+   con el paso de verdad — 1/60 — porque un paso grande se saltea impactos.  */
+window.__A = {
+  est: () => ({
+    pan: PAN, jugando: document.body.classList.contains('jugando'),
+    n: JU.n, tuto: JU.tuto, est: JU.est, turno: JU.turno,
+    va: JU.va, vb: JU.vb, flechas: JU.flechas, aciertos: JU.aciertos,
+    fin: JU.fin, paso: JU.paso, pausa: JU.pausa,
+    viento: JU.M ? JU.M.viento : null, rival: JU.M ? JU.M.rival : null,
+    lang: LANG, cal: PROG.cal, visto: PROG.visto, hechos: PROG.hechos.slice(),
+  }),
+  costo: () => escCosto(),
+  audita: () => auditaDuelos(),
+  auditaTuto: () => auditaTuto(),
+  solo: (n, p, s) => juegaSolo(n, p === undefined ? 0.88 : p, s),
+  todos: (p) => {
+    const r = [];
+    for (let n = 0; n < DUELOS; n++) r.push(juegaSolo(n, p === undefined ? 0.88 : p, 9000 + n * 71));
+    return { gana: r.filter(x => x.gano).length, de: DUELOS, filas: r };
+  },
+  /* la linealidad del apuntado: se proyecta un desplazamiento del mundo a
+     pixeles y se lo vuelve a traer. Tiene que dar 1,00000 — con camara
+     ortografica la proyeccion es afin y la inversa es exacta. */
+  lineal: () => {
+    const o = mundoAPant(5, 8), q = [];
+    for (const [dx, dy] of [[1, 0], [0, 1], [2, -1.5], [-3, 4]]) {
+      const p = mundoAPant(5 + dx, 8 + dy);
+      const w = pantAMundo(p.x - o.x, p.y - o.y);
+      q.push({ dx, dy, x: +w.x.toFixed(5), y: +w.y.toFixed(5),
+               err: +Math.hypot(w.x - dx, w.y - dy).toFixed(6) });
+    }
+    return { peor: Math.max(...q.map(a => a.err)), q };
+  },
+  /* el arrastre de verdad, en pixeles, por el mismo camino que el dedo */
+  tiroDe: (dpx, dpy) => tiroDe(dpx, dpy),
+  apunta: (dpx, dpy) => { const d = tiroDe(dpx, dpy); arqApunta(0, d.ang, d.k); return d; },
+  dispara: (dpx, dpy) => {
+    if (!puedeTirar()) return { ok: false, est: JU.est, turno: JU.turno };
+    const d = tiroDe(dpx, dpy); tira(0, d.vx, d.vy);
+    return { ok: true, k: +d.k.toFixed(3), vx: +d.vx.toFixed(2), vy: +d.vy.toFixed(2) };
+  },
+  /* dispara APUNTANDO BIEN, con el mismo resolvedor del rival: sirve para
+     llegar al final de un duelo sin depender de la punteria de la sonda */
+  clava: () => {
+    if (!puedeTirar()) return { ok: false, est: JU.est };
+    const s = resuelve(JU.M, 0, JU.M.viento);
+    if (!s) return { ok: false, sin: true };
+    arqApunta(0, Math.atan2(s.vy, s.vx), 0.9);
+    tira(0, s.vx, s.vy);
+    return { ok: true, v: +s.v.toFixed(2) };
+  },
+  avanza: (seg) => {
+    const n = Math.round((seg || 1) * 60);
+    for (let i = 0; i < n; i++) { duePaso(1 / 60); arqPaso(1 / 60); escPaso(1 / 60, JU.M ? JU.M.viento : 0); }
+    escDibuja();
+    return window.__A.est();
+  },
+  /* juega el duelo entero por el camino del jugador: apunta con el
+     resolvedor, tira, y deja correr la fisica hasta que alguien cae */
+  juega: (max) => {
+    const t0 = performance.now();
+    let n = 0;
+    while (!JU.fin && n < (max || 40)) {
+      if (JU.est === 'apunta' && JU.turno === 0) { window.__A.clava(); n++; }
+      duePaso(1 / 60); arqPaso(1 / 60);
+      if (performance.now() - t0 > 12000) break;
+    }
+    escDibuja();
+    return Object.assign({ tiros: n, ms: Math.round(performance.now() - t0) }, window.__A.est());
+  },
+  lang: (k) => { LANG = k; guardaProg(); pintaIdioma(); return LANG; },
+  /* SE DIBUJA UN CUADRO ANTES DE MEDIR. `escCosto` informa las llamadas del
+     ULTIMO cuadro dibujado: midiendo justo despues de cambiar la calidad se
+     informa la anterior, y las tres salen identicas — que es lo que devolvia
+     esta sonda antes de esta linea.                                       */
+  /* Y LA CLAVE SE COMPRUEBA. `aplicaCalidad` cae a `media` cuando no la
+     reconoce, asi que una sonda que acepte cualquier cosa devuelve tres
+     veces la misma calidad sin fallar — pedirle 0/1/2 en vez de los nombres
+     informaba `det:1` en las tres y parecia que la palanca no hacia nada. */
+  cal: (k) => { if (!CALIDADES[k]) return { error: 'calidad?', hay: Object.keys(CALIDADES) };
+                PROG.cal = k; guardaProg(); aplicaCalidad(); pintaCal(); escDibuja(); return escCosto(); },
+  panel: (id) => { verPanel(id); return PAN; },
+  /* EL INDICE ES EL DE LA LISTA, 0..DUELOS-1, y se RECORTA a proposito:
+     `armaMundo` hace `DUELO[n % largo]`, asi que pedir el 12 devuelve el 0
+     con el rotulo diciendo DUELO 13 — un numero fuera de rango no falla,
+     miente. Recortado, la sonda mide el duelo que dice medir.            */
+  duelo: (n) => { cargaDuelo(cl(n | 0, 0, DUELOS - 1)); return JU.n; },
+  tuto: () => { cargaTuto(); return JU.tuto; },
+  nivel: (ms) => auNivel(ms),
+  son: (k, a) => { auDesp(); son(k, a); return 1; },
+  /* el HUD contra si mismo y contra el marco: un rotulo nuevo que nadie mide
+     es un solapamiento esperando, y en teléfono ademas es un dedo que toca
+     el cartel en vez del arquero */
+  solapes: () => {
+    const m = $('marco').getBoundingClientRect();
+    const ids = ['vIzq', 'vDer', 'nIzq', 'nDer', 'viento', 'duelo', 'fuerza', 'pista', 'bPausa', 'bReinicia'];
+    const c = [];
+    for (const id of ids) {
+      const e = $(id); if (!e) continue;
+      const s = getComputedStyle(e);
+      if (s.display === 'none' || s.visibility === 'hidden') continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      c.push({ id, x0: r.left - m.left, y0: r.top - m.top, x1: r.right - m.left, y1: r.bottom - m.top });
+    }
+    const choques = [], fuera = [];
+    for (let i = 0; i < c.length; i++) {
+      const a = c[i];
+      if (a.x0 < -1 || a.y0 < -1 || a.x1 > m.width + 1 || a.y1 > m.height + 1) fuera.push(a.id);
+      for (let j = i + 1; j < c.length; j++) {
+        const b2 = c[j];
+        if (a.x0 < b2.x1 && b2.x0 < a.x1 && a.y0 < b2.y1 && b2.y0 < a.y1) choques.push(a.id + '×' + b2.id);
+      }
+    }
+    /* Y EL PANEL ABIERTO TAMBIEN, aunque solo por el borde. La lista de
+       arriba son los diez elementos del HUD, asi que una prueba que solo la
+       mira NO PUEDE VER un titulo cortado adentro de un panel — que es
+       exactamente lo que paso con «¡GANASTE!». Los botones de una columna
+       con hueco no se pueden pisar entre ellos, asi que ahi lo unico que
+       informa es si algo se sale; el `gDue` se saltea porque son cuarenta y
+       ocho casillas de una reja y compararlas de a pares no dice nada.     */
+    const pa = document.querySelector('.pan.on');
+    if (pa) for (const e of pa.querySelectorAll('h1, .sub, .tx, .pie, .bt')) {
+      if (e.closest('#gDue')) continue;
+      const s2 = getComputedStyle(e);
+      if (s2.display === 'none' || s2.visibility === 'hidden') continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      if (r.left - m.left < -1 || r.right - m.left > m.width + 1 ||
+          r.top - m.top < -1 || r.bottom - m.top > m.height + 1)
+        fuera.push((e.id || e.className) + '@' + pa.id);
+    }
+    return { choques, fuera, n: c.length, marco: [Math.round(m.width), Math.round(m.height)] };
+  },
+  /* EL CUERPO Y LA CAJA DE CHOQUE SON DOS COSAS. El ragdoll es SOLO dibujo
+     —`cajaArq` sigue clavada en XA/XB— asi que la sonda tiene que informar
+     las dos: `rx/ry/rot` es donde se ve el cuerpo y no donde se le pega. */
+  arq: () => ARQ.map(a => a && ({
+    lado: a.lado, est: a.est, piso: a.piso, ang: +a.ang.toFixed(3),
+    boca: [+a.boca.x.toFixed(2), +a.boca.y.toFixed(2)],
+    puesto: !!a.puesto, rag: !!a.rag, muere: !!a.muere,
+    rx: +a.rx.toFixed(3), ry: +a.ry.toFixed(3), rot: +a.rot.toFixed(3),
+    tension: +a.k.toFixed(3),
+  })),
+  /* un golpe a mano, para poder mirar el tumbo sin depender de que la
+     flecha acierte. `mata` deja al arquero en el piso: un muerto no se
+     levanta, y eso hay que poder comprobarlo aparte. */
+  golpe: (lado, cab, mata) => { arqRecibe(lado | 0, !!cab, cab ? DANO_CABEZA : DANO_CUERPO, !!mata); return window.__A.arq()[lado | 0]; },
+  /* LA CAMARA A MANO, para poder MIRAR una pieza a tamano de estudio. A la
+     escala de partida un arquero mide 53 px y el arco 40: a eso, un arco mal
+     puesto y uno bien puesto se ven igual, asi que juzgar la pose en una
+     captura de partida es juzgar una mancha. Planta la camara y dibuja. */
+  mira: (x, y, cel) => { camFoco(x, y); CAM.cx = x; CAM.cy = y;
+                         CAM.cel = cel || 4; encuadra(); escDibuja();
+                         return { cx: CAM.cx, cy: CAM.cy, cel: CAM.cel }; },
+  /* LA POSE, en el marco local del arquero. Es lo unico que dice donde cae
+     el arco respecto del hombro y de la mano, que es lo que una foto de
+     cuarenta pixeles no puede contestar. */
+  pose: (l) => { const a = ARQ[l | 0]; if (!a) return null; const P = a.P;
+                 return { est: a.est, bocaX: +P.bocaX.toFixed(3), bocaY: +P.bocaY.toFixed(3),
+                          arcoAng: +P.arcoAng.toFixed(3), nockX: +P.nockX.toFixed(3),
+                          manoTx: +P.manoTx.toFixed(3), manoTy: +P.manoTy.toFixed(3),
+                          hombroY: +(HOMBRO_Y + P.resp).toFixed(3),
+                          brazo: +Math.hypot(P.bocaX, P.bocaY - HOMBRO_Y - P.resp).toFixed(3),
+                          brazoMax: +(BR1 + BR2).toFixed(3) }; },
+  errs: () => window.__errs.slice(),
+};
+
+inicia();
+</script></body></html>

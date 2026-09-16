@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>RezUno</title>
+<style>
+/* ===================== EL MARCO =====================
+   Todo el juego vive dentro de un rectangulo 9:16 centrado. Es la misma decision que en RECREO y por
+   el mismo motivo: el reparto de cartas, el abanico de la mano y los dos botones estan pensados para
+   una pantalla alta, y estirarlos a un monitor apaisado deja las cartas del tamaño de un sello con
+   dos metros de vacio a los costados. En una pantalla ancha se ve el marco con bandas negras, que es
+   lo que hace cualquier juego vertical. */
+*{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+/* ===================== BLANCO, NO NEGRO =====================
+   La primera version era una mesa oscura con cartas brillando encima, y estaba mal por un motivo que
+   no es de gusto: en un juego cuya regla ENTERA es "del mismo color", el fondo compite con lo unico
+   que hay que mirar. Sobre blanco los cuatro colores se leen por lo que son —rojo, amarillo, verde,
+   azul— y sobre negro se leen todos como "claro". Ademas una mesa de cartas es blanca. */
+html,body{ height:100%; background:#e9eaec; overflow:hidden;
+  font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+  color:#1b1d22; user-select:none; -webkit-user-select:none; }
+#todo{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+#marco{ position:relative; width:min(100vw, calc(100vh * 9 / 16));
+        height:min(100vh, calc(100vw * 16 / 9)); overflow:hidden; background:#f4f5f6; }
+#lienzo{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+/* ===================== LAS PANTALLAS =====================
+   Idioma, menu y final son DOM y no lienzo, y eso es a proposito: son texto que hay que poder
+   traducir, seleccionar con el lector de pantalla y que se vea nitido en cualquier densidad. El
+   juego es lienzo porque son cartas moviendose. */
+.pan{ position:absolute; inset:0; display:none; flex-direction:column; align-items:center;
+/* EL HUECO BAJO DE 3,4vh A 2,6 Y EL PADDING DE 6 A 4. Medido en 412x732: con los valores viejos, el
+   boton de IDIOMA terminaba en 732 clavado, o sea pegado al borde de abajo sin un pixel de aire — y
+   eso con el marco justo de un telefono comun. Cada elemento que se agrega al menu se lo come todo
+   por abajo, asi que el aire tiene que salir de los huecos y no de sacar cosas. */
+      justify-content:center; gap:clamp(10px,2.6vh,24px); padding:4vh 8%; background:#f7f8f9;
+      z-index:20; text-align:center; }
+.pan.ver{ display:flex; }
+
+/* ===== EL TITULO ES UNA IMAGEN GENERADA, Y ES UN CAMBIO DE CRITERIO =====
+   Antes estaba dibujado con tipografia, y el argumento era que pesa cero y queda nitido. Lo que ese
+   argumento pasaba por alto es que `font-family:inherit` sobre `system-ui` NO ES LA MISMA LETRA en
+   cada aparato: en Android sale Roboto, en iPhone San Francisco y en Windows Segoe. O sea que el
+   titulo del juego —lo unico que uno reconoce de lejos— cambiaba de forma segun el telefono.
+   Una imagen es la misma letra en todos lados, y ademas se pidio con todas las letras.
+   Va con ALFA y no sobre un rectangulo blanco: el panel del menu es #f7f8f9 y un blanco puro pegado
+   encima se ve como un recuadro. Y va en negro liso con todo el detalle en el canal alfa, que en un
+   texto negro sobre blanco es exacto y comprime muchisimo mejor. */
+#logo, .logoImg{ width:min(78%, 320px); height:auto; display:block; }
+#logoSub{ font-size:clamp(10px,2.7vw,14px); letter-spacing:.42em; color:#8d929b;
+          margin-left:.42em; margin-top:-2px; }
+/* ===== LA MANO ENTRA POR EL BORDE Y NO VA CENTRADA =====
+   Centrada y entera se lee a calcomania pegada encima del menu; entrando desde afuera del cuadro se
+   lee a que hay algo mas alla del menu — es la misma leccion que en el menu de Maicol, donde los dos
+   hermanos entran cortados por el costado. Y ademas asi no gasta alto, que en un marco 9:16 con
+   cuatro botones, el aviso de camara y la fila de graficos es justo lo que no sobra.
+   Va DETRAS del contenido y sin capturar toques: es fondo, no un boton. */
+#pMenu{ overflow:hidden; }
+/* ===== LA MANO DEJA DE SER FONDO Y PASA A SER LA MITAD DE ARRIBA DEL LOGO =====
+   Estaba puesta en absoluto contra la esquina de arriba, detras del contenido — y el contenido de un
+   menu centrado en vertical arranca justo ahi: medido, la imagen ocupaba de 0,081 a 0,288 del alto y
+   el titulo de 0,24 a 0,33, o sea que la mano le caia encima a las letras. Estar detras no arregla
+   nada, porque lo que se encima es el DIBUJO con el TITULO, no el orden de pintado.
+   Ahora es un elemento mas de la columna, arriba del titulo: mano y palabra forman una sola marca, y
+   el solapamiento pasa a ser imposible por construccion — la misma leccion que ya habia costado una
+   vuelta con el HUD de Eco.
+   VA MEDIDA EN ALTO Y NO EN ANCHO. El menu tiene nueve cosas apiladas y en un telefono corto se come
+   todo el aire por abajo; con el ancho al mando, una pantalla angosta y baja le daria a la imagen el
+   mismo alto que a una alta. Con `height` en vh, la marca se achica cuando el alto escasea, que es
+   exactamente cuando hay que achicarla. */
+#mArte{ height:clamp(58px, 13.5vh, 132px); width:auto; max-width:86%; display:block;
+        margin-bottom:calc(-1 * clamp(6px,1.4vh,14px)); pointer-events:none; }
+
+.bot{ display:block; width:min(320px,82%); padding:clamp(13px,2.4vh,18px) 10px;
+      border:1px solid #c9ccd2; background:transparent; color:#1b1d22; cursor:pointer;
+      font-size:clamp(14px,3.6vw,18px); font-weight:600; letter-spacing:.13em;
+      font-family:inherit; transition:background .15s,border-color .15s; }
+.bot:active{ background:#e3e5e8; }
+.bot.lleno{ background:#1b1d22; color:#f7f8f9; border-color:#1b1d22; }
+.bot.lleno:active{ background:#41454e; }
+/* UN BOTON APAGADO TIENE QUE DECIR POR QUE. Un boton gris sin explicacion se lee a juego roto; la
+   linea de abajo dice "primero el tutorial" y entonces se lee a orden. */
+.bot[disabled]{ opacity:.32; cursor:default; pointer-events:none; }
+.pie{ font-size:clamp(11px,2.9vw,13px); color:#6b7079; line-height:1.55; max-width:30em; }
+#calFila{ display:flex; flex-direction:column; align-items:center; gap:7px; }
+#calN{ font-size:10px; letter-spacing:.24em; color:#8d929b; }
+#calBs{ display:flex; border:1px solid #c9ccd2; }
+.calB{ padding:8px 16px; border:0; border-left:1px solid #c9ccd2; background:transparent;
+       color:#6b7079; font-family:inherit; font-size:11px; font-weight:600; letter-spacing:.14em;
+       cursor:pointer; }
+.calB:first-child{ border-left:0; }
+.calB.on{ background:#1b1d22; color:#f7f8f9; }
+
+#salaT{ font-size:11px; letter-spacing:.24em; color:#8d929b; }
+#salaCod{ font-size:clamp(26px,8vw,40px); font-weight:700; letter-spacing:.30em; text-align:center;
+          width:min(300px,80%); padding:10px 0 10px .30em; border:0; border-bottom:2px solid #c9ccd2;
+          background:transparent; color:#1b1d22; font-family:inherit; text-transform:uppercase; }
+#salaCod:focus{ outline:0; border-bottom-color:#1b1d22; }
+#mpAviso{ font-size:clamp(10px,2.7vw,12px); letter-spacing:.08em; color:#6b7079; min-height:2.4em;
+          max-width:26em; line-height:1.5; }
+#mpAviso.bien{ color:#2e8b4f; } #mpAviso.mal{ color:#c0392b; }
+
+/* en partida */
+#mpBarra{ position:absolute; left:3%; top:8%; display:none; align-items:center; gap:6px; z-index:9;
+          font-size:10px; letter-spacing:.14em; color:#8d929b; pointer-events:none; }
+body.mp #mpBarra{ display:flex; }
+#mpPunto{ width:7px; height:7px; border-radius:50%; background:#c0392b; }
+#mpPunto.on{ background:#2e8b4f; } #mpPunto.med{ background:#c47b00; }
+#mpChat{ position:absolute; left:3%; right:3%; bottom:16%; display:none; flex-direction:column;
+         gap:3px; z-index:9; pointer-events:none; align-items:flex-start; }
+body.mp #mpChat{ display:flex; }
+#mpChat span{ background:#ffffffcc; border:1px solid #e2e4e8; padding:3px 8px;
+              font-size:clamp(10px,2.6vw,12px); color:#41454e; max-width:80%; }
+#mpChat span.mio{ align-self:flex-end; background:#1b1d22; color:#f7f8f9; border-color:#1b1d22; }
+#mpDecir{ position:absolute; left:0; right:0; bottom:2.5%; display:none; justify-content:center;
+          gap:5px; z-index:10; }
+body.mp #mpDecir{ display:flex; }
+#mpDecir button{ border:1px solid #c9ccd2; background:#ffffffdd; color:#41454e; font-family:inherit;
+                 font-size:11px; padding:6px 10px; cursor:pointer; }
+.pie b{ color:#1b1d22; font-weight:600; }
+
+#idBotones{ display:flex; flex-direction:column; gap:12px; align-items:center; width:100%; }
+
+/* la linea de estado de la camara: permanente y con el motivo, no un cartel de dos segundos */
+#camAviso{ font-size:clamp(10px,2.7vw,12px); letter-spacing:.10em; color:#6b7079; min-height:1.2em; }
+#camAviso.bien{ color:#2e8b4f; }
+#camAviso.mal{ color:#c0392b; }
+
+/* EL VIDEO NO VA CON display:none. Un video que el compositor considera que no se dibuja puede dejar
+   de entregar cuadros, y sin cuadros no hay deteccion. Queda de 2 px y transparente. */
+#camVid{ position:fixed; left:0; top:0; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+/* el HUD del juego: solo dos cosas, y las dos son texto */
+#hud{ position:absolute; left:0; right:0; top:0; padding:calc(env(safe-area-inset-top) + 10px) 14px 0;
+      display:none; justify-content:space-between; align-items:flex-start; z-index:10;
+      pointer-events:none; font-size:clamp(10px,2.7vw,12px); letter-spacing:.14em; color:#6b7079; }
+body.jugando #hud{ display:flex; }
+#salir{ pointer-events:auto; cursor:pointer; border:1px solid #c9ccd2; background:#ffffffcc;
+        color:#6b7079; padding:6px 11px; font:inherit; letter-spacing:.14em; }
+
+/* el cartel del tutorial: abajo, ancho, con fondo propio para que se lea sobre las cartas */
+/* EL CARTEL VA ARRIBA Y NO ABAJO, y esto salio de una captura: abajo tapaba justo el abanico de la
+   mano, o sea la parte de la pantalla que el propio cartel te esta pidiendo que mires. Arriba cae en
+   la franja de los dos rivales, que durante el tutorial no se dibujan porque ningun paso habla de
+   ellos — el hueco existe precisamente porque se lo hace existir. */
+/* LOS ROTULOS SE PEGAN AL BORDE Y ADELGAZAN, y el motivo es que ahora hay ALGUIEN ahi. Desde que
+   cada rival tiene cabeza, el craneo proyecta entre el 21% y el 36% del ancho: con el rotulo
+   arrancando en el 7% y midiendo el 19%, el nombre le caia encima a la cara. Medido en la captura.
+   Pegados al 2,5% y con menos espaciado ocupan hasta el 17% y no se tocan. */
+#rivales{ position:absolute; left:0; right:0; top:8%; display:none; z-index:8;
+          justify-content:space-between; padding:0 2.5%; pointer-events:none; }
+body.jugando #rivales{ display:flex; }
+/* CON UN SOLO RIVAL EL ROTULO SE VA A LA DERECHA. Con `space-between` y un unico hijo, el rotulo
+   queda pegado a la IZQUIERDA — que es exactamente donde vive el punto de conexion del multijugador,
+   y el 1v1 es el unico modo con un solo rival. Medido en la captura: "7 cartas" y "MANOS · P-W8Y"
+   encimados. A la derecha no hay nada, y la cabeza del rival en 1v1 se proyecta en el medio, asi que
+   tampoco le cae encima a la cara. */
+#rivales.solo{ justify-content:flex-end; }
+body.guia #rivales{ display:none; }
+.riv{ display:flex; flex-direction:column; align-items:center; gap:3px; }
+.rn{ font-size:clamp(8px,2.1vw,10px); letter-spacing:.12em; color:#9aa0a9; }
+.rc{ font-size:clamp(15px,4.2vw,20px); font-weight:600; color:#1b1d22; }
+.rc.uno{ color:#c47b00; }
+.riv.juega .rn{ color:#1b1d22; }
+.riv.juega::after{ content:''; width:26px; height:2px; background:#1b1d22; margin-top:3px; }
+
+/* A 60% Y NO A 57%: medido en la captura, el rotulo caia justo encima de la carta agarrada, que
+   proyecta alrededor del 50% del alto. Y con una carta en la mano el 'TU TURNO' sobra —los dos
+   botones ya dicen que hacer— asi que se esconde y queda solo la linea de ayuda. */
+#turno{ position:absolute; left:0; right:0; top:60%; display:none; z-index:8;
+        flex-direction:column; align-items:center; gap:4px; pointer-events:none; text-align:center; }
+body.jugando #turno{ display:flex; }
+body.guia #turno{ display:none; }
+#turnoT{ font-size:clamp(12px,3.4vw,16px); font-weight:700; letter-spacing:.24em; color:#1b1d22; }
+/* CON UNA CARTA EN LA MANO EL ROTULO SE VA ENTERO. Medido en la captura: la carta levantada proyecta
+   entre el 47% y el 62% del alto, o sea justo encima del rotulo — y ademas sobra, porque los dos
+   botones que acaban de aparecer SON la instruccion. Cuando lo que se pide es el color, el rotulo
+   vuelve pero mas arriba, encima de los cuatro cuadros. */
+body.eligiendo #turno{ display:none; }
+/* a 30% y no a 38%: medido en la captura, los cuatro cuadros de color empiezan en el 34% del
+   alto y el rotulo les caia encima */
+body.pidecolor #turno{ display:flex; top:30%; }
+body.pidecolor #turnoA{ display:none; }
+#turnoT.rival{ color:#9aa0a9; }
+#turnoA{ font-size:clamp(10px,2.8vw,12px); color:#9aa0a9; letter-spacing:.06em; }
+
+#guia{ position:absolute; left:12px; right:12px; top:13%;
+       background:#ffffffee; border:1px solid #d3d6db; padding:13px 15px; z-index:12;
+       display:none; font-size:clamp(12px,3.3vw,15px); line-height:1.5;
+       box-shadow:0 8px 26px #0000001f; }
+body.guia #guia{ display:block; }
+#guia .n{ font-size:10px; letter-spacing:.22em; color:#8d929b; display:block; margin-bottom:5px; }
+#guia b{ color:#c47b00; font-weight:700; }
+</style>
+</head>
+<body>
+<div id="todo"><div id="marco">
+  <canvas id="lienzo"></canvas>
+
+  <div id="hud"><div id="marcador"></div><button id="salir">×</button></div>
+  <!-- LOS ROTULOS VAN EN DOM Y NO EN LA ESCENA. Son texto que hay que traducir y que tiene que verse
+       nitido en cualquier densidad; dibujado en una textura quedaria borroso al acercarse y habria
+       que regenerarlo en cada cambio. Ademas ocupan la franja de arriba, que en un marco 9:16 con una
+       mesa larga y angosta queda libre por geometria. -->
+  <div id="rivales">
+    <div class="riv"><span class="rn" id="rivN1"></span><span class="rc" id="rivC1"></span></div>
+    <div class="riv"><span class="rn" id="rivN2"></span><span class="rc" id="rivC2"></span></div>
+  </div>
+  <div id="turno"><span id="turnoT"></span><span id="turnoA"></span></div>
+  <div id="guia"><span class="n" id="guiaN"></span><span id="guiaT"></span></div>
+  <!-- EL PUNTO DE CONEXION VIVE EN LA ESQUINA Y NO EN UN CARTEL: en una partida hay que poder mirarlo
+       de reojo sin que tape nada. Verde en linea, ambar conectando, rojo caido. -->
+  <div id="mpBarra"><span id="mpPunto"></span><span id="mpNom"></span></div>
+  <div id="mpChat"></div>
+  <div id="mpDecir"></div>
+
+  <div class="pan ver" id="pIdioma">
+    <img id="logo" src="@@ARTE_TITULO@@" alt="RezUno">
+    <div id="logoSub">BETA</div>
+    <div id="idBotones"></div>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <img id="mArte" src="@@ARTE_MANO@@" alt="">
+    <img id="logo2" class="logoImg" src="@@ARTE_TITULO@@" alt="RezUno">
+    <div id="logoSub2" style="font-size:clamp(10px,2.7vw,14px);letter-spacing:.42em;color:#8d929b;margin-left:.42em;margin-top:-2px">BETA</div>
+    <button class="bot lleno" id="bTut"></button>
+    <button class="bot" id="bJugar"></button>
+    <div class="pie" id="mPie"></div>
+    <div id="camAviso"></div>
+    <!-- LA CALIDAD VA EN UNA FILA DE TRES Y NO EN UN BOTON QUE CICLA. Con un boton que cicla hay que
+         tocarlo dos veces para ver la tercera opcion y nunca se sabe cuantas hay; con tres, el que
+         esta puesto se ve de una ojeada y elegir es un toque. -->
+    <div id="calFila">
+      <span id="calN"></span>
+      <div id="calBs">
+        <button class="calB" data-cal="baja"></button>
+        <button class="calB" data-cal="media"></button>
+        <button class="calB" data-cal="alta"></button>
+      </div>
+    </div>
+    <button class="bot" id="bIdioma" style="width:auto;padding:9px 18px;font-size:12px;letter-spacing:.16em"></button>
+  </div>
+
+  <!-- ELEGIR MODO. Aparece al tocar JUGAR, no antes: quien viene a jugar solo no tiene que enterarse
+       de que existe una sala. -->
+  <div class="pan" id="pModo">
+    <img class="logoImg" src="@@ARTE_TITULO@@" alt="RezUno">
+    <button class="bot lleno" id="bBots"></button>
+    <button class="bot" id="bMulti"></button>
+    <div class="pie" id="modoPie"></div>
+    <button class="bot" id="bVolver1" style="width:auto;padding:9px 18px;font-size:12px;letter-spacing:.16em"></button>
+  </div>
+
+  <div class="pan" id="pSala">
+    <div id="salaT"></div>
+    <input id="salaCod" maxlength="8" autocomplete="off" spellcheck="false">
+    <div class="pie" id="salaPie"></div>
+    <button class="bot lleno" id="bConectar"></button>
+    <div id="mpAviso"></div>
+    <button class="bot" id="bVolver2" style="width:auto;padding:9px 18px;font-size:12px;letter-spacing:.16em"></button>
+  </div>
+
+  <div class="pan" id="pFin">
+    <div id="finT" style="font-size:clamp(26px,8vw,44px);font-weight:200;letter-spacing:.10em"></div>
+    <div class="pie" id="finS"></div>
+    <button class="bot lleno" id="bOtra"></button>
+    <button class="bot" id="bMenu"></button>
+  </div>
+</div></div>
+<video id="camVid" playsinline muted autoplay></video>
+
+<!-- EL CLIENTE MQTT, Y VA CON `defer`. Un <script src> sin defer FRENA EL PARSEO hasta que llega o
+     falla, y este viene de un CDN de terceros: en una red donde unpkg no contesta, el juego entero se
+     quedaria esperando antes de dibujar el menu. Con defer, si no llega, lo unico que no hay es
+     multijugador — que es exactamente lo que el pedido pide: el juego tiene que andar sin conexion.
+     Es la misma leccion que ya costo doce segundos de arranque en Campo_de_Tiro. -->
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js" defer></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';

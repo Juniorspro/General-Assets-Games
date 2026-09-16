@@ -1,0 +1,3067 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>NAIPE</title>
+<style>
+:root{
+  --mw:412px; --mh:892px;
+  --tinta:#f4f1e8; --tinta2:#93a3a0; --fondo:#161d20; --fieltro:#2d5a45;
+  --oro:#ffd166; --rojo:#fe5f55; --azul:#3fa9f5; --verde:#6ece8a;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#090d0f;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  touch-action:none;user-select:none;-webkit-user-select:none}
+#marco{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:var(--mw);height:var(--mh);overflow:hidden;background:var(--fondo)}
+canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+
+#aviso{position:absolute;left:0;right:0;top:30%;text-align:center;pointer-events:none;z-index:6;
+  font:900 22px/1.2 system-ui;color:var(--oro);letter-spacing:.06em;opacity:0;
+  text-shadow:0 2px 12px #000,0 0 3px #000;transition:opacity .18s}
+#aviso.on{opacity:1}
+#pista{position:absolute;left:14px;right:14px;bottom:18px;text-align:center;pointer-events:none;
+  z-index:5;font:700 12px/1.4 system-ui;color:var(--tinta2);letter-spacing:.04em;opacity:0;
+  text-shadow:0 1px 6px #000;transition:opacity .2s}
+#pista.on{opacity:1}
+
+/* ---------- pantallas ---------- */
+.pan{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;padding:26px 22px;text-align:center;
+  background:rgba(9,13,15,.94)}
+.pan.on{display:flex}
+/* EL MENU DEJA VER LA DEMO: el velo se cierra donde va el texto y se abre
+   arriba y abajo, que es donde la mesa tiene algo para mostrar. */
+#pMenu{background:linear-gradient(180deg,
+  rgba(9,13,15,.24) 0%, rgba(9,13,15,.30) 26%,
+  rgba(9,13,15,.94) 33%, rgba(9,13,15,.94) 69%,
+  rgba(9,13,15,.30) 75%, rgba(9,13,15,.24) 100%)}
+#pMenu #pie{text-shadow:0 1px 5px #000,0 0 3px #000}
+h1{font:900 44px/1 system-ui;letter-spacing:.22em;color:var(--tinta);
+  text-shadow:0 3px 0 #000,0 0 26px rgba(255,209,102,.34)}
+/* el cartel generado PISA al texto cuando decodifica; sin el, el menu es
+   exactamente el de antes. El alto sale de la proporcion horneada (300x84). */
+body.pl-logo #pMenu h1, body.pl-logo #pIdioma h1{color:transparent;text-shadow:none;overflow:hidden;
+  width:min(300px,66vw);height:calc(min(300px,66vw)*.28);margin-inline:auto;
+  background:var(--pl-logo) center/contain no-repeat}
+h2{font:900 24px/1.1 system-ui;letter-spacing:.09em;color:var(--tinta)}
+.sub{font:700 12px/1.5 system-ui;color:var(--tinta2);letter-spacing:.07em;max-width:306px}
+.b{padding:13px 28px;border-radius:12px;border:2px solid rgba(255,255,255,.16);
+  background:rgba(255,255,255,.06);color:var(--tinta);
+  font:900 14px/1 system-ui;letter-spacing:.12em;min-width:190px}
+.b.p{background:linear-gradient(180deg,#ffdc88,#e8a52c);color:#2a1d02;border-color:#ffeab5}
+.b.ch{min-width:0;padding:9px 15px;font-size:11px;letter-spacing:.09em}
+body.pl-b .b{background-image:var(--pl-b);background-size:100% 100%;
+  background-repeat:no-repeat;background-color:transparent;border-color:transparent}
+body.pl-bo .b.p{background-image:var(--pl-bo)}
+.fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.dat{font:700 12px/1.7 system-ui;color:var(--tinta2);letter-spacing:.05em}
+.dat b{color:var(--tinta)}
+#pie{position:absolute;bottom:16px;left:0;right:0;text-align:center;
+  font:700 9px/1.5 system-ui;color:#4b5a57;letter-spacing:.1em;padding:0 20px}
+#idL .b{min-width:118px}
+#fiT.mal{color:var(--rojo)}
+#fiT.bien{color:var(--oro)}
+</style>
+</head>
+<body>
+<div id="marco">
+  <canvas id="c"></canvas>
+  <div id="aviso"></div>
+  <div id="pista"></div>
+
+  <div class="pan on" id="pIdioma">
+    <h1>NAIPE</h1>
+    <div class="sub" id="idT">Elegí tu idioma</div>
+    <div class="fila" id="idL"></div>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <h1>NAIPE</h1>
+    <div class="sub" id="mSub"></div>
+    <button class="b p" id="mJugar"></button>
+    <div class="fila">
+      <button class="b ch" id="mTuto"></button>
+      <button class="b ch" id="mIdioma"></button>
+    </div>
+    <div class="dat" id="mRec"></div>
+    <div id="pie"></div>
+  </div>
+
+  <div class="pan" id="pPausa">
+    <h2 id="paT"></h2>
+    <button class="b p" id="paSigue"></button>
+    <button class="b" id="paMenu"></button>
+  </div>
+
+  <div class="pan" id="pFin">
+    <h2 id="fiT"></h2>
+    <div class="sub" id="fiS"></div>
+    <div class="dat" id="fiD"></div>
+    <button class="b p" id="fiOtra"></button>
+    <button class="b" id="fiMenu"></button>
+  </div>
+</div>
+
+<script type="module">
+/* ============================================================
+   b.js — constantes, tablas, idiomas, guardado y EL ESTADO.
+
+   Va primero de todo lo que es JS porque aca se DECLARAN las
+   cosas que el resto lee. Un `const` leido antes de su linea no
+   devuelve undefined: TIRA, y se lleva el modulo entero. Ya paso
+   nueve veces en este repo.
+   ============================================================ */
+
+/* El $ y el lienzo van guardados porque `b.js`+`c.js` se concatenan y se
+   importan en node para auditar: ahi no hay document y una sola linea
+   suelta tira el modulo entero antes de llegar a la primera tabla. */
+const HAY_DOM = typeof document !== 'undefined';
+const $ = s => HAY_DOM ? document.querySelector(s) : null;
+const CV = $('#c'), CX = CV ? CV.getContext('2d') : null;
+
+/* --- el marco --- */
+const AN = 412, AL = 892;          // el juego se disena en estas unidades
+
+/* --- la baraja --- */
+/* 0 picas, 1 corazones, 2 diamantes, 3 treboles. El ORDEN importa: el rojo
+   sale de `p===1||p===2` en un solo sitio y no de una segunda lista. */
+const PALOS = ['picas','corazones','diamantes','treboles'];
+const ROJO  = p => p === 1 || p === 2;
+const RANGOS = [2,3,4,5,6,7,8,9,10,11,12,13,14];   // 11=J 12=Q 13=K 14=A
+const R_TXT = {11:'J',12:'Q',13:'K',14:'A'};
+const rtxt = r => R_TXT[r] || String(r);
+/* LAS FICHAS DE UNA CARTA SALEN DE SU RANGO Y DE NINGUN OTRO SITIO: la
+   figura vale 10 y el as 11. Escrito dos veces, el dia que se toque una el
+   previo promete un puntaje que el juego no paga. */
+function fichasDe(c){
+  if (c.me === 'piedra') return 50;
+  return c.r <= 10 ? c.r : (c.r === 14 ? 11 : 10);
+}
+
+/* --- las doce manos de poquer ---------------------------------------
+   `f` y `m` son la base de nivel 1; `df`/`dm` es lo que agrega cada nivel.
+   Una tabla y ninguna rama por mano. */
+const MANOS = {
+  alta:         {f:5,   m:1,  df:10, dm:1,  n:1},
+  par:          {f:10,  m:2,  df:15, dm:1,  n:2},
+  doblepar:     {f:20,  m:2,  df:20, dm:1,  n:4},
+  trio:         {f:30,  m:3,  df:20, dm:2,  n:3},
+  escalera:     {f:30,  m:4,  df:30, dm:3,  n:5},
+  color:        {f:35,  m:4,  df:15, dm:2,  n:5},
+  full:         {f:40,  m:4,  df:25, dm:2,  n:5},
+  poker:        {f:60,  m:7,  df:30, dm:3,  n:4},
+  escaleracolor:{f:100, m:8,  df:40, dm:4,  n:5},
+  cincoiguales: {f:120, m:12, df:35, dm:3,  n:5},
+  florimperial: {f:140, m:14, df:50, dm:4,  n:5},
+  familiareal:  {f:160, m:16, df:40, dm:4,  n:5},
+};
+const MANOS_ORD = ['familiareal','florimperial','cincoiguales','escaleracolor','poker',
+                   'full','color','escalera','trio','doblepar','par','alta'];
+
+/* --- mejoras, ediciones y sellos --- */
+const MEJORAS  = ['bonus','mult','comodin','cristal','acero','piedra','oro','suerte'];
+const EDICIONES= ['foil','holo','poli'];
+const SELLOS   = ['rojo','oro'];
+
+/* --- ciegas ---------------------------------------------------------
+   La tabla es la de verdad hasta el ante 8; de ahi en mas crece un 60%
+   por ante, que es lo que hace que el sin fin no se estanque. */
+const CIEGA_BASE = [300,800,2000,5000,11000,20000,35000,50000];
+function baseAnte(a){
+  if (a <= 8) return CIEGA_BASE[a-1];
+  let v = CIEGA_BASE[7];
+  for (let i = 9; i <= a; i++) v = Math.round(v * 1.6 / 100) * 100;
+  return v;
+}
+const CIEGAS = [
+  {id:'chica',  mult:1,   pago:3},
+  {id:'grande', mult:1.5, pago:4},
+  {id:'jefe',   mult:2,   pago:5},
+];
+
+/* --- los doce jefes --------------------------------------------------
+   Cada uno es UN dato que el resto del juego consulta, nunca una rama
+   suelta: `esc` escala el objetivo, `manos`/`desc` mueven el presupuesto,
+   `muerto(c)` dice que carta no puntua y `regla` es la restriccion. */
+const JEFES = {
+  muro:     {esc:1.6},
+  aguja:    {manos:-2},
+  arco:     {manos:-1},
+  agua:     {desc:-99},
+  psiquico: {regla:'cinco'},
+  ojo:      {regla:'norepite'},
+  boca:     {regla:'unatipo'},
+  ganso:    {muerto:c => c.p === 0},
+  corazon:  {muerto:c => c.p === 1},
+  ventana:  {muerto:c => c.p === 2},
+  club:     {muerto:c => c.p === 3},
+  pilar:    {muerto:c => c.r >= 11 && c.r <= 13},
+};
+const JEFES_ID = Object.keys(JEFES);
+
+/* --- presupuesto de la ronda --- */
+/* EL PRESUPUESTO DE LA RONDA NO SE COPIA DE BALATRO: SALE DE LO QUE
+   ESTE MAZO DE COMODINES PUEDE PRODUCIR. Con 4 manos, 3 descartes y 8
+   cartas —los numeros del original— el auto-jugador honesto ganaba
+   0 de 120 y moria en el ante 3,16. Y NO ERA FALTA DE POTENCIA: medido
+   con plata infinita, la mejor mano al morir en el ante 4 daba 32.542
+   contra un objetivo de 10.000, o sea tres veces de sobra. Lo que
+   faltaba era poder VOLVER A SACARLA: con cuatro manos, una ronda es
+   una tirada de dados. El original se permite 4/3/8 porque tiene 150
+   comodines y cartas de mejora que aflojan justo eso; aca hay 32.
+   Medido, con el resto igual: 4/3/8 gana 0 · 5/4/9 gana 6 ·
+   6/4/10 gana 25 de 120. */
+const MANOS_BASE = 6, DESC_BASE = 4, MANO_TAM = 10;
+const SEL_MAX = 5;
+const INTERES_PASO = 5, INTERES_TOPE = 5;   // $1 cada $5, tope $5
+
+/* ============================================================
+   LOS COMODINES. El efecto es una funcion que recibe el contexto
+   de puntuacion y lo MUTA; devuelve true si disparo, y eso es lo
+   unico que el dibujo necesita para saber a cual iluminar.
+   Con una tabla de datos y un switch en `puntua` habria dos
+   listas que se pueden desincronizar.
+   ============================================================ */
+const COM = {
+  comodin:   {rar:0, pre:4, f:C => { C.mult += 4; return true; }},
+  bromista:  {rar:0, pre:4, f:C => C.tiene('par')      && (C.mult += 8, true)},
+  chiflado:  {rar:0, pre:4, f:C => C.tiene('trio')     && (C.mult += 12, true)},
+  loco:      {rar:0, pre:4, f:C => C.tiene('doblepar') && (C.mult += 10, true)},
+  delirante: {rar:0, pre:4, f:C => C.tiene('escalera') && (C.mult += 12, true)},
+  gracioso:  {rar:0, pre:4, f:C => C.tiene('color')    && (C.mult += 10, true)},
+  astuto:    {rar:0, pre:3, f:C => C.tiene('par')      && (C.fichas += 50, true)},
+  taimado:   {rar:0, pre:4, f:C => C.tiene('trio')     && (C.fichas += 100, true)},
+  ladino:    {rar:0, pre:4, f:C => C.tiene('doblepar') && (C.fichas += 80, true)},
+  ruin:      {rar:0, pre:4, f:C => C.tiene('escalera') && (C.fichas += 100, true)},
+  manoso:    {rar:0, pre:4, f:C => C.tiene('color')    && (C.fichas += 80, true)},
+  codicioso: {rar:0, pre:5, f:C => C.cta[2] > 0 && (C.mult += 3 * C.cta[2], true)},
+  lujurioso: {rar:0, pre:5, f:C => C.cta[1] > 0 && (C.mult += 3 * C.cta[1], true)},
+  iracundo:  {rar:0, pre:5, f:C => C.cta[0] > 0 && (C.mult += 3 * C.cta[0], true)},
+  gloton:    {rar:0, pre:5, f:C => C.cta[3] > 0 && (C.mult += 3 * C.cta[3], true)},
+  medio:     {rar:0, pre:5, f:C => C.jugadas.length <= 3 && (C.mult += 20, true)},
+  estandarte:{rar:1, pre:5, f:C => C.descRest > 0 && (C.fichas += 30 * C.descRest, true)},
+  cumbre:    {rar:1, pre:5, f:C => C.descRest === 0 && (C.mult += 15, true)},
+  baron:     {rar:1, pre:8, f:C => { const k = C.enMano.filter(c => c.r === 13).length;
+                                     if (!k) return false; C.mult *= Math.pow(1.5, k); return true; }},
+  arquitecto:{rar:1, pre:7, f:C => { C.mult *= 1.5; return true; }},
+  vela:      {rar:2, pre:10,f:C => { C.mult *= 3; return true; }},
+  espejo:    {rar:2, pre:9, f:C => { C.mult *= 2; return true; }},
+  malabarista:{rar:1,pre:4, f:() => false, mano:1},     // +1 al tamano de mano
+  reloj:     {rar:1, pre:4, f:() => false, manos:1},    // +1 mano por ronda
+  lupa:      {rar:1, pre:4, f:() => false, desc:1},     // +1 descarte
+  cohete:    {rar:1, pre:6, f:() => false, renta:4},    // $4 al final de cada ronda
+
+  /* --- LOS QUE CRECEN ---------------------------------------------
+     SIN UNO SOLO DE ESTOS EL JUEGO NO SE PUEDE PASAR, y es aritmetica:
+     las ciegas se MULTIPLICAN por dos y medio cada ante y un nivel de
+     mano SUMA. Medido antes de agregarlos, con plata infinita y las
+     cinco ranuras llenas el auto-jugador honesto se plantaba en el
+     ante 3,78 y ganaba 0 de 120. El que crece es lo unico que le
+     puede seguir el paso a una curva que se multiplica.
+
+     SU ESTADO VIVE EN `JU.comX`, NO ADENTRO DE LA TABLA: la tabla es
+     una constante compartida por todas las partidas y esto es de la
+     partida. Y `f` solo LEE ese numero — quien lo mueve es `sube`,
+     que corre una vez por mano DE VERDAD. Con el incremento adentro
+     de `f`, la vista previa —que es la misma funcion con `sim`— lo
+     haria avanzar cada vez que el jugador toca una carta. */
+  bolanieve:{rar:0, pre:5,
+    f:C => C.x.bolanieve > 0 && (C.mult += C.x.bolanieve, true),
+    sube:(v, C) => C.figuras ? 0 : v + 2, proy:12},
+  verde:    {rar:0, pre:5,
+    f:C => C.x.verde > 0 && (C.mult += C.x.verde, true),
+    sube:(v) => v + 1, baja:(v) => Math.max(0, v - 1), proy:9},
+  corredor: {rar:1, pre:6,
+    f:C => C.x.corredor > 0 && (C.fichas += C.x.corredor, true),
+    sube:(v, C) => C.tipo.slice(0, 8) === 'escalera' ? v + 20 : v, proy:60},
+  obelisco: {rar:2, pre:9,
+    f:C => C.x.obelisco > 0 && (C.mult *= 1 + C.x.obelisco, true),
+    sube:(v, C) => C.tipo === C.masJug ? 0 : v + 0.2, proy:0.8},
+  constelacion:{rar:1, pre:7,
+    f:C => C.x.constelacion > 0 && (C.mult *= 1 + C.x.constelacion, true),
+    subeP:(v) => v + 0.1, proy:0.4},
+  fogata:   {rar:2, pre:10,
+    f:C => C.x.fogata > 0 && (C.mult *= 1 + C.x.fogata, true),
+    subeJ:(v) => v + 0.25, proy:0.5},
+};
+const COM_ID = Object.keys(COM);
+const COM_POR_RAR = [ COM_ID.filter(k => COM[k].rar === 0),
+                      COM_ID.filter(k => COM[k].rar === 1),
+                      COM_ID.filter(k => COM[k].rar === 2) ];
+const COM_RANURAS = 5;
+
+/* --- consumibles ----------------------------------------------------
+   `sel` es cuantas cartas de la mano hay que tener elegidas para usarlo;
+   0 quiere decir que no pide ninguna. */
+const TAROT = {
+  mago:     {sel:2, me:'suerte'},
+  emperatriz:{sel:2, me:'mult'},
+  ermitano: {sel:0, dinero:'doble'},
+  enamorados:{sel:1, me:'comodin'},
+  carro:    {sel:1, me:'acero'},
+  justicia: {sel:1, me:'cristal'},
+  torre:    {sel:1, me:'piedra'},
+  diablo:   {sel:1, me:'oro'},
+  fuerza:   {sel:1, me:'bonus'},
+  estrella: {sel:3, palo:2},
+  luna:     {sel:3, palo:3},
+  sol:      {sel:3, palo:1},
+  mundo:    {sel:3, palo:0},
+  templanza:{sel:0, dinero:8},
+};
+const TAROT_ID = Object.keys(TAROT);
+const PLANETA_ID = Object.keys(MANOS);   // uno por mano, sube su nivel
+const CONS_RANURAS = 2;
+
+/* --- la tienda --- */
+/* TRES Y NO DOS: con dos ranuras y el 58% de probabilidad de comodin,
+   una tienda ofrece 1,16 comodines, asi que la eleccion casi no existe.
+   Medido solo: honesto 3,16 -> 3,41 de ante. */
+const TIENDA_SLOTS = 3;
+const REROLL_BASE = 5;
+const PRECIO_TAROT = 3, PRECIO_PLANETA = 3;
+const SOBRES = {
+  arcano:  {pre:4, n:3, elige:1, tipo:'tarot'},
+  celeste: {pre:4, n:3, elige:1, tipo:'planeta'},
+  bufon:   {pre:4, n:2, elige:1, tipo:'comodin'},
+  estandar:{pre:4, n:3, elige:1, tipo:'carta'},
+};
+const SOBRE_ID = Object.keys(SOBRES);
+
+/* ============================================================
+   IDIOMAS
+   ============================================================ */
+const LANG = {
+ es:{
+  idT:'Elegí tu idioma', jugar:'REPARTIR', tuto:'CÓMO SE JUEGA', idioma:'IDIOMA',
+  sub:'Ocho antes. Una mano por vez.',
+  pie:'poquer con comodines · todo adentro de un archivo',
+  rec:'Mejor: ante {0}',
+  paT:'EN PAUSA', sigue:'SEGUIR', menu:'AL MENÚ',
+  muerto:'NO LLEGASTE', muertoS:'La ciega te ganó.',
+  gana:'ANTE 8 LIMPIO', ganaS:'Y la mesa sigue abierta.',
+  otra:'OTRA VEZ',
+  fiD:'ante {0} · {1} manos jugadas · ${2} · mejor mano {3}',
+  jugarM:'JUGAR', descartar:'DESCARTAR', ordenR:'RANGO', ordenP:'PALO',
+  manos:'MANOS', desc:'DESC', dinero:'DINERO', ante:'ANTE', ronda:'RONDA',
+  fichas:'FICHAS', mult:'MULT', objetivo:'OBJETIVO', pago:'PAGO',
+  elegiCiega:'ELEGÍ', jugarCiega:'JUGAR', saltar:'SALTAR',
+  tienda:'TIENDA', siguiente:'SIGUIENTE RONDA', rerollT:'OTRA VEZ ${0}',
+  vender:'VENDER', usar:'USAR', elegiSobre:'ELEGÍ UNA', saltarSobre:'SALTAR',
+  sinSitio:'NO HAY RANURA', sinPlata:'NO TE ALCANZA', elegiCartas:'ELEGÍ {0} CARTA(S)',
+  ganaste:'¡GANASTE LA CIEGA!', interes:'interés', manosSobra:'manos de sobra',
+  nivelSube:'NIVEL {0}',
+  ciegas:{chica:'CIEGA CHICA', grande:'CIEGA GRANDE', jefe:'LA CIEGA JEFE'},
+  manosN:{alta:'Carta alta',par:'Par',doblepar:'Doble par',trio:'Trío',escalera:'Escalera',
+    color:'Color',full:'Full',poker:'Póker',escaleracolor:'Escalera de color',
+    cincoiguales:'Cinco iguales',florimperial:'Flor imperial',familiareal:'Familia real'},
+  jefesN:{muro:'EL MURO',aguja:'LA AGUJA',arco:'EL ARCO',agua:'EL AGUA',psiquico:'EL PSÍQUICO',
+    ojo:'EL OJO',boca:'LA BOCA',ganso:'EL GANSO',corazon:'EL CORAZÓN',ventana:'LA VENTANA',
+    club:'EL CLUB',pilar:'EL PILAR'},
+  jefesD:{muro:'objetivo mucho más alto',aguja:'una sola mano',arco:'una mano menos',
+    agua:'sin descartes',psiquico:'hay que jugar cinco cartas',ojo:'no se repite tipo de mano',
+    boca:'un solo tipo de mano',ganso:'las picas no puntúan',corazon:'los corazones no puntúan',
+    ventana:'los diamantes no puntúan',club:'los tréboles no puntúan',
+    pilar:'las figuras no puntúan'},
+  comN:{comodin:'COMODÍN',bromista:'BROMISTA',chiflado:'CHIFLADO',loco:'LOCO',delirante:'DELIRANTE',
+    gracioso:'GRACIOSO',astuto:'ASTUTO',taimado:'TAIMADO',ladino:'LADINO',ruin:'RUIN',manoso:'MAÑOSO',
+    codicioso:'CODICIOSO',lujurioso:'LUJURIOSO',iracundo:'IRACUNDO',gloton:'GLOTÓN',medio:'MEDIO',
+    estandarte:'ESTANDARTE',cumbre:'CUMBRE',baron:'BARÓN',arquitecto:'ARQUITECTO',vela:'LA VELA',
+    espejo:'EL ESPEJO',malabarista:'MALABARISTA',reloj:'EL RELOJ',lupa:'LA LUPA',cohete:'EL COHETE'},
+  comD:{comodin:'+4 mult',bromista:'+8 mult si hay par',chiflado:'+12 mult si hay trío',
+    loco:'+10 mult si hay doble par',delirante:'+12 mult si hay escalera',
+    gracioso:'+10 mult si hay color',astuto:'+50 fichas si hay par',
+    taimado:'+100 fichas si hay trío',ladino:'+80 fichas si hay doble par',
+    ruin:'+100 fichas si hay escalera',manoso:'+80 fichas si hay color',
+    codicioso:'+3 mult por cada ♦ que puntúa',lujurioso:'+3 mult por cada ♥',
+    iracundo:'+3 mult por cada ♠',gloton:'+3 mult por cada ♣',
+    medio:'+20 mult si jugás 3 cartas o menos',estandarte:'+30 fichas por descarte que te sobre',
+    cumbre:'+15 mult si no te queda ningún descarte',baron:'×1,5 mult por cada K en la mano',
+    arquitecto:'×1,5 mult',vela:'×3 mult',espejo:'×2 mult',malabarista:'+1 carta en la mano',
+    reloj:'+1 mano por ronda',lupa:'+1 descarte por ronda',cohete:'$4 al terminar la ronda'},
+  tarN:{mago:'EL MAGO',emperatriz:'LA EMPERATRIZ',ermitano:'EL ERMITAÑO',enamorados:'LOS ENAMORADOS',
+    carro:'EL CARRO',justicia:'LA JUSTICIA',torre:'LA TORRE',diablo:'EL DIABLO',fuerza:'LA FUERZA',
+    estrella:'LA ESTRELLA',luna:'LA LUNA',sol:'EL SOL',mundo:'EL MUNDO',templanza:'LA TEMPLANZA'},
+  tarD:{mago:'2 cartas pasan a SUERTE',emperatriz:'2 cartas pasan a MULT',
+    ermitano:'te duplica el dinero (hasta $20)',enamorados:'1 carta pasa a COMODÍN',
+    carro:'1 carta pasa a ACERO',justicia:'1 carta pasa a CRISTAL',torre:'1 carta pasa a PIEDRA',
+    diablo:'1 carta pasa a ORO',fuerza:'1 carta pasa a BONUS',estrella:'3 cartas pasan a ♦',
+    luna:'3 cartas pasan a ♣',sol:'3 cartas pasan a ♥',mundo:'3 cartas pasan a ♠',
+    templanza:'te da $8'},
+  mejN:{bonus:'BONUS',mult:'MULT',comodin:'COMODÍN',cristal:'CRISTAL',acero:'ACERO',
+    piedra:'PIEDRA',oro:'ORO',suerte:'SUERTE'},
+  edN:{foil:'LÁMINA',holo:'HOLO',poli:'POLI'},
+  sobreN:{arcano:'SOBRE ARCANO',celeste:'SOBRE CELESTE',bufon:'SOBRE BUFÓN',estandar:'SOBRE ESTÁNDAR'},
+  planeta:'PLANETA · {0}',
+  tuto:['Elegí hasta 5 cartas y tocá JUGAR',
+        'La mano vale FICHAS × MULT, y tiene que llegar al objetivo',
+        'DESCARTAR cambia las que no te sirven',
+        'Los comodines de arriba se suman a cada mano',
+        'Ganá la ciega, comprá en la tienda, y subí de ante'],
+  tutoFin:'ESO ES TODO',
+ },
+ en:{
+  idT:'Pick your language', jugar:'DEAL', tuto:'HOW TO PLAY', idioma:'LANGUAGE',
+  sub:'Eight antes. One hand at a time.',
+  pie:'poker with jokers · all inside one file',
+  rec:'Best: ante {0}',
+  paT:'PAUSED', sigue:'RESUME', menu:'MENU',
+  muerto:'YOU FELL SHORT', muertoS:'The blind beat you.',
+  gana:'ANTE 8 CLEARED', ganaS:'And the table stays open.',
+  otra:'AGAIN',
+  fiD:'ante {0} · {1} hands played · ${2} · best hand {3}',
+  jugarM:'PLAY', descartar:'DISCARD', ordenR:'RANK', ordenP:'SUIT',
+  manos:'HANDS', desc:'DISC', dinero:'MONEY', ante:'ANTE', ronda:'ROUND',
+  fichas:'CHIPS', mult:'MULT', objetivo:'TARGET', pago:'REWARD',
+  elegiCiega:'CHOOSE', jugarCiega:'PLAY', saltar:'SKIP',
+  tienda:'SHOP', siguiente:'NEXT ROUND', rerollT:'REROLL ${0}',
+  vender:'SELL', usar:'USE', elegiSobre:'PICK ONE', saltarSobre:'SKIP',
+  sinSitio:'NO SLOT LEFT', sinPlata:'NOT ENOUGH', elegiCartas:'SELECT {0} CARD(S)',
+  ganaste:'BLIND BEATEN!', interes:'interest', manosSobra:'hands left',
+  nivelSube:'LEVEL {0}',
+  ciegas:{chica:'SMALL BLIND', grande:'BIG BLIND', jefe:'BOSS BLIND'},
+  manosN:{alta:'High card',par:'Pair',doblepar:'Two pair',trio:'Three of a kind',
+    escalera:'Straight',color:'Flush',full:'Full house',poker:'Four of a kind',
+    escaleracolor:'Straight flush',cincoiguales:'Five of a kind',florimperial:'Flush five',
+    familiareal:'Flush house'},
+  jefesN:{muro:'THE WALL',aguja:'THE NEEDLE',arco:'THE ARC',agua:'THE WATER',psiquico:'THE PSYCHIC',
+    ojo:'THE EYE',boca:'THE MOUTH',ganso:'THE GOOSE',corazon:'THE HEART',ventana:'THE WINDOW',
+    club:'THE CLUB',pilar:'THE PILLAR'},
+  jefesD:{muro:'much higher target',aguja:'only one hand',arco:'one hand less',
+    agua:'no discards',psiquico:'you must play five cards',ojo:'no repeating hand types',
+    boca:'only one hand type',ganso:'spades do not score',corazon:'hearts do not score',
+    ventana:'diamonds do not score',club:'clubs do not score',pilar:'face cards do not score'},
+  comN:{comodin:'JOKER',bromista:'JOLLY',chiflado:'ZANY',loco:'MAD',delirante:'CRAZY',
+    gracioso:'DROLL',astuto:'SLY',taimado:'WILY',ladino:'CLEVER',ruin:'DEVIOUS',manoso:'CRAFTY',
+    codicioso:'GREEDY',lujurioso:'LUSTY',iracundo:'WRATHFUL',gloton:'GLUTTONOUS',medio:'HALF',
+    estandarte:'BANNER',cumbre:'SUMMIT',baron:'BARON',arquitecto:'ARCHITECT',vela:'THE CANDLE',
+    espejo:'THE MIRROR',malabarista:'JUGGLER',reloj:'THE CLOCK',lupa:'THE LENS',cohete:'THE ROCKET'},
+  comD:{comodin:'+4 mult',bromista:'+8 mult if hand has a pair',chiflado:'+12 mult if three of a kind',
+    loco:'+10 mult if two pair',delirante:'+12 mult if straight',gracioso:'+10 mult if flush',
+    astuto:'+50 chips if pair',taimado:'+100 chips if three of a kind',ladino:'+80 chips if two pair',
+    ruin:'+100 chips if straight',manoso:'+80 chips if flush',
+    codicioso:'+3 mult per scoring ♦',lujurioso:'+3 mult per ♥',iracundo:'+3 mult per ♠',
+    gloton:'+3 mult per ♣',medio:'+20 mult if you play 3 cards or less',
+    estandarte:'+30 chips per discard left',cumbre:'+15 mult if no discards left',
+    baron:'×1.5 mult per King held in hand',arquitecto:'×1.5 mult',vela:'×3 mult',espejo:'×2 mult',
+    malabarista:'+1 card in hand',reloj:'+1 hand per round',lupa:'+1 discard per round',
+    cohete:'$4 at the end of the round'},
+  tarN:{mago:'THE MAGICIAN',emperatriz:'THE EMPRESS',ermitano:'THE HERMIT',
+    enamorados:'THE LOVERS',carro:'THE CHARIOT',justicia:'JUSTICE',torre:'THE TOWER',
+    diablo:'THE DEVIL',fuerza:'STRENGTH',estrella:'THE STAR',luna:'THE MOON',sol:'THE SUN',
+    mundo:'THE WORLD',templanza:'TEMPERANCE'},
+  tarD:{mago:'2 cards become LUCKY',emperatriz:'2 cards become MULT',
+    ermitano:'doubles your money (up to $20)',enamorados:'1 card becomes WILD',
+    carro:'1 card becomes STEEL',justicia:'1 card becomes GLASS',torre:'1 card becomes STONE',
+    diablo:'1 card becomes GOLD',fuerza:'1 card becomes BONUS',estrella:'3 cards become ♦',
+    luna:'3 cards become ♣',sol:'3 cards become ♥',mundo:'3 cards become ♠',
+    templanza:'gives you $8'},
+  mejN:{bonus:'BONUS',mult:'MULT',comodin:'WILD',cristal:'GLASS',acero:'STEEL',
+    piedra:'STONE',oro:'GOLD',suerte:'LUCKY'},
+  edN:{foil:'FOIL',holo:'HOLO',poli:'POLY'},
+  sobreN:{arcano:'ARCANA PACK',celeste:'CELESTIAL PACK',bufon:'BUFFOON PACK',estandar:'STANDARD PACK'},
+  planeta:'PLANET · {0}',
+  tuto:['Pick up to 5 cards and tap PLAY',
+        'A hand scores CHIPS × MULT, and has to reach the target',
+        'DISCARD swaps the cards you do not want',
+        'The jokers up top add to every hand',
+        'Beat the blind, buy in the shop, and climb the antes'],
+  tutoFin:'THAT IS ALL',
+ },
+ pt:{
+  idT:'Escolha seu idioma', jugar:'DISTRIBUIR', tuto:'COMO JOGAR', idioma:'IDIOMA',
+  sub:'Oito antes. Uma mão por vez.',
+  pie:'pôquer com coringas · tudo dentro de um arquivo',
+  rec:'Melhor: ante {0}',
+  paT:'PAUSADO', sigue:'CONTINUAR', menu:'MENU',
+  muerto:'NÃO CHEGOU', muertoS:'O blind te venceu.',
+  gana:'ANTE 8 LIMPO', ganaS:'E a mesa continua aberta.',
+  otra:'DE NOVO',
+  fiD:'ante {0} · {1} mãos jogadas · ${2} · melhor mão {3}',
+  jugarM:'JOGAR', descartar:'DESCARTAR', ordenR:'VALOR', ordenP:'NAIPE',
+  manos:'MÃOS', desc:'DESC', dinero:'DINHEIRO', ante:'ANTE', ronda:'RODADA',
+  fichas:'FICHAS', mult:'MULT', objetivo:'OBJETIVO', pago:'PRÊMIO',
+  elegiCiega:'ESCOLHA', jugarCiega:'JOGAR', saltar:'PULAR',
+  tienda:'LOJA', siguiente:'PRÓXIMA RODADA', rerollT:'DE NOVO ${0}',
+  vender:'VENDER', usar:'USAR', elegiSobre:'ESCOLHA UMA', saltarSobre:'PULAR',
+  sinSitio:'SEM ESPAÇO', sinPlata:'NÃO DÁ', elegiCartas:'ESCOLHA {0} CARTA(S)',
+  ganaste:'BLIND VENCIDO!', interes:'juros', manosSobra:'mãos de sobra',
+  nivelSube:'NÍVEL {0}',
+  ciegas:{chica:'BLIND PEQUENO', grande:'BLIND GRANDE', jefe:'BLIND CHEFE'},
+  manosN:{alta:'Carta alta',par:'Par',doblepar:'Dois pares',trio:'Trinca',escalera:'Sequência',
+    color:'Flush',full:'Full house',poker:'Quadra',escaleracolor:'Straight flush',
+    cincoiguales:'Cinco iguais',florimperial:'Flush five',familiareal:'Flush house'},
+  jefesN:{muro:'O MURO',aguja:'A AGULHA',arco:'O ARCO',agua:'A ÁGUA',psiquico:'O PSÍQUICO',
+    ojo:'O OLHO',boca:'A BOCA',ganso:'O GANSO',corazon:'O CORAÇÃO',ventana:'A JANELA',
+    club:'O CLUBE',pilar:'O PILAR'},
+  jefesD:{muro:'objetivo bem mais alto',aguja:'uma mão só',arco:'uma mão a menos',
+    agua:'sem descartes',psiquico:'tem que jogar cinco cartas',ojo:'não repete tipo de mão',
+    boca:'um tipo de mão só',ganso:'espadas não pontuam',corazon:'copas não pontuam',
+    ventana:'ouros não pontuam',club:'paus não pontuam',pilar:'figuras não pontuam'},
+  comN:{comodin:'CORINGA',bromista:'BRINCALHÃO',chiflado:'MALUCO',loco:'LOUCO',delirante:'DELIRANTE',
+    gracioso:'ENGRAÇADO',astuto:'ASTUTO',taimado:'MANHOSO',ladino:'ESPERTO',ruin:'RUIM',manoso:'ARDILOSO',
+    codicioso:'GANANCIOSO',lujurioso:'LUXURIOSO',iracundo:'IRACUNDO',gloton:'GLUTÃO',medio:'MEIO',
+    estandarte:'ESTANDARTE',cumbre:'CUME',baron:'BARÃO',arquitecto:'ARQUITETO',vela:'A VELA',
+    espejo:'O ESPELHO',malabarista:'MALABARISTA',reloj:'O RELÓGIO',lupa:'A LUPA',cohete:'O FOGUETE'},
+  comD:{comodin:'+4 mult',bromista:'+8 mult se tiver par',chiflado:'+12 mult se tiver trinca',
+    loco:'+10 mult se tiver dois pares',delirante:'+12 mult se tiver sequência',
+    gracioso:'+10 mult se tiver flush',astuto:'+50 fichas se tiver par',
+    taimado:'+100 fichas se tiver trinca',ladino:'+80 fichas se tiver dois pares',
+    ruin:'+100 fichas se tiver sequência',manoso:'+80 fichas se tiver flush',
+    codicioso:'+3 mult por cada ♦ que pontua',lujurioso:'+3 mult por cada ♥',
+    iracundo:'+3 mult por cada ♠',gloton:'+3 mult por cada ♣',
+    medio:'+20 mult se jogar 3 cartas ou menos',estandarte:'+30 fichas por descarte que sobrar',
+    cumbre:'+15 mult se não sobrar descarte',baron:'×1,5 mult por cada K na mão',
+    arquitecto:'×1,5 mult',vela:'×3 mult',espejo:'×2 mult',malabarista:'+1 carta na mão',
+    reloj:'+1 mão por rodada',lupa:'+1 descarte por rodada',cohete:'$4 no fim da rodada'},
+  tarN:{mago:'O MAGO',emperatriz:'A IMPERATRIZ',ermitano:'O EREMITA',enamorados:'OS AMANTES',
+    carro:'O CARRO',justicia:'A JUSTIÇA',torre:'A TORRE',diablo:'O DIABO',fuerza:'A FORÇA',
+    estrella:'A ESTRELA',luna:'A LUA',sol:'O SOL',mundo:'O MUNDO',templanza:'A TEMPERANÇA'},
+  tarD:{mago:'2 cartas viram SORTE',emperatriz:'2 cartas viram MULT',
+    ermitano:'dobra seu dinheiro (até $20)',enamorados:'1 carta vira CORINGA',
+    carro:'1 carta vira AÇO',justicia:'1 carta vira VIDRO',torre:'1 carta vira PEDRA',
+    diablo:'1 carta vira OURO',fuerza:'1 carta vira BÔNUS',estrella:'3 cartas viram ♦',
+    luna:'3 cartas viram ♣',sol:'3 cartas viram ♥',mundo:'3 cartas viram ♠',
+    templanza:'dá $8'},
+  mejN:{bonus:'BÔNUS',mult:'MULT',comodin:'CORINGA',cristal:'VIDRO',acero:'AÇO',
+    piedra:'PEDRA',oro:'OURO',suerte:'SORTE'},
+  edN:{foil:'FOIL',holo:'HOLO',poli:'POLI'},
+  sobreN:{arcano:'PACOTE ARCANO',celeste:'PACOTE CELESTE',bufon:'PACOTE BUFÃO',
+    estandar:'PACOTE PADRÃO'},
+  planeta:'PLANETA · {0}',
+  tuto:['Escolha até 5 cartas e toque JOGAR',
+        'A mão vale FICHAS × MULT, e tem que chegar ao objetivo',
+        'DESCARTAR troca as que não servem',
+        'Os coringas de cima somam em cada mão',
+        'Vença o blind, compre na loja, e suba de ante'],
+  tutoFin:'É SÓ ISSO',
+ },
+};
+let IDIOMA = 'en';
+function T(k, ...a){
+  let s = (LANG[IDIOMA] && LANG[IDIOMA][k]) !== undefined ? LANG[IDIOMA][k] : LANG.es[k];
+  if (s === undefined) s = k;
+  if (typeof s !== 'string') return s;
+  a.forEach((v,i)=>{ s = s.split('{'+i+'}').join(v); });
+  return s;
+}
+/* UN SOLO ACCESO POR TABLA. Con `LANG[IDIOMA].comN[id] || id` repetido en cada
+   sitio que dibuja, el dia que falte una clave en un idioma cada sitio cae de
+   una forma distinta. */
+const tt = (tab, id) => ((LANG[IDIOMA] && LANG[IDIOMA][tab] && LANG[IDIOMA][tab][id])
+                      || (LANG.es[tab] && LANG.es[tab][id]) || id);
+
+/* ---------- guardado ---------- */
+const GUARDA = {rec:0, visto:0, idioma:''};
+function guardaLee(){
+  try{
+    const s = localStorage.getItem('naipe_v1');
+    if (s) Object.assign(GUARDA, JSON.parse(s));
+  }catch(e){}
+  /* el tutorial se ve cada vez que se abre el juego: es el unico dato del
+     guardado que se descarta a proposito, igual que en ARCO, MEKO y DUNA. */
+  GUARDA.visto = 0;
+}
+function guardaEscribe(){
+  if (DEMO) return;
+  try{ localStorage.setItem('naipe_v1', JSON.stringify(GUARDA)); }catch(e){}
+}
+
+/* ============================================================
+   EL ESTADO. Todo lo mutable vive aca y se declara antes de que
+   nadie lo lea.
+   ============================================================ */
+let DEMO = false;
+const JU = {
+  modo:'menu',        // menu | ciega | juega | puntua | tienda | sobre | pausa | fin
+  t:0,
+  ante:1, ronda:1, ciegaIx:0, jefe:'',
+  objetivo:0, puntaje:0, pago:0,
+  manos:0, desc:0, dinero:4,
+  mazo:[], pila:[], mano:[], jugadas:[], descartadas:[],
+  sel:[],                 // indices elegidos de la mano
+  com:[], cons:[],        // comodines y consumibles en juego
+  comX:{},                // lo que cada comodin que crece lleva juntado
+  niv:{},                 // nivel de cada mano de poquer
+  vistas:{},              // cuantas veces se jugo cada mano en la corrida
+  jugadasRonda:[],        // tipos de mano jugados en esta ciega (para EL OJO / LA BOCA)
+  tienda:null, sobre:null,
+  ultima:null,            // el resultado de la ultima puntuacion
+  anim:null,              // la animacion de puntuar
+  totManos:0, mejorMano:0,
+  consUsado:-1,
+  rng:null,
+};
+/* ============================================================
+   c.js — EL MODELO. No toca ni el DOM ni el lienzo, asi que
+   `b.js`+`c.js` se concatenan y se importan en node: la
+   auditoria y los auto-jugadores corren sin navegador.
+
+   Y aca vive la regla que sostiene el juego entero:
+
+     LA PUNTUACION ES **UNA** FUNCION.
+
+   `puntua()` la llaman el detector de mano, la vista previa que
+   el jugador mira antes de tirar, la jugada de verdad, el
+   auto-jugador y el auditor. Con dos cuentas, la vista previa
+   promete un puntaje que el juego no paga — y eso no falla:
+   miente.
+   ============================================================ */
+
+/* --- azar con semilla ---
+   Con Math.random una partida no se puede reproducir, y sin
+   reproducir no hay auditoria. */
+function rngNuevo(s){
+  let a = s >>> 0;
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const az  = () => JU.rng ? JU.rng() : Math.random();
+const azI = n => Math.floor(az() * n);
+function mezcla(a){
+  for (let i = a.length - 1; i > 0; i--){
+    const j = azI(i + 1); const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* --- la baraja --- */
+let _cid = 0;
+function carta(p, r){ return { p, r, me:'', ed:'', se:'', id:++_cid }; }
+function mazoNuevo(){
+  const m = [];
+  for (let p = 0; p < 4; p++) for (const r of RANGOS) m.push(carta(p, r));
+  return m;
+}
+
+/* ============================================================
+   DETECCION DE MANO
+
+   La piedra no tiene rango ni palo, asi que no entra en la
+   deteccion — pero SI puntua (son 50 fichas). El comodin vale
+   cualquier palo para el color y nada mas.
+   ============================================================ */
+function grupear(vivas){
+  const porR = {};
+  vivas.forEach(c => { (porR[c.r] = porR[c.r] || []).push(c); });
+  const gs = Object.values(porR).sort((a, b) => b.length - a.length || b[0].r - a[0].r);
+  const g0 = gs[0] ? gs[0].length : 0;
+  const g1 = gs[1] ? gs[1].length : 0;
+
+  /* color: cinco cartas del mismo palo; el comodin se acomoda al que haya */
+  let col = false;
+  if (vivas.length >= 5){
+    const fijas = vivas.filter(c => c.me !== 'comodin');
+    col = !fijas.length || fijas.every(c => c.p === fijas[0].p);
+  }
+
+  return { gs, g0, g1, esc:escaleraDe(vivas), col };
+}
+
+function escaleraDe(vivas){
+  if (vivas.length < 5) return false;
+  const rs = [...new Set(vivas.map(c => c.r))];
+  if (rs.length !== 5) return false;
+  rs.sort((a, b) => a - b);
+  let seguidas = true;
+  for (let i = 1; i < 5; i++) if (rs[i] !== rs[i-1] + 1) seguidas = false;
+  if (seguidas) return true;
+  /* el as tambien vale abajo: A 2 3 4 5 */
+  return rs[0] === 2 && rs[1] === 3 && rs[2] === 4 && rs[3] === 5 && rs[4] === 14;
+}
+
+/* `contiene` no es `es igual a`: un full CONTIENE un par, y por
+   eso el comodin que paga "si la mano tiene un par" se dispara
+   con un full. Es la regla del juego original. */
+function contiene(g, t){
+  if (t === 'par')      return g.g0 >= 2;
+  if (t === 'doblepar') return (g.g0 >= 2 && g.g1 >= 2) || g.g0 >= 4;
+  if (t === 'trio')     return g.g0 >= 3;
+  if (t === 'escalera') return g.esc;
+  if (t === 'color')    return g.col;
+  return false;
+}
+
+/* Devuelve el tipo y CUALES cartas cuentan. En color, escalera,
+   full y las de cinco cuentan las cinco; en un par cuentan dos.
+   Esa lista es la que despues puntua de izquierda a derecha. */
+function detecta(cs){
+  const vivas = cs.filter(c => c.me !== 'piedra');
+  const piedras = cs.filter(c => c.me === 'piedra');
+  const g = grupear(vivas);
+  const todo = () => cs.slice();
+
+  let tipo, cuentan;
+  if      (g.g0 >= 5 && g.col)               { tipo = 'familiareal';   cuentan = todo(); }
+  else if (g.g0 >= 3 && g.g1 >= 2 && g.col)  { tipo = 'florimperial';  cuentan = todo(); }
+  else if (g.g0 >= 5)                        { tipo = 'cincoiguales';  cuentan = todo(); }
+  else if (g.esc && g.col)                   { tipo = 'escaleracolor'; cuentan = todo(); }
+  else if (g.g0 >= 4)                        { tipo = 'poker';         cuentan = g.gs[0].slice(); }
+  else if (g.g0 >= 3 && g.g1 >= 2)           { tipo = 'full';          cuentan = todo(); }
+  else if (g.col)                            { tipo = 'color';         cuentan = todo(); }
+  else if (g.esc)                            { tipo = 'escalera';      cuentan = todo(); }
+  else if (g.g0 >= 3)                        { tipo = 'trio';          cuentan = g.gs[0].slice(); }
+  else if (g.g0 >= 2 && g.g1 >= 2)           { tipo = 'doblepar';      cuentan = g.gs[0].concat(g.gs[1]); }
+  else if (g.g0 >= 2)                        { tipo = 'par';           cuentan = g.gs[0].slice(); }
+  else {
+    tipo = 'alta';
+    let alta = null;
+    vivas.forEach(c => { if (!alta || c.r > alta.r) alta = c; });
+    cuentan = alta ? [alta] : [];
+  }
+
+  /* la piedra siempre cuenta, sea cual sea la mano */
+  if (!cuentan.length || cuentan !== cs) piedras.forEach(c => { if (cuentan.indexOf(c) < 0) cuentan.push(c); });
+
+  /* de izquierda a derecha, en el orden en que estan sobre la mesa */
+  cuentan.sort((a, b) => cs.indexOf(a) - cs.indexOf(b));
+  return { tipo, cuentan, g };
+}
+
+/* --- el jefe puede MATAR cartas: no dan fichas ni mult, pero
+   siguen contando para que tipo de mano es --- */
+function jefeMata(jefe, c){
+  const J = JEFES[jefe];
+  return !!(J && J.muerto && J.muerto(c));
+}
+
+/* ============================================================
+   LA PUNTUACION
+
+   El orden es el del juego original y no es negociable, porque
+   los multiplicadores no conmutan: `x2` antes o despues de `+10`
+   da numeros distintos.
+
+     1. la base de la mano, en SU nivel
+     2. cada carta que cuenta, de izquierda a derecha
+     3. las que se quedaron en la mano (acero, sello rojo)
+     4. cada comodin, de izquierda a derecha
+     5. fichas x mult
+
+   `sim:true` es la vista previa: no tira los dados de la carta
+   de suerte ni rompe el cristal. Un preview que gasta suerte
+   mostraria un numero que la jugada de verdad no repite.
+   ============================================================ */
+function puntua(cs, o){
+  o = o || {};
+  const enMano   = o.enMano   || [];
+  const com      = o.com      || [];
+  const niv      = o.niv      || {};
+  const jefe     = o.jefe     !== undefined ? o.jefe     : '';
+  const x        = o.x        || {};
+  const descRest = o.descRest !== undefined ? o.descRest : 0;
+  const sim      = !!o.sim;
+
+  const det = detecta(cs);
+  const M   = MANOS[det.tipo];
+  const lv  = niv[det.tipo] || 1;
+
+  let fichas = M.f + M.df * (lv - 1);
+  let mult   = M.m + M.dm * (lv - 1);
+  let dinero = 0;
+  const rotas = [], log = [];
+  const muerta = c => jefeMata(jefe, c);
+
+  /* 2) las cartas que cuentan */
+  for (const c of det.cuentan){
+    if (muerta(c)){ log.push({ c, nada:true }); continue; }
+    const veces = c.se === 'rojo' ? 2 : 1;   /* el sello rojo la dispara dos veces */
+    for (let v = 0; v < veces; v++){
+      const f0 = fichas, m0 = mult;
+      fichas += fichasDe(c);
+      if      (c.me === 'bonus')   fichas += 30;
+      else if (c.me === 'mult')    mult   += 4;
+      else if (c.me === 'cristal') mult   *= 2;
+      else if (c.me === 'suerte' && !sim){
+        if (az() < 0.20)   mult   += 20;
+        if (az() < 1 / 15) dinero += 20;
+      }
+      if      (c.ed === 'foil') fichas += 50;
+      else if (c.ed === 'holo') mult   += 10;
+      else if (c.ed === 'poli') mult   *= 1.5;
+      if (c.se === 'oro') dinero += 3;
+      log.push({ c, df:fichas - f0, dm:mult - m0 });
+    }
+    /* el cristal se rompe una de cada cuatro, DESPUES de puntuar */
+    if (c.me === 'cristal' && !sim && az() < 0.25) rotas.push(c);
+  }
+
+  /* 3) las que se quedaron en la mano */
+  for (const c of enMano){
+    if (muerta(c) || c.me !== 'acero') continue;
+    const veces = c.se === 'rojo' ? 2 : 1;
+    for (let v = 0; v < veces; v++){ mult *= 1.5; log.push({ c, mano:true }); }
+  }
+
+  /* 4) los comodines. Cuentan los palos de las cartas que puntuaron;
+        el comodin-carta vale para los cuatro. */
+  const cta = [0, 0, 0, 0];
+  for (const c of det.cuentan){
+    if (muerta(c) || c.me === 'piedra') continue;
+    if (c.me === 'comodin'){ cta[0]++; cta[1]++; cta[2]++; cta[3]++; }
+    else cta[c.p]++;
+  }
+
+  const C = {
+    fichas, mult, dinero, cta, enMano, descRest,
+    jugadas: det.cuentan, tipo: det.tipo, x,
+    tiene: t => contiene(det.g, t),
+  };
+  const comLog = [];
+  for (const k of com){
+    const J = COM[k];
+    if (!J || !J.f) continue;
+    const f0 = C.fichas, m0 = C.mult;
+    if (J.f(C)) comLog.push({ k, df:C.fichas - f0, dm:C.mult - m0, m0 });
+  }
+
+  return {
+    tipo: det.tipo, lv, cuentan: det.cuentan,
+    fichas: C.fichas, mult: C.mult,
+    total: Math.round(C.fichas * C.mult),
+    dinero: C.dinero, rotas, log, comLog,
+  };
+}
+
+/* La vista previa es LA MISMA funcion con `sim`. */
+function previo(cs){
+  if (!cs.length) return null;
+  return puntua(cs, {
+    enMano: JU.mano.filter(c => cs.indexOf(c) < 0),
+    com: JU.com, niv: JU.niv, jefe: cieganJefe(), descRest: JU.desc, x: JU.comX, sim:true,
+  });
+}
+const cieganJefe = () => JU.ciegaIx === 2 ? JU.jefe : '';
+
+/* ============================================================
+   LO QUE EL JEFE CAMBIA
+   ============================================================ */
+function manosDe(){
+  let m = MANOS_BASE;
+  JU.com.forEach(k => { if (COM[k] && COM[k].manos) m += COM[k].manos; });
+  const J = JEFES[cieganJefe()];
+  if (J && J.manos) m += J.manos;
+  return Math.max(1, m);
+}
+function descDe(){
+  let d = DESC_BASE;
+  JU.com.forEach(k => { if (COM[k] && COM[k].desc) d += COM[k].desc; });
+  const J = JEFES[cieganJefe()];
+  if (J && J.desc) d += J.desc;
+  return Math.max(0, d);
+}
+function manoTam(){
+  let t = MANO_TAM;
+  JU.com.forEach(k => { if (COM[k] && COM[k].mano) t += COM[k].mano; });
+  return t;
+}
+
+/* Si la jugada es legal. La usan el boton de TIRAR (para
+   apagarlo) y el auto-jugador: con dos cuentas el boton diria
+   que se puede y el juego lo rechazaria. */
+function legalBase(cs){
+  if (!cs.length || cs.length > SEL_MAX) return false;
+  const J = JEFES[cieganJefe()];
+  if (!J || !J.regla) return true;
+  if (J.regla === 'cinco' && cs.length !== 5) return false;
+  const t = detecta(cs).tipo;
+  if (J.regla === 'norepite' && JU.jugadasRonda.indexOf(t) >= 0) return false;
+  if (J.regla === 'unatipo' && JU.jugadasRonda.length && JU.jugadasRonda[0] !== t) return false;
+  return true;
+}
+
+/* SI NINGUNA JUGADA ES LEGAL, TODAS LO SON.
+   LA BOCA obliga a repetir el tipo de la primera mano. Con ocho
+   cartas que no lo arman y sin descartes, las 218 combinaciones
+   quedan ilegales y la partida no puede seguir NI terminar: medido,
+   el auto-jugador se cortaba en el ante 1.2 sin morir. Una regla
+   que puede volver el juego injugable no es una regla, es una
+   trampa. Vale igual para EL OJO y para EL PSIQUICO.
+   Y la salida pasa POR `legal`, que es lo que leen el boton TIRAR,
+   la jugada de verdad y el auto-jugador: con dos cuentas, el boton
+   se veria apagado sobre una mano que si se puede tirar. */
+let TRAB_K = '', TRAB_V = false;
+function trabado(){
+  if (!JU.mano.length) return false;
+  const k = JU.mano.map(c => c.id).join(',') + '|' + JU.jugadasRonda.join(',')
+          + '|' + JU.ante + '.' + JU.ciegaIx;
+  if (k === TRAB_K) return TRAB_V;
+  TRAB_K = k; TRAB_V = true;
+  const subs = subconjuntos(JU.mano, SEL_MAX);
+  for (let i = 0; i < subs.length; i++)
+    if (legalBase(subs[i])){ TRAB_V = false; break; }
+  return TRAB_V;
+}
+
+function legal(cs){
+  if (!cs.length || cs.length > SEL_MAX) return false;
+  return legalBase(cs) || trabado();
+}
+
+/* ============================================================
+   EL MAZO EN JUEGO
+   ============================================================ */
+let ORDEN_MANO = 'rango';
+function ordena(m){
+  if (m) ORDEN_MANO = m;
+  if (ORDEN_MANO === 'palo') JU.mano.sort((a, b) => a.p - b.p || b.r - a.r);
+  else                       JU.mano.sort((a, b) => b.r - a.r || a.p - b.p);
+}
+function robaHasta(){
+  const t = manoTam();
+  while (JU.mano.length < t && JU.mazo.length) JU.mano.push(JU.mazo.pop());
+  ordena();
+}
+function saca(cs){
+  cs.forEach(c => { const i = JU.mano.indexOf(c); if (i >= 0) JU.mano.splice(i, 1); });
+  JU.sel = [];
+}
+
+/* ============================================================
+   TIENDA Y SOBRES
+   ============================================================ */
+function comSorteo(){
+  const r = az();
+  /* EL 5% DEL ORIGINAL ACA ES CERO. Con 2 ranuras, 58% de comodin y
+     nueve rondas, un 5% de raro son 0,5 apariciones por partida — y los
+     cuatro multiplicativos (vela, espejo, obelisco, fogata) viven ahi.
+     El censo lo canto: `obelisco` salia 3 veces en 120 partidas contra
+     30 de `medio`. Con 20% se da vuelta —obelisco 39, fogata 38,
+     espejo 37, vela 35 son los CUATRO mas tenidos— y el techo de
+     puntaje pasa de 15.980 a 32.542 en el ante 4. */
+  const rar = r < 0.50 ? 0 : (r < 0.80 ? 1 : 2);
+  for (let i = 0; i < 3; i++){
+    const lista = COM_POR_RAR[(rar + i) % 3].filter(k => JU.com.indexOf(k) < 0);
+    if (lista.length) return lista[azI(lista.length)];
+  }
+  return '';
+}
+function tiendaItem(){
+  const r = az();
+  if (r < 0.58){
+    const k = comSorteo();
+    if (k) return { t:'comodin', k, pre: COM[k].pre };
+  }
+  if (r < 0.80) return { t:'tarot',   k: TAROT_ID[azI(TAROT_ID.length)],     pre: PRECIO_TAROT };
+  return          { t:'planeta', k: PLANETA_ID[azI(PLANETA_ID.length)], pre: PRECIO_PLANETA };
+}
+function sobreItem(){
+  const ks = Object.keys(SOBRES);
+  const k = ks[azI(ks.length)];
+  return { k, pre: SOBRES[k].pre };
+}
+function tiendaArma(){
+  const it = [];
+  for (let i = 0; i < TIENDA_SLOTS; i++) it.push(tiendaItem());
+  JU.tienda = { it, sobres:[sobreItem(), sobreItem()], reroll: REROLL_BASE };
+}
+function tiendaReroll(){
+  if (!JU.tienda || JU.dinero < JU.tienda.reroll) return false;
+  JU.dinero -= JU.tienda.reroll;
+  JU.tienda.reroll++;
+  JU.tienda.it = JU.tienda.it.map(() => tiendaItem());
+  return true;
+}
+function tiendaCompra(i){
+  const it = JU.tienda && JU.tienda.it[i];
+  if (!it || it.ido || JU.dinero < it.pre) return false;
+  if (it.t === 'comodin' && JU.com.length >= COM_RANURAS) return false;
+  if (it.t !== 'comodin' && it.t !== 'planeta' && JU.cons.length >= CONS_RANURAS) return false;
+  JU.dinero -= it.pre;
+  if      (it.t === 'comodin') JU.com.push(it.k);
+  else if (it.t === 'planeta') planetaUsa(it.k);
+  else                         JU.cons.push({ t:it.t, k:it.k });
+  it.ido = true;
+  return true;
+}
+function sobreCompra(i){
+  const s = JU.tienda && JU.tienda.sobres[i];
+  if (!s || s.ido || JU.dinero < s.pre) return false;
+  JU.dinero -= s.pre;
+  s.ido = true;
+  const S = SOBRES[s.k];
+  const op = [];
+  for (let j = 0; j < S.n; j++){
+    if      (S.tipo === 'tarot')   op.push({ t:'tarot',   k: TAROT_ID[azI(TAROT_ID.length)] });
+    else if (S.tipo === 'planeta') op.push({ t:'planeta', k: PLANETA_ID[azI(PLANETA_ID.length)] });
+    else if (S.tipo === 'comodin'){ const k = comSorteo(); if (k) op.push({ t:'comodin', k }); }
+    else                           op.push({ t:'carta',   c: cartaSobre() });
+  }
+  JU.sobre = { k:s.k, op, elige:S.elige, hechas:0 };
+  return true;
+}
+/* Una carta de sobre viene con mejora: si no, seria una carta mas del mazo. */
+function cartaSobre(){
+  const c = carta(azI(4), RANGOS[azI(RANGOS.length)]);
+  if (az() < 0.70) c.me = MEJORAS[azI(MEJORAS.length)];
+  if (az() < 0.20) c.ed = EDICIONES[azI(EDICIONES.length)];
+  if (az() < 0.12) c.se = SELLOS[azI(SELLOS.length)];
+  return c;
+}
+function sobreElige(i){
+  const S = JU.sobre; if (!S || S.hechas >= S.elige) return false;
+  const op = S.op[i]; if (!op || op.ido) return false;
+  if      (op.t === 'comodin'){ if (JU.com.length >= COM_RANURAS) return false; JU.com.push(op.k); }
+  else if (op.t === 'planeta'){ planetaUsa(op.k); }
+  else if (op.t === 'tarot')  { if (JU.cons.length >= CONS_RANURAS) return false; JU.cons.push({ t:'tarot', k:op.k }); }
+  else                        { JU.mazo.push(op.c); mezcla(JU.mazo); }
+  op.ido = true; S.hechas++;
+  return true;
+}
+
+/* ============================================================
+   TAROT Y PLANETA
+   ============================================================ */
+function planetaUsa(k){ JU.niv[k] = (JU.niv[k] || 1) + 1; comSube('subeP', {}); }
+
+/* El tarot pide cartas elegidas: `sel` dice CUANTAS. 0 = ninguna. */
+function tarotUsa(k, cs){
+  const T = TAROT[k]; if (!T) return false;
+  const n = cs ? cs.length : 0;
+  if (T.sel && (n === 0 || n > T.sel)) return false;
+  if (!T.sel && n) return false;
+  if (T.me)   cs.forEach(c => { c.me = T.me; });
+  if (T.palo !== undefined) cs.forEach(c => { c.p = T.palo; });
+  if (T.dinero === 'doble') JU.dinero = Math.min(JU.dinero * 2, JU.dinero + 20);
+  else if (T.dinero)        JU.dinero += T.dinero;
+  return true;
+}
+function consUsa(i, cs){
+  const c = JU.cons[i]; if (!c) return false;
+  const ok = c.t === 'tarot' ? tarotUsa(c.k, cs) : (planetaUsa(c.k), true);
+  if (ok){ JU.cons.splice(i, 1); JU.sel = []; }
+  return ok;
+}
+
+/* ============================================================
+   ECONOMIA
+
+   El interes es lo que hace que guardar plata sea una decision:
+   $1 por cada $5 en mano, con techo. Sin techo, la corrida se
+   gana ahorrando y comprar deja de tener costo.
+   ============================================================ */
+function interes(){ return Math.min(Math.floor(JU.dinero / INTERES_PASO), INTERES_TOPE); }
+function rentaDe(){
+  let r = CIEGAS[JU.ciegaIx].pago;
+  JU.com.forEach(k => { if (COM[k] && COM[k].renta) r += COM[k].renta; });
+  return r;
+}
+function pagoRonda(){
+  const oroEnMano = JU.mano.filter(c => c.me === 'oro').length * 3;
+  return rentaDe() + interes() + JU.manos + oroEnMano;
+}
+
+/* ============================================================
+   LA CORRIDA
+   ============================================================ */
+function objetivoDe(){
+  const cg = CIEGAS[JU.ciegaIx];
+  let v = baseAnte(JU.ante) * cg.mult;
+  const J = JEFES[cieganJefe()];
+  if (J && J.esc) v *= J.esc;
+  return Math.round(v);
+}
+
+function partidaNueva(semilla){
+  JU.rng = rngNuevo(semilla === undefined ? (Math.random() * 1e9) | 0 : semilla);
+  JU.ante = 1; JU.ronda = 1; JU.ciegaIx = 0;
+  JU.dinero = 4; JU.com = []; JU.comX = {}; JU.cons = []; JU.niv = {}; JU.vistas = {};
+  JU.totManos = 0; JU.mejorMano = 0; JU.consUsado = -1;
+  JU.tienda = null; JU.sobre = null; JU.ultima = null; JU.anim = null;
+  JU.baraja = mazoNuevo();
+  JU.jefe = JEFES_ID[azI(JEFES_ID.length)];
+  cieganNueva();
+}
+
+/* Cada ciega arranca con el mazo entero barajado de nuevo: lo
+   descartado vuelve. */
+function cieganNueva(){
+  JU.objetivo = objetivoDe();
+  JU.puntaje = 0;
+  JU.manos = manosDe();
+  JU.desc  = descDe();
+  JU.jugadasRonda = [];
+  JU.mazo = mezcla(JU.baraja.slice());
+  JU.mano = []; JU.jugadas = []; JU.descartadas = []; JU.sel = [];
+  robaHasta();
+  JU.modo = 'juega';
+}
+
+/* Tirar. Devuelve el resultado de `puntua` o null si es ilegal. */
+function tira(cs){
+  if (!legal(cs) || JU.manos <= 0) return null;
+  const r = puntua(cs, {
+    enMano: JU.mano.filter(c => cs.indexOf(c) < 0),
+    com: JU.com, niv: JU.niv, jefe: cieganJefe(), descRest: JU.desc, x: JU.comX,
+  });
+  JU.puntaje += r.total;
+  JU.manos--;
+  JU.totManos++;
+  JU.dinero += r.dinero;
+  if (r.total > JU.mejorMano) JU.mejorMano = r.total;
+  /* el obelisco mira la mas jugada ANTES de contar esta: si no, la
+     primera mano de la partida siempre seria "la mas jugada". */
+  comSube('sube', { tipo:r.tipo, masJug:masJugada(),
+                    figuras: cs.some(c => c.r >= 11 && c.r <= 13) });
+  JU.vistas[r.tipo] = (JU.vistas[r.tipo] || 0) + 1;
+  JU.jugadasRonda.push(r.tipo);
+  /* el cristal roto sale del mazo para siempre */
+  r.rotas.forEach(c => { const i = JU.baraja.indexOf(c); if (i >= 0) JU.baraja.splice(i, 1); });
+  saca(cs);
+  JU.jugadas = cs;
+  JU.ultima = r;
+  if (JU.puntaje < JU.objetivo) robaHasta();
+  return r;
+}
+
+/* ============================================================
+   LO QUE CRECE CRECE ACA, NO EN `puntua`
+   `puntua` es la MISMA funcion que dibuja la vista previa, y la
+   vista previa se recalcula en cada toque: con el incremento
+   adentro, mirar una mano la haria subir sin jugarla.
+   Y los tres ganchos leen la MISMA tabla que el efecto, asi que no
+   hay dos listas de comodines que crecen que se puedan
+   desincronizar.
+   ============================================================ */
+function comSube(campo, ctx){
+  JU.com.forEach(k => {
+    const J = COM[k]; if (!J || !J[campo]) return;
+    JU.comX[k] = J[campo](JU.comX[k] || 0, ctx);
+  });
+}
+/* cual es la mano mas jugada de la partida: la necesita el obelisco,
+   que paga por VARIAR y no por repetir. */
+function masJugada(){
+  let m = '', n = -1;
+  Object.keys(JU.vistas).forEach(k => { if (JU.vistas[k] > n){ n = JU.vistas[k]; m = k; } });
+  return m;
+}
+
+function descarta(cs){
+  if (!cs.length || cs.length > SEL_MAX || JU.desc <= 0) return false;
+  JU.desc--;
+  comSube('baja', {});
+  saca(cs);
+  JU.descartadas = JU.descartadas.concat(cs);
+  robaHasta();
+  return true;
+}
+
+const gano  = () => JU.puntaje >= JU.objetivo;
+const perdio= () => !gano() && JU.manos <= 0;
+
+/* Cerrar la ciega: cobrar y abrir la tienda. */
+function cieganCierra(){
+  JU.dinero += pagoRonda();
+  if (JU.ciegaIx === 2) comSube('subeJ', {});   /* se gano un jefe */
+  JU.ciegaIx++;
+  if (JU.ciegaIx > 2){
+    JU.ciegaIx = 0; JU.ante++;
+    JU.jefe = JEFES_ID[azI(JEFES_ID.length)];
+  }
+  JU.ronda++;
+  tiendaArma();
+  JU.modo = 'tienda';
+}
+
+/* ============================================================
+   AUTO-JUGADOR Y AUDITORIA
+
+   Lo unico que prueba que hay una decision adentro es que el
+   que elige bien le gane al que elige al azar. Y los dos juegan
+   POR EL MISMO CAMINO: `tira()` y `descarta()`, no escribiendo
+   el puntaje a mano.
+   ============================================================ */
+function subconjuntos(m, tope){
+  const out = [];
+  const n = Math.min(m.length, 12);
+  for (let mask = 1; mask < (1 << n); mask++){
+    let k = 0, x = mask;
+    while (x){ k += x & 1; x >>= 1; }
+    if (k > tope) continue;
+    const s = [];
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) s.push(m[i]);
+    out.push(s);
+  }
+  return out;
+}
+
+function mejorJugada(){
+  let mejor = null, mt = -1;
+  for (const s of subconjuntos(JU.mano, SEL_MAX)){
+    if (!legal(s)) continue;
+    const r = puntua(s, {
+      enMano: JU.mano.filter(c => s.indexOf(c) < 0),
+      com: JU.com, niv: JU.niv, jefe: cieganJefe(), descRest: JU.desc, x: JU.comX, sim:true,
+    });
+    if (r.total > mt){ mt = r.total; mejor = s; }
+  }
+  return mejor ? { cs: mejor, total: mt } : null;
+}
+
+/* EL BOT NO COMPRA LO MAS BARATO: compra lo que mas le sirve.
+   Comprar por precio es comprar planetas de $3 para siempre y no
+   juntar nunca para un comodin que multiplica — medido, con esa
+   politica el honesto muere en el ante 2.
+
+   Y guarda reserva, porque el interes paga por tener plata
+   quieta: gastar hasta el ultimo peso cuesta $1 por cada $5 que
+   uno no dejo en la mano. */
+/* LA FAVORITA ES LA MAS JUGADA, Y NO LA QUE MAS PAGA POR NIVEL.
+   Probe pesarla por cuanto vale su nivel —un nivel de `poker` son
+   +30 fichas y +3 mult sobre 60 y 7, y uno de `par` son +15 y +1
+   sobre 10 y 2, o sea nueve veces mas— y MIDIO PEOR: honesto 3,16 a
+   3,08 y con plata infinita 4,16 a 4,04. La razon es que un nivel
+   solo se cobra cuando la mano SALE, y `vistas` estima mal justo las
+   manos raras: multiplicar esa estimacion por un delta nueve veces
+   mas grande amplifica el error en vez de corregirlo. */
+const botFavorita = () => {
+  let m = '', n = -1;
+  Object.keys(JU.vistas).forEach(k => { if (JU.vistas[k] > n){ n = JU.vistas[k]; m = k; } });
+  return m || 'par';
+};
+
+/* LO QUE VALE UN COMODIN NO ES SU PRECIO: SE MIDE.
+   Se lo aplica a la ULTIMA mano que el bot jugo de verdad —con
+   `puntua`, la misma funcion del juego— y lo que vale es cuanto la
+   multiplica. Con el precio, uno que suma +4 de multiplicador y uno
+   que lo triplica valen igual si cuestan igual, y los que CRECEN
+   valen lo MENOS de todo, porque arrancan en cero.
+   Por eso cada uno que crece declara `proy`: a cuanto llega en un
+   ante. Ese numero es lo unico escrito a mano; la comparacion la
+   sigue haciendo puntua, asi que no hay una segunda tabla de cuanto
+   pega cada comodin que se pueda desincronizar de la de verdad. */
+function comVale(k){
+  const J = COM[k]; if (!J) return 0;
+  const u = JU.ultima;
+  if (!u || !u.cuentan || !u.cuentan.length) return J.pre;   /* todavia no jugo nada */
+  const x = Object.assign({}, JU.comX);
+  if (J.proy) x[k] = J.proy;
+  const o = { enMano:[], niv:JU.niv, jefe:'', descRest:JU.desc, x, sim:true };
+  const sin = puntua(u.cuentan, Object.assign({}, o, { com:JU.com }));
+  const con = puntua(u.cuentan, Object.assign({}, o, { com:JU.com.concat([k]) }));
+  if (!sin.total) return J.pre;
+  /* EL PISO ES EL PRECIO, Y NO ES UN DETALLE: es lo que hace que la
+     medicion SUME en vez de reemplazar. `puntua` se corre contra UNA
+     mano recordada, asi que un comodin cuyo efecto no aplica a esa
+     mano —uno de palo, uno de un tipo de mano, o `acero` y `baron`,
+     que miran las cartas EN MANO— devuelve cero y el bot lo descarta
+     para siempre. O sea que esto detecta un bonus y no puede
+     demostrar la ausencia de uno. Y la escala tiene que ser la misma
+     que la de los sobres (8/6/4 en `botTienda`) o el bot compra
+     sobres toda la partida: medido sin piso, los comodines por
+     partida caen de 3,68 a 3,01. */
+  return Math.max(J.pre, (con.total / sin.total - 1) * 24);
+}
+
+function botValor(it){
+  if (it.t === 'comodin') return JU.com.length >= COM_RANURAS ? 0 : comVale(it.k);
+  if (it.t === 'planeta') return it.k === botFavorita() ? 7 : 1;
+  if (it.t === 'tarot'){
+    /* sin ranura libre un consumible no se puede ni guardar */
+    if (JU.cons.length >= CONS_RANURAS) return 0;
+    return botTarotVale(it.k);
+  }
+  return 0;
+}
+/* CUANTO VALE UN TAROT PARA EL BOT, y sale de si lo sabe usar. Los
+   que mejoran cartas dejan la mejora puesta para el resto de la
+   partida; los de plata pagan una vez; los de palo solo valen si la
+   mano ya esta cerca de un color. Lo que no sabe usar vale cero, y
+   por eso no lo compra: con dos ranuras, un tarot inutilizable las
+   tapa y el bot se queda sin poder comprar planetas. */
+function botTarotVale(k){
+  const T = TAROT[k]; if (!T) return 0;
+  if (T.me) return 6;
+  if (T.dinero) return 3;
+  if (T.palo !== undefined) return 2;
+  return 0;
+}
+
+/* EL BOT NO USABA LO QUE COMPRABA. Los planetas se quedaban en
+   `cons` hasta el final de la partida: medido, el honesto se plantaba
+   en el ante 2,79 porque sin subir de nivel la mano que juega no hay
+   con que seguir la curva de las ciegas (300, 800, 2000, 5000...).
+   Un auto-jugador que no juega el mismo juego que el jugador esta
+   midiendo otro juego, y entonces el numero que devuelve no describe
+   el juego sino al bot. */
+function botConsumibles(){
+  for (let i = JU.cons.length - 1; i >= 0; i--){
+    const c = JU.cons[i];
+    /* un planeta guardado no hace nada y un nivel no se puede
+       deshacer: no hay ninguna razon para esperar */
+    if (c.t === 'planeta'){ consUsa(i, []); continue; }
+    const T = TAROT[c.k]; if (!T) continue;
+    if (!T.sel){ consUsa(i, []); continue; }
+    if (T.me){
+      /* a las mas gordas SIN mejora: una mejora encima de otra la pisa */
+      const cs = JU.mano.filter(x => !x.me)
+                        .sort((a, b) => fichasDe(b) - fichasDe(a))
+                        .slice(0, T.sel);
+      if (cs.length) consUsa(i, cs);
+      continue;
+    }
+    if (T.palo !== undefined){
+      /* cambiar tres cartas de palo solo sirve si con eso se llega
+         al color: con dos del palo puestas, tres mas hacen cinco */
+      const porP = [0, 0, 0, 0];
+      JU.mano.forEach(x => porP[x.p]++);
+      if (porP[T.palo] < 2) continue;
+      const cs = JU.mano.filter(x => x.p !== T.palo)
+                        .sort((a, b) => fichasDe(b) - fichasDe(a))
+                        .slice(0, T.sel);
+      if (cs.length === T.sel) consUsa(i, cs);
+    }
+  }
+}
+function botSobre(){
+  const S = JU.sobre; if (!S) return;
+  while (S.hechas < S.elige){
+    let ix = -1, iv = -1;
+    S.op.forEach((o, i) => {
+      if (o.ido) return;
+      let v = 0;
+      if      (o.t === 'planeta') v = o.k === botFavorita() ? 9 : 2;
+      else if (o.t === 'comodin') v = JU.com.length >= COM_RANURAS ? 0 : COM[o.k].pre;
+      else if (o.t === 'carta')   v = 3;
+      if (v > iv){ iv = v; ix = i; }
+    });
+    if (ix < 0 || !sobreElige(ix)) break;
+  }
+  JU.sobre = null;
+}
+/* QUE SE TIRA. La version anterior tiraba "lo que no entra en la
+   mejor mano de AHORA", y eso no persigue nada: con un par en la
+   mano se quedaba con dos cartas y robaba seis a ver que sale.
+   Lo que se guarda es lo que PUEDE crecer — las cartas repetidas
+   (un par se hace trio, un trio se hace poker) y el palo mayoritario
+   SI YA HAY CUATRO. Con tres midio PEOR — ante 2,45 contra 2,77 —
+   porque perseguir un color desde tres tira cartas buenas a cambio
+   de un tiro que casi nunca entra; desde cuatro falta una sola y
+   paga. El resto se tira empezando por lo que menos fichas da. */
+function botDescarte(){
+  const m = JU.mano;
+  if (!m.length) return [];
+  const porR = {}, porP = [0,0,0,0];
+  m.forEach(c => { porR[c.r] = (porR[c.r] || 0) + 1; porP[c.p]++; });
+  let pMax = 0;
+  for (let p = 1; p < 4; p++) if (porP[p] > porP[pMax]) pMax = p;
+  const guarda = c => porR[c.r] >= 2 || (porP[pMax] >= 4 && c.p === pMax)
+                   || c.me === 'piedra' || c.ed || c.se;
+  let fuera = m.filter(c => !guarda(c));
+  /* si no sobra nada, la mano ya es toda "util": se tira lo mas flojo */
+  if (!fuera.length) fuera = m.slice();
+  fuera.sort((a, b) => fichasDe(a) - fichasDe(b));
+  return fuera.slice(0, Math.min(SEL_MAX, m.length - 1));
+}
+
+function botTienda(){
+  /* SIN COMODINES NO SE GUARDA UN PESO. El interes paga $1 por cada
+     $5 quietos; un comodin de $4 que suma +4 de multiplicador paga
+     eso en la primera mano y sigue pagando todas las demas. Medido,
+     con reserva desde el ante 1 el bot llegaba al ante 2 con CERO
+     comodines y $7 en la mano. */
+  const reserva = JU.com.length < 2 ? 0 : Math.min(3 + JU.ante * 2, 15);
+  for (let g = 0; g < 12; g++){
+    let ix = -1, iv = 0;
+    JU.tienda.it.forEach((it, i) => {
+      if (!it || it.ido) return;
+      const v = botValor(it);
+      if (v <= 0 || it.pre > JU.dinero - reserva) return;
+      if (v > iv){ iv = v; ix = i; }
+    });
+    /* el sobre celeste da TRES planetas para elegir: es la unica
+       forma de subir la mano que uno juega y no una al azar */
+    let sx = -1, sv = 0;
+    JU.tienda.sobres.forEach((s, i) => {
+      if (!s || s.ido || s.pre > JU.dinero - reserva) return;
+      const v = s.k === 'celeste' ? 8 : s.k === 'bufon' ? 6 : s.k === 'estandar' ? 4 : 0;
+      if (v > sv){ sv = v; sx = i; }
+    });
+    if (sv > iv && sx >= 0){ if (!sobreCompra(sx)) break; botSobre(); continue; }
+    if (ix < 0) break;
+    if (!tiendaCompra(ix)) break;
+  }
+}
+
+function juegaSolo(semilla, modo, topeAnte){
+  const azarPuro = modo === 'azar';
+  topeAnte = topeAnte || 8;
+  partidaNueva(semilla);
+  let vueltas = 0;
+  while (JU.ante <= topeAnte && vueltas++ < 4000){
+    if (JU.modo === 'juega'){
+      if (!azarPuro) botConsumibles();
+      let jugada;
+      if (azarPuro){
+        const ss = subconjuntos(JU.mano, SEL_MAX).filter(legal);
+        jugada = ss.length ? { cs: ss[azI(ss.length)], total:0 } : null;
+      } else {
+        jugada = mejorJugada();
+      }
+      if (!jugada) break;
+      /* SE DESCARTA CONTRA LA CUOTA DE ESTA MANO, NO CONTRA EL
+         OBJETIVO ENTERO. Con `falta` a secas ninguna primera mano
+         llega nunca —300 puntos no salen de un par— asi que el bot
+         quemaba los tres descartes de arrancada y despues jugaba lo
+         que le tocara: medido en la semilla 1074, tres descartes y
+         despues manos de 76, 64, 36 y 15. Con cuatro manos por
+         delante, a esta le toca un cuarto. */
+      const falta = JU.objetivo - JU.puntaje;
+      const cuota = falta / Math.max(1, JU.manos);
+      if (!azarPuro && JU.desc > 0 && jugada.total < cuota && JU.manos > 1){
+        const fuera = botDescarte();
+        if (fuera.length){ descarta(fuera); continue; }
+      }
+      if (azarPuro && JU.desc > 0 && az() < 0.35){
+        const fuera = mezcla(JU.mano.slice()).slice(0, 1 + azI(SEL_MAX));
+        if (fuera.length){ descarta(fuera); continue; }
+      }
+      tira(jugada.cs);
+      if (gano())  { cieganCierra(); continue; }
+      if (perdio()) break;
+    } else if (JU.modo === 'tienda'){
+      if (!azarPuro) botTienda();
+      cieganNueva();
+    } else break;
+  }
+  return {
+    ante: JU.ante, ronda: JU.ronda, dinero: JU.dinero,
+    manos: JU.totManos, mejor: JU.mejorMano,
+    com: JU.com.length, niveles: Object.keys(JU.niv).length,
+    gano: JU.ante > topeAnte,
+  };
+}
+
+function audita(n, modo, topeAnte){
+  n = n || 40;
+  const rs = [];
+  for (let i = 0; i < n; i++) rs.push(juegaSolo(1000 + i * 37, modo, topeAnte));
+  const med = k => rs.reduce((a, r) => a + r[k], 0) / rs.length;
+  return {
+    n, modo: modo || 'honesto',
+    gana: rs.filter(r => r.gano).length,
+    ante: +med('ante').toFixed(2),
+    ronda: +med('ronda').toFixed(2),
+    manos: +med('manos').toFixed(1),
+    mejor: Math.round(med('mejor')),
+    com: +med('com').toFixed(2),
+  };
+}
+
+/* Auditoria del detector: cada mano tiene que reconocerse como
+   si misma. Con una sola cuenta rota, el juego paga otra cosa
+   de la que muestra. */
+function auditaManos(){
+  const C = (p, r, e) => { const c = carta(p, r); if (e) c.me = e; return c; };
+  const casos = [
+    ['familiareal',   [C(0,10),C(0,10),C(0,10),C(0,10),C(0,10)]],
+    ['florimperial',  [C(0,9),C(0,9),C(0,9),C(0,4),C(0,4)]],
+    ['cincoiguales',  [C(0,7),C(1,7),C(2,7),C(3,7),C(0,7)]],
+    ['escaleracolor', [C(1,5),C(1,6),C(1,7),C(1,8),C(1,9)]],
+    ['poker',         [C(0,3),C(1,3),C(2,3),C(3,3),C(0,9)]],
+    ['full',          [C(0,5),C(1,5),C(2,5),C(0,8),C(1,8)]],
+    ['color',         [C(2,2),C(2,5),C(2,9),C(2,11),C(2,13)]],
+    ['escalera',      [C(0,2),C(1,3),C(2,4),C(3,5),C(0,6)]],
+    ['escalera',      [C(0,14),C(1,2),C(2,3),C(3,4),C(0,5)]],
+    ['trio',          [C(0,4),C(1,4),C(2,4),C(0,9),C(1,12)]],
+    ['doblepar',      [C(0,4),C(1,4),C(2,9),C(3,9),C(0,12)]],
+    ['par',           [C(0,4),C(1,4),C(2,9),C(3,11),C(0,13)]],
+    ['alta',          [C(0,2),C(1,5),C(2,9),C(3,11),C(0,13)]],
+  ];
+  const malos = [];
+  casos.forEach(([esp, cs]) => { const t = detecta(cs).tipo; if (t !== esp) malos.push(esp + '->' + t); });
+  /* el comodin-carta cierra un color que le falta un palo */
+  const wild = [C(2,2),C(2,5),C(2,9),C(2,11),C(0,13,'comodin')];
+  if (detecta(wild).tipo !== 'color') malos.push('comodin->' + detecta(wild).tipo);
+  /* la piedra no rompe la mano y SI puntua */
+  const conP = [C(0,4),C(1,4),C(2,9),C(3,11),C(0,2,'piedra')];
+  const dp = detecta(conP);
+  if (dp.tipo !== 'par') malos.push('piedra->' + dp.tipo);
+  if (dp.cuentan.filter(c => c.me === 'piedra').length !== 1) malos.push('piedra-no-cuenta');
+  return { n: casos.length + 2, malos };
+}
+
+/* ============================================================
+   d.js — SONIDO
+
+   Todo procedural: un naipe que cae, una ficha, una fanfarria.
+   Y la muestra generada, si llega, PISA al oscilador — el juego
+   suena igual sin `i_son.js`, que es lo que hace que un base64
+   roto cueste un sonido y no el audio entero.
+
+   El contexto despierta con el PRIMER gesto de verdad: ningun
+   navegador deja sonar nada antes de uno, y engancharlo en cada
+   boton garantiza olvidarse del proximo que se agregue.
+   ============================================================ */
+let AC = null, MAE = null, MUESTRAS = {}, SON_ON = true;
+
+function audioDespierta(){
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  const K = window.AudioContext || window.webkitAudioContext;
+  if (!K) return;
+  AC = new K();
+  MAE = AC.createGain(); MAE.gain.value = 0.85; MAE.connect(AC.destination);
+  camaArranca();
+  sonDecodifica();
+}
+if (HAY_DOM){
+  const g = () => audioDespierta();
+  document.addEventListener('pointerdown', g, true);
+  document.addEventListener('click', g, true);
+  document.addEventListener('keydown', g, true);
+}
+
+/* --- las muestras generadas, si estan --- */
+function sonDecodifica(){
+  if (typeof SON_B64 === 'undefined' || !AC) return;
+  Object.keys(SON_B64).forEach(k => {
+    try{
+      const b = atob(SON_B64[k]); const u = new Uint8Array(b.length);
+      for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+      AC.decodeAudioData(u.buffer, buf => { MUESTRAS[k] = buf; }, () => {});
+    }catch(e){}
+  });
+}
+
+function envol(g, t, a, d, v){
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(v, t + a);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+}
+
+/* Un ruido corto y filtrado: el naipe, la ficha, el barajado. */
+function ruido(t, dur, hz, q, vol){
+  const n = Math.floor(AC.sampleRate * dur);
+  const b = AC.createBuffer(1, n, AC.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = AC.createBufferSource(); s.buffer = b;
+  const f = AC.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = hz; f.Q.value = q;
+  const g = AC.createGain(); g.gain.value = vol;
+  s.connect(f); f.connect(g); g.connect(MAE); s.start(t);
+}
+
+function tono(t, hz, hz2, dur, vol, tipo){
+  const o = AC.createOscillator(); o.type = tipo || 'triangle';
+  o.frequency.setValueAtTime(hz, t);
+  if (hz2 && hz2 !== hz) o.frequency.exponentialRampToValueAtTime(hz2, t + dur);
+  const g = AC.createGain(); envol(g, t, 0.008, dur, vol);
+  o.connect(g); g.connect(MAE); o.start(t); o.stop(t + dur + 0.05);
+}
+
+const ESC = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];   /* pentatonica: cualquier nota pega */
+const nota = i => 261.63 * Math.pow(2, ESC[Math.min(i, ESC.length - 1)] / 12);
+
+function son(k, n){
+  if (!SON_ON || !AC) return;
+  if (MUESTRAS[k]){
+    const s = AC.createBufferSource(); s.buffer = MUESTRAS[k];
+    const g = AC.createGain(); g.gain.value = 1;
+    s.connect(g); g.connect(MAE); s.start(); return;
+  }
+  const t = AC.currentTime;
+  switch(k){
+    case 'carta':   ruido(t, 0.09, 2600, 0.7, 0.22); break;
+    case 'elige':   tono(t, 520, 620, 0.06, 0.12); break;
+    case 'baraja':  for (let i = 0; i < 6; i++) ruido(t + i * 0.035, 0.06, 2200, 0.6, 0.12); break;
+    case 'ficha':   tono(t, nota(Math.min(n || 0, 9)) * 2, 0, 0.08, 0.10, 'square');
+                    ruido(t, 0.05, 3400, 1.2, 0.07); break;
+    case 'mult':    tono(t, nota(Math.min(n || 0, 9)) * 3, 0, 0.10, 0.12, 'sawtooth'); break;
+    case 'comodin': tono(t, 330, 660, 0.18, 0.14, 'square'); break;
+    case 'plata':   tono(t, 880, 1320, 0.10, 0.12, 'square');
+                    tono(t + 0.07, 1320, 1760, 0.12, 0.10, 'square'); break;
+    case 'gana':    [0,2,4,7].forEach((g,i)=>tono(t+i*0.09, 261.63*Math.pow(2,g/12), 0, 0.28, 0.13)); break;
+    case 'pierde':  tono(t, 220, 90, 0.80, 0.16, 'sawtooth');
+                    ruido(t, 0.5, 220, 0.8, 0.10); break;
+    case 'jefe':    tono(t, 140, 110, 0.70, 0.14, 'sawtooth'); break;
+    case 'compra':  tono(t, 660, 990, 0.12, 0.12, 'square'); break;
+    case 'mal':     tono(t, 200, 150, 0.16, 0.12, 'square'); break;
+    case 'ui':      ruido(t, 0.05, 1400, 1.0, 0.13); break;
+    case 'sube':    [0,4,7,12].forEach((g,i)=>tono(t+i*0.06, 392*Math.pow(2,g/12), 0, 0.22, 0.11)); break;
+  }
+}
+
+/* --- la cama: dos senos desafinados y un pasabajos que respira.
+   Dos iguales suenan a tono de prueba; el batido los vuelve
+   instrumento. --- */
+let CAMA = null;
+function camaArranca(){
+  if (CAMA || !AC) return;
+  const g = AC.createGain(); g.gain.value = 0.055;
+  const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 420; f.Q.value = 3;
+  const l = AC.createOscillator(); l.frequency.value = 0.055;
+  const la = AC.createGain(); la.gain.value = 260;
+  l.connect(la); la.connect(f.frequency); l.start();
+  [130.81, 196.00, 261.63, 329.63].forEach((hz, i) => {
+    [1, 1.00023].forEach(d => {
+      const o = AC.createOscillator(); o.type = 'sine';
+      o.frequency.value = hz * d;
+      const og = AC.createGain(); og.gain.value = 0.22 / (1 + i * 0.4);
+      o.connect(og); og.connect(f); o.start();
+    });
+  });
+  f.connect(g); g.connect(MAE);
+  CAMA = g;
+}
+function camaNivel(v){ if (CAMA && AC) CAMA.gain.setTargetAtTime(v, AC.currentTime, 0.4); }
+
+/* ============================================================
+   e.js — EL PINTOR
+
+   Dos cosas y nada mas: primitivas de dibujo y la carta.
+   `f.js` arma las pantallas.
+
+   LA REGLA DE ESTE ARCHIVO: **la zona de toque se anota en la
+   misma linea que dibuja la cosa**. Con una tabla de rectangulos
+   aparte, el dia que una carta se corre dos pixeles el boton
+   promete un blanco que el juego no acepta — y eso no falla, miente.
+   La lista se vacia en cada cuadro porque las cartas cambian de
+   sitio, de cantidad y de orden.
+
+   Y todo lo generado PISA a lo dibujado cuando llega: el dorso, el
+   fieltro, el sello del comodin. Un base64 roto cuesta esa pieza y
+   no la pantalla.
+   ============================================================ */
+
+/* --- el registro de zonas --- */
+let ZONAS = [];
+const zonaLimpia = () => { ZONAS = []; };
+function zona(id, x, y, w, h, dat){
+  ZONAS.push({ id, x, y, w, h, dat });
+  return ZONAS[ZONAS.length - 1];
+}
+/* al reves: lo ultimo dibujado esta arriba, asi que gana */
+function zonaEn(px, py){
+  for (let i = ZONAS.length - 1; i >= 0; i--){
+    const z = ZONAS[i];
+    if (px >= z.x && px <= z.x + z.w && py >= z.y && py <= z.y + z.h) return z;
+  }
+  return null;
+}
+
+/* --- las imagenes generadas, si llegaron --- */
+const IMG = {};
+/* TRES DE LOS DIEZ NO SE DIBUJAN EN EL LIENZO: van al CSS. El cartel
+   del menu y las dos chapas de boton son DOM, asi que se enchufan como
+   variable mas una clase en el body — y la clase la pone el `onload` de
+   la propia imagen y no el codigo que la pide: preguntar «llego?» es lo
+   unico que separa un menu con cartel de un rectangulo vacio. */
+const IMG_CSS = { logo: 'pl-logo', boton: 'pl-b', botonOro: 'pl-bo' };
+
+function imgCarga(){
+  if (typeof ASSETS === 'undefined' || !HAY_DOM) return;
+  Object.keys(ASSETS).forEach(k => {
+    const im = new Image();
+    im.onload  = () => {
+      IMG[k] = im;
+      const cl = IMG_CSS[k];
+      if (cl){
+        document.documentElement.style.setProperty('--' + cl, 'url(' + ASSETS[k] + ')');
+        document.body.classList.add(cl);
+      }
+    };
+    im.onerror = () => { IMG.fallan = (IMG.fallan || []).concat(k); };
+    im.src = ASSETS[k];
+  });
+}
+
+/* ============================================================
+   PRIMITIVAS
+   ============================================================ */
+function rr(x, y, w, h, r){
+  const g = CX;
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y,     x + w, y + h, r);
+  g.arcTo(x + w, y + h, x,     y + h, r);
+  g.arcTo(x,     y + h, x,     y,     r);
+  g.arcTo(x,     y,     x + w, y,     r);
+  g.closePath();
+}
+function caja(x, y, w, h, r, rell, borde, gr){
+  rr(x, y, w, h, r);
+  if (rell){ CX.fillStyle = rell; CX.fill(); }
+  if (borde){ CX.strokeStyle = borde; CX.lineWidth = gr || 2; CX.stroke(); }
+}
+function txt(s, x, y, px, col, al, peso){
+  CX.font = (peso || 700) + ' ' + px + 'px system-ui, sans-serif';
+  CX.fillStyle = col;
+  CX.textAlign = al || 'center';
+  CX.textBaseline = 'middle';
+  CX.fillText(s, x, y);
+  CX.textAlign = 'left';
+}
+/* el texto del HUD vive encima de un fieltro con dibujo: sin borde
+   oscuro, una cifra clara sobre una mancha clara no se lee */
+function txtB(s, x, y, px, col, al, peso){
+  CX.font = (peso || 900) + ' ' + px + 'px system-ui, sans-serif';
+  CX.textAlign = al || 'center';
+  CX.textBaseline = 'middle';
+  CX.lineWidth = Math.max(3, px * 0.22);
+  CX.lineJoin = 'round';
+  CX.strokeStyle = 'rgba(6,10,11,.85)';
+  CX.strokeText(s, x, y);
+  CX.fillStyle = col;
+  CX.fillText(s, x, y);
+  CX.textAlign = 'left';
+}
+/* cuanto mide un texto, para que una ficha se ajuste a lo que dice
+   y no al reves */
+function anchoTxt(s, px, peso){
+  CX.font = (peso || 700) + ' ' + px + 'px system-ui, sans-serif';
+  return CX.measureText(s).width;
+}
+
+/* CORTAR UN TEXTO EN LINEAS QUE ENTREN. Vive aca, con las
+   medidas, y no en cada sitio que dibuja un parrafo: en tres
+   idiomas la misma frase mide distinto, y dos cortes escritos
+   por separado terminan cortando distinto el mismo texto. */
+function envuelveLineas(s, w, px, peso){
+  const pal = String(s).split(' ');
+  const ls = []; let ln = '';
+  pal.forEach(p => {
+    const t = ln ? ln + ' ' + p : p;
+    if (anchoTxt(t, px, peso) > w && ln){ ls.push(ln); ln = p; } else ln = t;
+  });
+  if (ln) ls.push(ln);
+  return ls;
+}
+
+/* ============================================================
+   LOS PALOS
+
+   Dibujados por codigo y no como imagen: son cuatro formas de
+   veinte lineas que tienen que verse nitidas a catorce pixeles,
+   y una foto a ese tamano es una mancha.
+   ============================================================ */
+function palo(p, x, y, s, col){
+  const g = CX;
+  g.fillStyle = col;
+  g.beginPath();
+  if (p === 0){                       /* picas */
+    g.moveTo(x, y - s);
+    g.bezierCurveTo(x + s * .95, y - s * .1, x + s * .62, y + s * .5, x + s * .16, y + s * .22);
+    g.lineTo(x + s * .34, y + s * .86);
+    g.lineTo(x - s * .34, y + s * .86);
+    g.lineTo(x - s * .16, y + s * .22);
+    g.bezierCurveTo(x - s * .62, y + s * .5, x - s * .95, y - s * .1, x, y - s);
+  } else if (p === 1){                /* corazones */
+    g.moveTo(x, y + s * .92);
+    g.bezierCurveTo(x - s * 1.05, y + s * .1, x - s * .72, y - s * .98, x, y - s * .34);
+    g.bezierCurveTo(x + s * .72, y - s * .98, x + s * 1.05, y + s * .1, x, y + s * .92);
+  } else if (p === 2){                /* diamantes */
+    g.moveTo(x, y - s);
+    g.lineTo(x + s * .70, y);
+    g.lineTo(x, y + s);
+    g.lineTo(x - s * .70, y);
+  } else {                            /* treboles */
+    const r = s * .40;
+    g.arc(x, y - s * .42, r, 0, 7);
+    g.closePath(); g.fill(); g.beginPath();
+    g.arc(x - s * .46, y + s * .20, r, 0, 7);
+    g.closePath(); g.fill(); g.beginPath();
+    g.arc(x + s * .46, y + s * .20, r, 0, 7);
+    g.closePath(); g.fill(); g.beginPath();
+    g.moveTo(x - s * .20, y + s * .18);
+    g.lineTo(x + s * .20, y + s * .18);
+    g.lineTo(x + s * .34, y + s * .92);
+    g.lineTo(x - s * .34, y + s * .92);
+  }
+  g.closePath();
+  g.fill();
+}
+
+/* ============================================================
+   LA CARTA
+
+   El rango y el palo son el dato; la mejora, la edicion y el sello
+   son TRES capas que se pueden dar juntas, asi que ninguna puede
+   reemplazar a la carta: una piedra sigue teniendo su marco, un
+   holografico sigue mostrando su numero.
+   ============================================================ */
+const ME_COL = {
+  bonus:'#3fa9f5', mult:'#fe5f55', comodin:'#c47bff', cristal:'#7be0ff',
+  acero:'#b8c4c2', piedra:'#6f7d7a', oro:'#ffd166', suerte:'#6ece8a',
+};
+const ED_COL = { foil:'#8fd0ff', holo:'#ff8fd4', poli:'#ffe08a' };
+
+function pintaCarta(x, y, w, h, c, o){
+  o = o || {};
+  const g  = CX;
+  const rd = Math.round(w * .13);
+  const rojo = ROJO(c.p);
+
+  if (o.alza){ g.save(); g.translate(0, -o.alza); }
+
+  /* sombra: es lo unico que dice "esto esta encima de la mesa" */
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.55)';
+  g.shadowBlur = o.sel ? 14 : 8;
+  g.shadowOffsetY = o.sel ? 6 : 3;
+
+  /* el cuerpo */
+  let base = '#f4f1e8';
+  if (c.me === 'piedra') base = '#8a9794';
+  else if (c.me === 'oro') base = '#f0d79a';
+  caja(x, y, w, h, rd, base, null);
+  g.restore();
+
+  /* la mejora tine el cuerpo, no lo tapa */
+  if (c.me && c.me !== 'piedra' && c.me !== 'oro'){
+    g.save(); rr(x, y, w, h, rd); g.clip();
+    g.globalAlpha = .28; g.fillStyle = ME_COL[c.me] || '#fff';
+    g.fillRect(x, y, w, h);
+    g.restore();
+  }
+
+  /* la cara */
+  if (c.me === 'piedra'){
+    /* la piedra no tiene rango ni palo: por eso no entra en la
+       deteccion. Dibujarle un numero seria mentir. */
+    g.save(); rr(x, y, w, h, rd); g.clip();
+    g.fillStyle = 'rgba(40,48,46,.5)';
+    for (let i = 0; i < 5; i++){
+      const a = (c.id * 7 + i * 13) % 100 / 100;
+      g.beginPath();
+      g.ellipse(x + w * (.2 + a * .6), y + h * (.15 + ((i * 29) % 70) / 100),
+                w * .16, h * .07, a * 3, 0, 7);
+      g.fill();
+    }
+    g.restore();
+  } else {
+    const col = rojo ? '#d9403a' : '#1d2629';
+    const t = rtxt(c.r);
+    txt(t, x + w * .19, y + h * .16, Math.round(w * .30), col, 'center', 900);
+    palo(c.p, x + w * .19, y + h * .33, w * .11, col);
+    /* el pip grande es lo que se ve de reojo con la mano solapada */
+    palo(c.p, x + w * .62, y + h * .66, w * .26, col);
+  }
+
+  /* la edicion: un brillo por encima de todo lo de adentro */
+  if (c.ed){
+    g.save(); rr(x, y, w, h, rd); g.clip();
+    const gr = g.createLinearGradient(x, y, x + w, y + h);
+    gr.addColorStop(0,   'rgba(255,255,255,0)');
+    gr.addColorStop(.42, ED_COL[c.ed] + (c.ed === 'poli' ? 'cc' : '99'));
+    gr.addColorStop(.58, 'rgba(255,255,255,.45)');
+    gr.addColorStop(1,   'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(x, y, w, h);
+    g.restore();
+  }
+
+  /* el sello: un punto en la esquina, que es donde no tapa nada */
+  if (c.se){
+    g.fillStyle = c.se === 'oro' ? '#ffd166' : '#fe5f55';
+    g.beginPath(); g.arc(x + w * .82, y + h * .13, w * .10, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 1.5; g.stroke();
+  }
+
+  /* el marco va ULTIMO: con la edicion encima, un marco dibujado
+     antes queda tapado justo en las cartas que mas se miran */
+  caja(x, y, w, h, rd, null,
+       o.sel ? '#ffd166' : (o.muerta ? '#fe5f55' : 'rgba(20,26,28,.42)'),
+       o.sel ? 3 : (o.muerta ? 2.5 : 1.5));
+  if (o.muerta){
+    g.save(); rr(x, y, w, h, rd); g.clip();
+    g.fillStyle = 'rgba(10,14,15,.55)'; g.fillRect(x, y, w, h);
+    g.restore();
+  }
+
+  if (o.alza) g.restore();
+}
+
+function pintaDorso(x, y, w, h){
+  const rd = Math.round(w * .13);
+  if (IMG.dorso){
+    CX.save(); rr(x, y, w, h, rd); CX.clip();
+    CX.drawImage(IMG.dorso, x, y, w, h);
+    CX.restore();
+  } else {
+    caja(x, y, w, h, rd, '#1f4a6d', null);
+    CX.save(); rr(x, y, w, h, rd); CX.clip();
+    CX.strokeStyle = 'rgba(255,255,255,.14)'; CX.lineWidth = 2;
+    for (let i = -h; i < w; i += 9){
+      CX.beginPath(); CX.moveTo(x + i, y); CX.lineTo(x + i + h, y + h); CX.stroke();
+    }
+    CX.restore();
+  }
+  caja(x, y, w, h, rd, null, 'rgba(244,241,232,.55)', 2);
+}
+
+/* ============================================================
+   COMODINES Y CONSUMIBLES
+
+   Cada uno lleva su INICIAL y su color de rareza, no un dibujo:
+   veintiseis dibujos serian veintiseis descargas para veintiseis
+   fichas de setenta pixeles. Lo que hace falta es distinguirlos de
+   un vistazo, y una letra grande con un color lo hace.
+   Si el arte generado llega, la pisa.
+   ============================================================ */
+const RAR_COL = ['#6ece8a', '#3fa9f5', '#fe5f55'];
+
+function pintaRanura(x, y, w, h, vacia){
+  caja(x, y, w, h, 9, vacia ? 'rgba(10,18,16,.35)' : null,
+       'rgba(244,241,232,.16)', 1.5);
+}
+
+function pintaComodin(x, y, w, h, k, o){
+  o = o || {};
+  const J = COM[k] || {};
+  const col = RAR_COL[J.rar || 0];
+  if (IMG['com_' + k]){
+    CX.save(); rr(x, y, w, h, 9); CX.clip();
+    CX.drawImage(IMG['com_' + k], x, y, w, h);
+    CX.restore();
+  } else {
+    caja(x, y, w, h, 9, '#1a2528', null);
+    CX.save(); rr(x, y, w, h, 9); CX.clip();
+    CX.globalAlpha = .22; CX.fillStyle = col;
+    CX.fillRect(x, y, w, h * .55);
+    CX.restore();
+    txt(tt('comN', k).slice(0, 1).toUpperCase(),
+        x + w / 2, y + h * .36, Math.round(h * .40), col, 'center', 900);
+  }
+  /* el nombre, achicado hasta que entre: en tres idiomas la misma
+     ficha recibe palabras de largos muy distintos */
+  const n = tt('comN', k);
+  let px = 9;
+  while (px > 5 && anchoTxt(n, px, 700) > w - 6) px -= 0.5;
+  txt(n, x + w / 2, y + h - 9, px, '#cfe0dc', 'center', 700);
+  caja(x, y, w, h, 9, null, o.sel ? '#ffd166' : col, o.sel ? 2.5 : 1.5);
+}
+
+/* recibe la ficha entera (`{t,k}`) y no la clave: un planeta y un
+   tarot se guardan igual y solo el campo `t` los separa */
+function pintaCons(x, y, w, h, C, o){
+  o = o || {};
+  const k = C.k, esPlaneta = C.t === 'planeta';
+  const col = esPlaneta ? '#7be0ff' : '#c47bff';
+  caja(x, y, w, h, 9, '#1a2528', null);
+  CX.save(); rr(x, y, w, h, 9); CX.clip();
+  CX.globalAlpha = .20; CX.fillStyle = col; CX.fillRect(x, y, w, h * .6);
+  CX.restore();
+  if (esPlaneta){
+    CX.fillStyle = col;
+    CX.beginPath(); CX.arc(x + w / 2, y + h * .34, h * .15, 0, 7); CX.fill();
+    CX.strokeStyle = col; CX.lineWidth = 2;
+    CX.save(); CX.translate(x + w / 2, y + h * .34); CX.rotate(-.5);
+    CX.beginPath(); CX.ellipse(0, 0, h * .27, h * .08, 0, 0, 7); CX.stroke();
+    CX.restore();
+  } else {
+    txt('★', x + w / 2, y + h * .34, Math.round(h * .34), col, 'center', 900);
+  }
+  /* la clave de un planeta ES el nombre de la mano que sube */
+  const n = esPlaneta ? tt('manosN', k) : tt('tarN', k);
+  let px = 9;
+  while (px > 5 && anchoTxt(n, px, 700) > w - 6) px -= 0.5;
+  txt(n, x + w / 2, y + h - 9, px, '#cfe0dc', 'center', 700);
+  caja(x, y, w, h, 9, null, o.sel ? '#ffd166' : col, o.sel ? 2.5 : 1.5);
+}
+
+/* ============================================================
+   FICHAS DE INTERFAZ
+   ============================================================ */
+function pintaBoton(x, y, w, h, s, col, apag){
+  const g = CX;
+  g.save();
+  if (!apag){ g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 8; g.shadowOffsetY = 3; }
+  caja(x, y, w, h, 10, apag ? 'rgba(30,40,38,.55)' : col, null);
+  g.restore();
+  let px = 13;
+  while (px > 8 && anchoTxt(s, px, 900) > w - 14) px -= 0.5;
+  txt(s, x + w / 2, y + h / 2 + 1, px,
+      apag ? 'rgba(200,214,210,.40)' : '#0e1618', 'center', 900);
+}
+
+function pintaPanel(x, y, w, h, tono){
+  caja(x, y, w, h, 12, tono || 'rgba(10,18,20,.62)', 'rgba(244,241,232,.10)', 1.5);
+}
+
+/* el fieltro: si llega la foto, la foto; si no, el verde con su
+   grano, que es lo que impide que la mesa se lea a rectangulo */
+function pintaFieltro(){
+  if (IMG.fieltro){
+    CX.drawImage(IMG.fieltro, 0, 0, AN, AL);
+  } else {
+    const gr = CX.createLinearGradient(0, 0, 0, AL);
+    gr.addColorStop(0, '#2f5e49'); gr.addColorStop(.55, '#26503e'); gr.addColorStop(1, '#1b3b2d');
+    CX.fillStyle = gr; CX.fillRect(0, 0, AN, AL);
+  }
+  /* la vineta empuja la vista al medio, que es donde estan las cartas */
+  const v = CX.createRadialGradient(AN / 2, AL * .52, AN * .28, AN / 2, AL * .52, AL * .70);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.52)');
+  CX.fillStyle = v; CX.fillRect(0, 0, AN, AL);
+}
+
+/* ============================================================
+   f.js — LAS PANTALLAS
+
+   Aca vive la maqueta y nada mas: donde cae cada cosa, que zona
+   registra y que pasa cuando el dedo la toca. La regla del juego
+   esta en `c.js` y el dibujo en `e.js`; este archivo no decide si
+   una jugada es legal ni como se dibuja una carta.
+
+   El toque entra por UNA funcion (`toca`) que pregunta la zona.
+   Con un manejador por pantalla, la que nadie prueba se queda sin
+   el arreglo que se le hizo a las otras.
+   ============================================================ */
+
+const HUD_Y = 10,  HUD_H = 40;
+const COM_Y = 58,  COM_H = 92,  COM_W = 70;
+const PUN_Y = 158, PUN_H = 94;
+const MESA_Y = 262, MESA_H = 196;
+const CONS_Y = 470, CONS_H = 78, CONS_W = 74;
+const MANO_Y = 576, MANO_H = 106, CARTA_W = 72;
+const BOT_Y = 712,  BOT_H = 50;
+const PIE_Y = 784;
+const ALZA = 18;                 /* cuanto sube una carta elegida */
+
+let ORDEN_TOC = 0;               /* el ultimo toque, para la animacion del boton */
+let COM_SEL = -1;                /* comodin elegido en la tienda, para vender */
+
+/* --- avisos --- */
+let AVI_T = 0;
+function avisa(s){
+  if (!HAY_DOM) return;
+  const e = $('#aviso'); if (!e) return;
+  e.textContent = s; e.style.opacity = 1; AVI_T = 1.9;
+}
+function pista(s){
+  if (!HAY_DOM) return;
+  const e = $('#pista'); if (!e) return;
+  e.textContent = s || ''; e.style.opacity = s ? 1 : 0;
+}
+function aviPaso(dt){
+  if (AVI_T > 0){ AVI_T -= dt; if (AVI_T <= 0 && HAY_DOM){ const e=$('#aviso'); if (e) e.style.opacity = 0; } }
+}
+
+/* ============================================================
+   LO QUE SE VE SIEMPRE
+   ============================================================ */
+function pintaHud(){
+  const cg = CIEGAS[JU.ciegaIx];
+  txtB('ANTE ' + JU.ante + '/8', 14, HUD_Y + 13, 13, '#f4f1e8', 'left');
+  txtB(tt('ciegas', cg.id), 14, HUD_Y + 31, 10, JU.ciegaIx === 2 ? '#fe5f55' : '#93a3a0', 'left');
+  txtB('$' + JU.dinero, AN - 14, HUD_Y + 13, 16, '#ffd166', 'right');
+  txtB(T('ronda') + ' ' + JU.ronda, AN - 14, HUD_Y + 31, 10, '#93a3a0', 'right');
+  /* la pausa va en el HUD y no en un boton del DOM: el DOM de este
+     juego son los paneles, y un boton flotando encima del fieltro
+     se lee a otra aplicacion */
+  const bx = AN / 2 - 19;
+  caja(bx, HUD_Y + 2, 38, 34, 10, 'rgba(0,0,0,.34)', 'rgba(255,255,255,.18)', 1.5);
+  for (let i = 0; i < 3; i++){
+    CX.fillStyle = '#93a3a0';
+    CX.fillRect(bx + 11, HUD_Y + 11 + i * 6, 16, 2);
+  }
+  zona('pausa', bx, HUD_Y, 38, 38);
+}
+
+function pintaComodines(){
+  const n = COM_RANURAS;
+  const paso = (AN - 20 - COM_W) / (n - 1);
+  for (let i = 0; i < n; i++){
+    const x = 10 + paso * i, k = JU.com[i];
+    if (!k){ pintaRanura(x, COM_Y, COM_W, COM_H, true); continue; }
+    pintaComodin(x, COM_Y, COM_W, COM_H, k, { sel: COM_SEL === i });
+    zona('com', x, COM_Y, COM_W, COM_H, i);
+  }
+}
+
+function pintaConsumibles(){
+  const x0 = 10;
+  for (let i = 0; i < CONS_RANURAS; i++){
+    const x = x0 + (CONS_W + 8) * i, C = JU.cons[i];
+    if (!C){ pintaRanura(x, CONS_Y, CONS_W, CONS_H, true); continue; }
+    pintaCons(x, CONS_Y, CONS_W, CONS_H, C, {});
+    zona('cons', x, CONS_Y, CONS_W, CONS_H, i);
+  }
+  /* a la derecha, el jefe: su regla es la unica informacion que
+     cambia lo que conviene jugar, asi que tiene que estar a la vista
+     y no en un cartel que ya se fue */
+  if (JU.ciegaIx === 2){
+    const x = x0 + (CONS_W + 8) * CONS_RANURAS + 6, w = AN - x - 10;
+    pintaPanel(x, CONS_Y, w, CONS_H, 'rgba(60,14,16,.55)');
+    txt(tt('jefesN', JU.jefe), x + w / 2, CONS_Y + 20, 12, '#fe5f55', 'center', 900);
+    envuelve(tt('jefesD', JU.jefe), x + w / 2, CONS_Y + 40, w - 12, 9, '#e9c9c6');
+  }
+}
+
+/* parte un texto en renglones que entren en `w`: en tres idiomas la
+   misma descripcion mide distinto y un `slice` corta palabras */
+function envuelve(s, cx, y, w, px, col){
+  envuelveLineas(s, w, px, 700).slice(0, 3).forEach((l, i) => txt(l, cx, y + i * (px + 3), px, col, 'center', 700));
+}
+
+function pintaMano(){
+  const n = JU.mano.length;
+  if (!n) return;
+  const h = MANO_H;
+  const paso = n > 1 ? Math.min(CARTA_W + 6, (AN - 20 - CARTA_W) / (n - 1)) : 0;
+  const ancho = CARTA_W + paso * (n - 1);
+  const x0 = (AN - ancho) / 2;
+  const jefe = cieganJefe();
+  for (let i = 0; i < n; i++){
+    const c = JU.mano[i], x = x0 + paso * i;
+    const sel = JU.sel.indexOf(i) >= 0;
+    pintaCarta(x, MANO_Y, CARTA_W, h, c,
+               { sel, alza: sel ? ALZA : 0, muerta: jefeMata(jefe, c) });
+    /* la zona NO sube con la carta: la de al lado tapa su mitad
+       derecha, asi que el blanco util es la franja que asoma — y
+       eso es lo mismo esté elegida o no */
+    zona('carta', x, MANO_Y - ALZA, i === n - 1 ? CARTA_W : paso, h + ALZA, i);
+  }
+}
+
+function pintaBotones(){
+  const w = 116, hu = (AN - w * 2 - 30) ;
+  const puede = JU.sel.length > 0;
+  const jl = puede && legal(JU.sel.map(i => JU.mano[i])) && JU.manos > 0;
+  pintaBoton(12, BOT_Y, w, BOT_H, T('jugarM'), '#6ece8a', !jl);
+  if (jl) zona('jugar', 12, BOT_Y, w, BOT_H);
+  const xd = AN - 12 - w;
+  const dl = puede && JU.desc > 0;
+  pintaBoton(xd, BOT_Y, w, BOT_H, T('descartar'), '#fe5f55', !dl);
+  if (dl) zona('descartar', xd, BOT_Y, w, BOT_H);
+  /* el orden va en el medio y es chico: se toca pocas veces */
+  const xo = 12 + w + 8, wo = xd - xo - 8;
+  pintaBoton(xo, BOT_Y + 8, wo, BOT_H - 16,
+             ORDEN_MANO === 'palo' ? T('ordenP') : T('ordenR'), '#3fa9f5', false);
+  zona('orden', xo, BOT_Y, wo, BOT_H);
+}
+
+function pintaPie(){
+  const cel = (AN - 24) / 3;
+  const dat = [[T('manos'), JU.manos, '#3fa9f5'],
+               [T('desc'),  JU.desc,  '#fe5f55'],
+               [T('dinero'), '$' + JU.dinero, '#ffd166']];
+  dat.forEach((d, i) => {
+    const x = 12 + cel * i;
+    pintaPanel(x + 3, PIE_Y, cel - 6, 44);
+    txt(d[0], x + cel / 2, PIE_Y + 13, 9, '#93a3a0', 'center', 700);
+    txt(String(d[1]), x + cel / 2, PIE_Y + 30, 17, d[2], 'center', 900);
+  });
+}
+
+/* ============================================================
+   EL PANEL DE PUNTUACION
+
+   Es lo unico que contesta "¿me alcanza?", asi que muestra las dos
+   cifras que se multiplican Y el objetivo, no una sola.
+   ============================================================ */
+function pintaPuntos(){
+  pintaPanel(10, PUN_Y, AN - 20, PUN_H);
+  /* arriba: cuanto hay que llegar y cuanto va */
+  txt(T('objetivo'), 24, PUN_Y + 16, 9, '#93a3a0', 'left', 700);
+  txt(String(JU.objetivo), 24, PUN_Y + 34, 20, '#fe5f55', 'left', 900);
+  txt(String(JU.puntaje), AN - 24, PUN_Y + 30, 26,
+      JU.puntaje >= JU.objetivo ? '#6ece8a' : '#f4f1e8', 'right', 900);
+  /* la barra: un numero contra otro no dice cuanto falta de un vistazo */
+  const bw = AN - 48, bx = 24, by = PUN_Y + 46;
+  caja(bx, by, bw, 6, 3, 'rgba(0,0,0,.35)', null);
+  const f = Math.min(1, JU.puntaje / Math.max(1, JU.objetivo));
+  if (f > 0) caja(bx, by, Math.max(4, bw * f), 6, 3, f >= 1 ? '#6ece8a' : '#ffd166', null);
+
+  /* abajo: fichas × mult de lo que esta elegido, o de la animacion */
+  let f2 = 0, m2 = 0, nom = '';
+  if (JU.anim){ f2 = JU.anim.f; m2 = JU.anim.m; nom = tt('manosN', JU.anim.r.tipo); }
+  else if (JU.sel.length){
+    const p = previo(JU.sel.map(i => JU.mano[i]));
+    if (p){ f2 = p.fichas; m2 = p.mult; nom = tt('manosN', p.tipo) + '  ' + T('nivelSube', p.lv); }
+  }
+  const y = PUN_Y + 74;
+  if (nom){
+    txt(nom, 24, y - 12, 10, '#cfe0dc', 'left', 700);
+    const sf = String(Math.round(f2)), sm = String(Math.round(m2 * 100) / 100);
+    const wf = anchoTxt(sf, 18, 900), wm = anchoTxt(sm, 18, 900);
+    const tot = wf + wm + 44, x0 = AN - 24 - tot;
+    caja(x0, y - 12, wf + 16, 24, 5, '#3fa9f5', null);
+    txt(sf, x0 + wf / 2 + 8, y, 18, '#0e1618', 'center', 900);
+    txt('×', x0 + wf + 24, y, 15, '#f4f1e8', 'center', 900);
+    caja(x0 + wf + 36, y - 12, wm + 16, 24, 5, '#fe5f55', null);
+    txt(sm, x0 + wf + 44 + wm / 2, y, 18, '#0e1618', 'center', 900);
+  } else {
+    txt(T('elegiCartas', SEL_MAX), AN / 2, y, 10, '#6e7f7c', 'center', 700);
+  }
+}
+
+/* ============================================================
+   LA MESA
+
+   Mientras se elige, muestra las cartas elegidas en grande; al
+   tirar, las mismas cartas puntuando una por una. Es la misma
+   funcion porque es la misma fila: cambiando de sitio entre la
+   vista previa y la jugada, la mano "salta" justo cuando hay que
+   mirarla.
+   ============================================================ */
+function pintaMesa(){
+  const A = JU.anim;
+  const cs = A ? A.r.cuentan : (JU.sel.length ? JU.sel.map(i => JU.mano[i]) : []);
+  const todas = A ? A.cs : cs;
+  if (!todas.length){
+    txt(T('elegiCiega'), AN / 2, MESA_Y + MESA_H / 2, 11, '#4f615e', 'center', 700);
+    return;
+  }
+  const w = 76, h = 108;
+  const paso = Math.min(w + 10, (AN - 24 - w) / Math.max(1, todas.length - 1));
+  const x0 = (AN - (w + paso * (todas.length - 1))) / 2;
+  const y = MESA_Y + 22;
+  todas.forEach((c, i) => {
+    const vivo = !A || A.brilla === c;
+    const cuenta = cs.indexOf(c) >= 0;
+    pintaCarta(x0 + paso * i, y, w, h, c,
+               { alza: vivo && A ? 10 : 0, muerta: A ? !cuenta : false });
+  });
+  /* el numerito que sale de la carta que acaba de puntuar */
+  if (A && A.pop && A.popT > 0){
+    const i = todas.indexOf(A.brilla);
+    const px = x0 + paso * Math.max(0, i) + w / 2;
+    const a = Math.min(1, A.popT / .30);
+    CX.globalAlpha = a;
+    txtB(A.pop, px, y - 14 - (1 - a) * 16, 17, A.popC, 'center', 900);
+    CX.globalAlpha = 1;
+  }
+  if (A && A.fin){
+    txtB('+' + A.r.total, AN / 2, MESA_Y + MESA_H - 14, 26, '#ffd166', 'center', 900);
+  }
+}
+
+/* ============================================================
+   LA ANIMACION DE PUNTUAR
+
+   Recorre el mismo `log` que devolvio `puntua`, asi que lo que se
+   ve sumar ES lo que se sumo: con una cuenta propia, la animacion
+   podria terminar en un numero distinto del que el juego ya cobro.
+   ============================================================ */
+const ANIM_PASO = 0.15, ANIM_FIN = 0.75;
+function animArranca(r, cs){
+  const M = MANOS[r.tipo];
+  const ev = [];
+  r.log.forEach(L => ev.push({ t:'c', L }));
+  r.comLog.forEach(L => ev.push({ t:'j', L }));
+  JU.anim = {
+    r, cs, ev, i: -1, t: 0, fin: false,
+    f: M.f + M.df * (r.lv - 1), m: M.m + M.dm * (r.lv - 1),
+    brilla: null, pop: '', popC: '#fff', popT: 0,
+  };
+}
+function animPaso(dt){
+  const A = JU.anim; if (!A) return;
+  A.t += dt;
+  if (A.popT > 0) A.popT -= dt;
+  if (A.fin){
+    if (A.t >= ANIM_FIN){ JU.anim = null; tiraCierra(); }
+    return;
+  }
+  while (A.t >= ANIM_PASO && A.i < A.ev.length - 1){
+    A.t -= ANIM_PASO;
+    A.i++;
+    const e = A.ev[A.i];
+    if (e.t === 'c'){
+      const L = e.L;
+      A.brilla = L.c;
+      if (L.nada){ A.pop = '—'; A.popC = '#6e7f7c'; son('mal'); }
+      else {
+        A.f += L.df; A.m += L.dm;
+        if (L.dm > 0){ A.pop = '+' + Math.round(L.dm * 100) / 100; A.popC = '#fe5f55'; son('mult'); }
+        else          { A.pop = '+' + Math.round(L.df);            A.popC = '#3fa9f5'; son('ficha'); }
+      }
+    } else {
+      const L = e.L;
+      A.f += L.df; A.m += L.dm;
+      A.brilla = null;
+      A.pop = (L.dm ? '+' + Math.round(L.dm * 100) / 100 : '+' + Math.round(L.df));
+      A.popC = '#ffd166'; son('comodin');
+      avisa(tt('comN', L.k));
+    }
+    A.popT = .32;
+  }
+  if (A.i >= A.ev.length - 1 && A.t >= ANIM_PASO){
+    A.fin = true; A.t = 0; A.f = A.r.fichas; A.m = A.r.mult;
+    son(A.r.total >= JU.objetivo ? 'gana' : 'ficha');
+  }
+}
+/* lo que pasa DESPUES de la animacion, que es donde el juego avanza */
+function tiraCierra(){
+  JU.jugadas = [];
+  if (gano()){
+    JU.modo = 'puntua';
+    JU.pago = pagoRonda();
+    son('gana');
+  } else if (perdio()){
+    JU.modo = 'fin';
+    finMuestra(false);
+  }
+}
+
+/* ============================================================
+   PANTALLA DE CIEGA
+   ============================================================ */
+function pintaCiega(){
+  pintaFieltro();
+  const cg = CIEGAS[JU.ciegaIx];
+  const jefe = JU.ciegaIx === 2;
+  txtB('ANTE ' + JU.ante + '/8', AN / 2, 150, 13, '#93a3a0');
+  txtB(tt('ciegas', cg.id), AN / 2, 196, 26, jefe ? '#fe5f55' : '#f4f1e8');
+  if (jefe){
+    txtB(tt('jefesN', JU.jefe), AN / 2, 244, 17, '#ffd166');
+    envuelve(tt('jefesD', JU.jefe), AN / 2, 276, AN - 60, 12, '#e9c9c6');
+  }
+  pintaPanel(56, 340, AN - 112, 104);
+  txt(T('objetivo'), AN / 2, 366, 10, '#93a3a0', 'center', 700);
+  txt(String(objetivoDe()), AN / 2, 396, 32, '#fe5f55', 'center', 900);
+  txt(T('pago') + '  $' + CIEGAS[JU.ciegaIx].pago, AN / 2, 426, 11, '#ffd166', 'center', 700);
+  pintaBoton(AN / 2 - 90, 486, 180, 52, T('jugarCiega'), '#6ece8a', false);
+  zona('ciegaVa', AN / 2 - 90, 486, 180, 52);
+  /* los comodines se ven aca: es lo que se acaba de comprar y lo
+     que decide si esta ciega se puede o no */
+  pintaComodines();
+}
+
+/* ============================================================
+   PANTALLA DE VICTORIA DE RONDA
+   ============================================================ */
+function pintaPuntua(){
+  pintaFieltro();
+  txtB(T('ganaste'), AN / 2, 210, 22, '#6ece8a');
+  const cg = CIEGAS[JU.ciegaIx];
+  const fil = [[tt('ciegas', cg.id), '$' + cg.pago],
+               [T('manosSobra') + ' ×' + JU.manos, '$' + JU.manos],
+               [T('interes'), '$' + interes()]];
+  let y = 290;
+  pintaPanel(50, 268, AN - 100, 132);
+  fil.forEach(f => {
+    txt(f[0], 72, y, 11, '#cfe0dc', 'left', 700);
+    txt(f[1], AN - 72, y, 13, '#ffd166', 'right', 900);
+    y += 30;
+  });
+  caja(72, y - 12, AN - 144, 1.5, 0, 'rgba(244,241,232,.18)', null);
+  txt('$' + JU.pago, AN - 72, y + 8, 20, '#ffd166', 'right', 900);
+  pintaBoton(AN / 2 - 90, 442, 180, 52, T('tienda'), '#ffd166', false);
+  zona('aTienda', AN / 2 - 90, 442, 180, 52);
+}
+
+/* ============================================================
+   LA TIENDA
+   ============================================================ */
+function pintaTienda(){
+  pintaFieltro();
+  txtB(T('tienda'), 14, 28, 18, '#ffd166', 'left');
+  txtB('$' + JU.dinero, AN - 14, 28, 20, '#ffd166', 'right');
+
+  /* lo que ya se tiene, arriba: comprar sin ver las ranuras que
+     quedan es comprar a ciegas */
+  pintaComodines();
+  const Tn = JU.tienda; if (!Tn) return;
+
+  /* los dos articulos */
+  const w = 150, h = 176, y = 172;
+  const x0 = (AN - (w * 2 + 12)) / 2;
+  Tn.it.forEach((it, i) => {
+    const x = x0 + (w + 12) * i;
+    if (it.ido){ pintaRanura(x, y, w, h, true); return; }
+    pintaPanel(x, y, w, h);
+    if (it.t === 'comodin') pintaComodin(x + 22, y + 14, w - 44, 104, it.k, {});
+    else                    pintaCons(x + 30, y + 14, w - 60, 104, { t:it.t, k:it.k }, {});
+    const d = it.t === 'comodin' ? tt('comD', it.k)
+            : it.t === 'tarot'   ? tt('tarD', it.k)
+            : T('planeta', tt('manosN', it.k));
+    envuelve(d, x + w / 2, y + 132, w - 14, 8.5, '#93a3a0');
+    const pu = JU.dinero >= it.pre;
+    pintaBoton(x + 30, y + h - 34, w - 60, 26, '$' + it.pre, '#6ece8a', !pu);
+    zona('compra', x, y, w, h, i);
+  });
+
+  /* los sobres */
+  const sw = 150, sh = 62, sy = y + h + 14;
+  Tn.sobres.forEach((s, i) => {
+    const x = x0 + (sw + 12) * i;
+    if (s.ido){ pintaRanura(x, sy, sw, sh, true); return; }
+    pintaPanel(x, sy, sw, sh, 'rgba(48,26,66,.55)');
+    txt(tt('sobreN', s.k), x + sw / 2, sy + 22, 10, '#c47bff', 'center', 900);
+    const pu = JU.dinero >= s.pre;
+    pintaBoton(x + 30, sy + 34, sw - 60, 20, '$' + s.pre, '#c47bff', !pu);
+    zona('sobre', x, sy, sw, sh, i);
+  });
+
+  /* reroll y salida */
+  const by = sy + sh + 18;
+  const rr2 = JU.dinero >= Tn.reroll;
+  pintaBoton(14, by, 150, 44, T('rerollT', Tn.reroll), '#3fa9f5', !rr2);
+  if (rr2) zona('reroll', 14, by, 150, 44);
+  pintaBoton(AN - 164, by, 150, 44, T('siguiente'), '#6ece8a', false);
+  zona('salirTienda', AN - 164, by, 150, 44);
+
+  /* los consumibles y el boton de vender, que solo existe con un
+     comodin elegido: un boton de vender siempre visible es una
+     venta accidental esperando */
+  pintaConsumibles();
+  if (COM_SEL >= 0 && JU.com[COM_SEL]){
+    const pre = Math.max(1, Math.floor((COM[JU.com[COM_SEL]].pre || 4) / 2));
+    const bx = AN / 2 - 80, byy = CONS_Y + CONS_H + 12;
+    pintaBoton(bx, byy, 160, 38, T('vender') + '  $' + pre, '#fe5f55', false);
+    zona('vender', bx, byy, 160, 38);
+  }
+}
+
+/* ============================================================
+   EL SOBRE
+   ============================================================ */
+function pintaSobre(){
+  pintaFieltro();
+  const S = JU.sobre; if (!S) return;
+  txtB(tt('sobreN', S.k), AN / 2, 130, 18, '#c47bff');
+  txtB(T('elegiSobre'), AN / 2, 162, 11, '#93a3a0');
+  const n = S.op.length;
+  const w = Math.min(104, (AN - 40 - (n - 1) * 10) / n), h = w * 1.42;
+  const x0 = (AN - (w * n + 10 * (n - 1))) / 2, y = 250;
+  S.op.forEach((o, i) => {
+    const x = x0 + (w + 10) * i;
+    if (o.ido){ pintaRanura(x, y, w, h, true); return; }
+    if      (o.t === 'comodin') pintaComodin(x, y, w, h, o.k, {});
+    else if (o.t === 'carta')   pintaCarta(x, y, w, h, o.c, {});
+    else                        pintaCons(x, y, w, h, o, {});
+    zona('sobreOp', x, y, w, h, i);
+  });
+  const d = S.op.map(o => o.t === 'comodin' ? tt('comD', o.k)
+                        : o.t === 'tarot'   ? tt('tarD', o.k)
+                        : o.t === 'planeta' ? T('planeta', tt('manosN', o.k)) : '')
+                 .filter(Boolean)[0];
+  if (d) envuelve(d, AN / 2, y + h + 26, AN - 50, 10, '#93a3a0');
+  pintaBoton(AN / 2 - 80, 520, 160, 44, T('saltarSobre'), '#93a3a0', false);
+  zona('sobreSale', AN / 2 - 80, 520, 160, 44);
+}
+
+/* ============================================================
+   LA PARTIDA
+   ============================================================ */
+function pintaJuega(){
+  pintaFieltro();
+  pintaHud();
+  pintaComodines();
+  pintaPuntos();
+  pintaMesa();
+  pintaConsumibles();
+  if (!JU.anim){ pintaMano(); pintaBotones(); }
+  pintaPie();
+}
+
+function pinta(){
+  zonaLimpia();
+  CX.clearRect(0, 0, AN, AL);
+  switch (JU.modo){
+    case 'ciega':  pintaCiega();  break;
+    case 'puntua': pintaPuntua(); break;
+    case 'tienda': pintaTienda(); break;
+    case 'sobre':  pintaSobre();  break;
+    case 'juega':  pintaJuega();  break;
+    default:       pintaFieltro();
+  }
+  if (typeof tutoPinta === 'function') tutoPinta();
+}
+
+/* ============================================================
+   EL DEDO
+   ============================================================ */
+function toca(px, py){
+  if (typeof tutoToque === 'function' && tutoToque(px, py)) return;
+  const z = zonaEn(px, py);
+  if (!z) { COM_SEL = -1; pista(''); return; }
+  son('ui');
+  switch (z.id){
+    case 'carta': {
+      const i = z.dat, k = JU.sel.indexOf(i);
+      if (k >= 0) JU.sel.splice(k, 1);
+      else if (JU.sel.length < SEL_MAX) JU.sel.push(i);
+      else { avisa(T('elegiCartas', SEL_MAX)); return; }
+      son('elige');
+      break;
+    }
+    case 'jugar':     accionTira();     break;
+    case 'descartar': accionDescarta(); break;
+    case 'orden':     ordena(ORDEN_MANO === 'rango' ? 'palo' : 'rango'); son('baraja'); break;
+    case 'com':
+      COM_SEL = COM_SEL === z.dat ? -1 : z.dat;
+      pista(tt('comN', JU.com[z.dat]) + ' · ' + tt('comD', JU.com[z.dat]));
+      break;
+    case 'cons':      accionCons(z.dat); break;
+    case 'ciegaVa':   JU.modo = 'juega'; pista(''); break;
+    case 'aTienda':   cieganCierra(); COM_SEL = -1; break;
+    case 'compra':
+      if (!tiendaCompra(z.dat)) avisa(JU.dinero < JU.tienda.it[z.dat].pre ? T('sinPlata') : T('sinSitio'));
+      else son('compra');
+      break;
+    case 'sobre':
+      if (!sobreCompra(z.dat)) avisa(T('sinPlata'));
+      else { JU.modo = 'sobre'; son('compra'); }
+      break;
+    case 'sobreOp':
+      if (!sobreElige(z.dat)) avisa(T('sinSitio'));
+      else { son('compra'); if (JU.sobre.hechas >= JU.sobre.elige){ JU.sobre = null; JU.modo = 'tienda'; } }
+      break;
+    case 'sobreSale': JU.sobre = null; JU.modo = 'tienda'; break;
+    case 'reroll':    if (tiendaReroll()) son('baraja'); break;
+    case 'vender': {
+      const k = JU.com[COM_SEL];
+      JU.dinero += Math.max(1, Math.floor((COM[k].pre || 4) / 2));
+      JU.com.splice(COM_SEL, 1); COM_SEL = -1; son('plata');
+      break;
+    }
+    case 'salirTienda': vaCiega(); break;
+    case 'pausa':     pausaAbre(); break;
+  }
+}
+
+function accionTira(){
+  const cs = JU.sel.map(i => JU.mano[i]);
+  const r = tira(cs);
+  if (!r){ avisa(T('elegiCartas', SEL_MAX)); son('mal'); return; }
+  animArranca(r, cs);
+  son('carta');
+}
+function accionDescarta(){
+  const cs = JU.sel.map(i => JU.mano[i]);
+  if (!descarta(cs)){ son('mal'); return; }
+  son('baraja');
+}
+/* Un consumible se usa con lo que este elegido: el tarot pide
+   cartas y el planeta no, y `consUsa` ya sabe cual es cual. */
+function accionCons(i){
+  const C = JU.cons[i];
+  const cs = JU.sel.map(k => JU.mano[k]);
+  if (!consUsa(i, cs)){
+    const T2 = C.t === 'tarot' ? TAROT[C.k] : null;
+    avisa(T2 ? T('elegiCartas', T2.sel) : T('sinSitio'));
+    son('mal');
+    return;
+  }
+  son(C.t === 'planeta' ? 'sube' : 'compra');
+  if (C.t === 'planeta') avisa(T('planeta', tt('manosN', C.k)));
+  ordena();
+}
+
+/* --- pasar de la tienda a la ciega siguiente --- */
+function vaCiega(){
+  cieganNueva();
+  JU.modo = 'ciega';
+  COM_SEL = -1;
+  if (JU.ante > 8){ JU.modo = 'fin'; finMuestra(true); }
+}
+
+/* ============================================================
+   EL TUTORIAL
+
+   Cinco pasos, y CADA UNO ESPERA A QUE SE HAGA LA COSA. Un
+   tutorial que se pasa leyendo se saltea, y lo que se saltea es
+   exactamente lo que despues no se entiende — la leccion que este
+   repo ya pago en MEKO, FLECHAS y RezUno.
+
+   De ahi sale la decision que ordena el archivo entero: EL
+   TUTORIAL NO SE COME LOS TOQUES. `tutoToque` devuelve true
+   unicamente sobre su propio boton de saltear; todo lo demas pasa
+   de largo al juego, porque el juego es lo que hay que hacer.
+
+   Y ningun paso puede quedarse trabado: cada condicion tiene una
+   salida por si el camino que esperaba no ocurre (la ciega se gana
+   con la primera mano y no hay ocasion de descartar, o se pierde y
+   no hay tienda). Un tutorial trabado es peor que ninguno.
+   ============================================================ */
+
+const TUTO = { on:false, i:0, t:0, fin:0, mem:{ man:0, desc:0 } };
+
+function tutoArranca(){
+  TUTO.on = true; TUTO.fin = 0;
+  tutoEntra(0);
+}
+function tutoCorta(){
+  TUTO.on = false; TUTO.fin = 0;
+  GUARDA.visto = 1; guardaEscribe();
+}
+/* al entrar a un paso se guarda contra QUE se compara: los
+   contadores del juego son acumulados, asi que "descarto" es
+   "bajo respecto de cuando el paso empezo" y no un numero fijo */
+function tutoEntra(i){
+  TUTO.i = i; TUTO.t = 0;
+  TUTO.mem.man = JU.totManos;
+  TUTO.mem.desc = JU.desc;
+}
+
+/* La condicion de cada paso. El `||` de la segunda parte es la
+   salida: si el juego se fue del sitio donde ese paso se podia
+   hacer, el paso se da por hecho en vez de esperar para siempre. */
+const TUTO_LISTO = [
+  () => JU.totManos > TUTO.mem.man,
+  () => (JU.ultima && !JU.anim) || JU.modo !== 'juega',
+  () => JU.desc < TUTO.mem.desc || JU.modo !== 'juega',
+  () => JU.modo === 'tienda' || JU.modo === 'fin',
+  () => JU.modo === 'ciega' || JU.modo === 'juega' || JU.modo === 'fin',
+];
+
+/* Donde mirar en cada paso. Se calcula y no se escribe a mano:
+   los botones y la mano salen de las mismas constantes que los
+   dibujan, asi que mover el HUD no deja al tutorial senalando
+   un sitio vacio. */
+function tutoFoco(){
+  const w = 116;
+  /* un contorno latiendo sobre una pantalla donde esa cosa no se
+     esta dibujando senala un sitio vacio, asi que el foco se apaga
+     cuando su blanco no esta en pantalla */
+  const enMesa = JU.modo === 'juega';
+  const enFila = JU.modo === 'juega' || JU.modo === 'ciega';
+  switch (TUTO.i){
+    case 0: case 1: case 2: if (!enMesa) return null; break;
+    case 3: if (!enFila) return null; break;
+  }
+  switch (TUTO.i){
+    case 0: return [10, MANO_Y - ALZA - 4, AN - 20, MANO_H + ALZA + 8];
+    case 1: return [10, PUN_Y, AN - 20, PUN_H];
+    case 2: return [AN - 12 - w, BOT_Y, w, BOT_H];
+    case 3: return [10, COM_Y, AN - 20, COM_H];
+    default: return null;
+  }
+}
+/* la ficha se va al lado contrario del foco: un cartel encima de
+   la cosa que el cartel manda a mirar no ensena nada */
+const TUTO_Y = [300, 604, 300, 300, 392];
+
+const TUTO_BW = 120, TUTO_BH = 34;
+function tutoSaltarCaja(){ return [AN - 12 - TUTO_BW, 12, TUTO_BW, TUTO_BH]; }
+
+function tutoPaso(dt){
+  if (!TUTO.on) return;
+  TUTO.t += dt;
+  if (TUTO.fin > 0){
+    TUTO.fin -= dt;
+    if (TUTO.fin <= 0) tutoCorta();
+    return;
+  }
+  /* medio segundo de piso antes de mirar la condicion: si no, un
+     paso cuya condicion ya esta cumplida al entrar pasa de largo
+     sin que a nadie le de tiempo de leerlo */
+  if (TUTO.t < 0.5) return;
+  if (!TUTO_LISTO[TUTO.i]()) return;
+  son('sube');
+  if (TUTO.i >= TUTO_LISTO.length - 1){ TUTO.fin = 1.6; return; }
+  tutoEntra(TUTO.i + 1);
+}
+
+function tutoPinta(){
+  if (!TUTO.on) return;
+  const f = TUTO_FIN_VER();
+  if (f) return;
+
+  /* el foco: un contorno que late. No se oscurece el resto —
+     con un velo encima, las cartas que hay que elegir se leen
+     apagadas justo cuando hay que elegirlas */
+  const fo = tutoFoco();
+  if (fo){
+    const k = 0.5 + 0.5 * Math.sin(JU.t * 4.4);
+    CX.save();
+    CX.strokeStyle = '#ffd166';
+    CX.globalAlpha = 0.45 + 0.45 * k;
+    CX.lineWidth = 3;
+    rr(fo[0] - 3, fo[1] - 3, fo[2] + 6, fo[3] + 6, 12);
+    CX.stroke();
+    CX.restore();
+  }
+
+  tutoFicha(TUTO_TXT()[TUTO.i], (TUTO.i + 1) + '/' + TUTO_LISTO.length);
+
+  const b = tutoSaltarCaja();
+  pintaBoton(b[0], b[1], b[2], b[3], T('saltar'), '#93a3a0', false);
+}
+
+/* el cierre: la misma ficha, sin numero y sin boton */
+function TUTO_FIN_VER(){
+  if (TUTO.fin <= 0) return false;
+  tutoFicha(T('tutoFin'), '');
+  return true;
+}
+
+const TUTO_TXT = () => (LANG[IDIOMA] && LANG[IDIOMA].tuto) || LANG.es.tuto;
+
+function tutoFicha(s, num){
+  const w = AN - 48, x = 24;
+  const y = TUTO.fin > 0 ? 392 : TUTO_Y[TUTO.i];
+  /* el alto sale de cuantas lineas entran de verdad: en tres
+     idiomas la misma frase mide distinto y un alto fijo deja la
+     ultima linea afuera o media ficha vacia */
+  const ls = envuelveLineas(s, w - 28, 15, 700);
+  const h = 22 + ls.length * 20 + (num ? 16 : 0);
+  CX.save();
+  CX.shadowColor = 'rgba(0,0,0,.55)'; CX.shadowBlur = 16; CX.shadowOffsetY = 4;
+  caja(x, y, w, h, 14, '#161d20', '#ffd166', 2);
+  CX.restore();
+  if (num) txt(num, x + w - 14, y + 16, 9, '#ffd166', 'right', 900);
+  ls.forEach((l, i) => txt(l, x + w / 2, y + 26 + i * 20 + (num ? 8 : 0), 15,
+                           '#f4f1e8', 'center', 700));
+}
+
+/* SOLO el boton de saltear se come el toque. Todo lo demas tiene
+   que llegar al juego: el paso se aprueba haciendo la cosa. */
+function tutoToque(px, py){
+  if (!TUTO.on || TUTO.fin > 0) return false;
+  const b = tutoSaltarCaja();
+  if (px >= b[0] && px <= b[0] + b[2] && py >= b[1] && py <= b[1] + b[3]){
+    son('ui');
+    tutoCorta();
+    return true;
+  }
+  return false;
+}
+
+/* ============================================================
+   LOS PANELES
+
+   El DOM de este juego es cuatro paneles y nada mas: idioma,
+   menu, pausa y final. Todo lo demas se dibuja en el lienzo, asi
+   que hay UN solo sistema de toque — y estos cuatro son
+   justamente lo que tiene que ser texto de verdad, porque se
+   traduce y tiene que leerse nitido en cualquier densidad.
+   ============================================================ */
+
+function verPanel(id){
+  document.querySelectorAll('.pan').forEach(p => p.classList.toggle('on', p.id === id));
+}
+
+/* ---------- idioma ----------
+   Se pregunta ANTES del menu. Elegir el idioma dentro de un menu
+   ya escrito en un idioma que no entendes no sirve: para cuando
+   lo encontras ya leiste todo lo demas sin entenderlo. */
+const IDIOMAS = [['es', 'ESPAÑOL'], ['en', 'ENGLISH'], ['pt', 'PORTUGUÊS']];
+
+function idiomaArma(){
+  const l = $('#idL');
+  l.innerHTML = '';
+  IDIOMAS.forEach(([k, n]) => {
+    const b = document.createElement('button');
+    b.className = 'b'; b.textContent = n;
+    b.onclick = () => { ponIdioma(k); alMenu(); };
+    l.appendChild(b);
+  });
+}
+function ponIdioma(k){
+  IDIOMA = k;
+  GUARDA.idioma = k; guardaEscribe();
+  pintaIdioma();
+}
+
+/* UNA sola funcion repinta TODO el texto del DOM. Escrito boton
+   por boton donde se arma cada panel, cambiar de idioma con un
+   panel ya abierto lo deja en el anterior — el defecto que en Z
+   Force costo 107 claves. */
+function pintaIdioma(){
+  $('#idT').textContent = T('idT');
+  $('#mSub').textContent = T('sub');
+  $('#mJugar').textContent = T('jugar');
+  $('#mTuto').textContent = T('tuto');
+  $('#mIdioma').textContent = T('idioma');
+  $('#pie').textContent = T('pie');
+  $('#mRec').textContent = GUARDA.rec ? T('rec', GUARDA.rec) : '';
+  $('#paT').textContent = T('paT');
+  $('#paSigue').textContent = T('sigue');
+  $('#paMenu').textContent = T('menu');
+  $('#fiOtra').textContent = T('otra');
+  $('#fiMenu').textContent = T('menu');
+  /* el panel de final se repinta con SU estado guardado y no con
+     el del juego: al terminar una corrida el estado ya se reseteo,
+     asi que leerlo de JU mostraria la partida siguiente */
+  if (FIN.vista) finEscribe();
+}
+
+/* ---------- menu ---------- */
+function alMenu(){
+  JU.modo = 'menu';
+  TUTO.on = false;
+  DEMO = false;
+  pintaIdioma();
+  verPanel('pMenu');
+}
+
+function juegaArranca(conTuto){
+  partidaNueva();
+  cieganNueva();
+  JU.modo = 'ciega';
+  COM_SEL = -1;
+  FIN.vista = false;
+  verPanel('');
+  if (conTuto) tutoArranca(); else TUTO.on = false;
+}
+
+/* ---------- pausa ---------- */
+let MODO_PREV = 'juega';
+function pausaAbre(){
+  if (JU.modo === 'pausa') return;
+  MODO_PREV = JU.modo;
+  JU.modo = 'pausa';
+  son('ui');
+  verPanel('pPausa');
+}
+function pausaCierra(){
+  JU.modo = MODO_PREV;
+  verPanel('');
+}
+
+/* ---------- final ---------- */
+const FIN = { vista:false, gano:false, ante:0, manos:0, dinero:0, mejor:0 };
+
+function finMuestra(gano){
+  FIN.vista = true;
+  FIN.gano = gano;
+  FIN.ante = JU.ante;
+  FIN.manos = JU.totManos;
+  FIN.dinero = JU.dinero;
+  FIN.mejor = JU.mejorMano;
+  if (JU.ante > GUARDA.rec){ GUARDA.rec = JU.ante; guardaEscribe(); }
+  son(gano ? 'gana' : 'pierde');
+  finEscribe();
+  verPanel('pFin');
+}
+function finEscribe(){
+  const t = $('#fiT');
+  t.textContent = FIN.gano ? T('gana') : T('muerto');
+  t.className = FIN.gano ? 'bien' : 'mal';
+  $('#fiS').textContent = FIN.gano ? T('ganaS') : T('muertoS');
+  $('#fiD').textContent = T('fiD', FIN.ante, FIN.manos, FIN.dinero, FIN.mejor);
+}
+
+/* ---------- cableado ---------- */
+function panelesArma(){
+  idiomaArma();
+  $('#mJugar').onclick  = () => { audioDespierta(); juegaArranca(!GUARDA.visto); };
+  $('#mTuto').onclick   = () => { audioDespierta(); juegaArranca(true); };
+  $('#mIdioma').onclick = () => verPanel('pIdioma');
+  $('#paSigue').onclick = () => pausaCierra();
+  $('#paMenu').onclick  = () => alMenu();
+  $('#fiOtra').onclick  = () => juegaArranca(false);
+  $('#fiMenu').onclick  = () => alMenu();
+  /* el idioma guardado salta la primera pantalla; la primera vez
+     no hay ninguno y hay que preguntar */
+  if (GUARDA.idioma){ IDIOMA = GUARDA.idioma; pintaIdioma(); alMenu(); }
+  else { pintaIdioma(); verPanel('pIdioma'); }
+}
+
+/* ============================================================
+   EL RELOJ Y EL DEDO
+
+   Paso fijo con interpolacion: un telefono a 30 y una notebook a
+   144 tienen que jugar el mismo juego. Aca casi nada se integra
+   —es un juego de cartas— pero los relojes que SI corren (la
+   animacion de puntuar, el aviso, el tutorial, la demo del menu)
+   tienen que durar lo mismo en los dos, y eso no sale solo.
+   ============================================================ */
+const PASO = 1 / 60, PASO_TOPE = 0.25, PASOS_MAX = 8;
+let ACUM = 0, T_ANT = performance.now() / 1000;
+
+function ajusta(){
+  const esc = Math.min(innerWidth / AN, innerHeight / AL);
+  $('#marco').style.transform = 'translate(-50%,-50%) scale(' + esc + ')';
+  const d = Math.min(devicePixelRatio || 1, 2.5);
+  CV.width = Math.round(AN * d);
+  CV.height = Math.round(AL * d);
+  CX.setTransform(d, 0, 0, d, 0, 0);
+}
+addEventListener('resize', ajusta);
+
+/* ---------- el dedo ----------
+   UNA sola entrada. El marco esta escalado, asi que las
+   coordenadas salen de la caja que el navegador informa y no de
+   una cuenta con el factor: con la cuenta a mano, el dia que
+   cambie el encuadre el dedo y el dibujo dejan de coincidir. */
+function aCuadro(cx, cy){
+  const r = CV.getBoundingClientRect();
+  return [(cx - r.left) * AN / r.width, (cy - r.top) * AL / r.height];
+}
+CV.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  audioDespierta();
+  if (JU.modo === 'menu' || JU.modo === 'pausa' || JU.modo === 'fin') return;
+  const [x, y] = aCuadro(e.clientX, e.clientY);
+  toca(x, y);
+});
+addEventListener('keydown', e => {
+  if (e.key === 'Escape' && (JU.modo === 'juega' || JU.modo === 'tienda')) pausaAbre();
+});
+
+/* ---------- la demo del menu ----------
+   Un panel opaco encima de una mesa quieta tira a la basura lo
+   unico que este menu tiene para mostrar. Corre el juego de
+   verdad, jugado por el mismo bot que lo audita — asi no hay una
+   segunda animacion que mantener — y con DEMO puesto, que es lo
+   que impide que la demo toque el record ni el guardado. */
+let DEMO_T = 0;
+const DEMO_RITMO = 1.15;
+function demoArranca(){
+  DEMO = true;
+  partidaNueva(Math.floor(Math.random() * 1e6));
+  cieganNueva();
+  DEMO_T = 0;
+}
+function demoPaso(dt){
+  if (JU.modo !== 'menu' && JU.modo !== 'pausa') return;
+  DEMO_T += dt;
+  if (DEMO_T < DEMO_RITMO) return;
+  DEMO_T = 0;
+  if (JU.modo === 'pausa') return;
+  if (JU.anim) return;
+  if (JU.mano.length === 0 || JU.ante > 8 || perdio()){ demoArranca(); return; }
+  const j = mejorJugada();
+  if (!j){ demoArranca(); return; }
+  /* la MISMA cuota que el auditor: contra el objetivo entero
+     ninguna primera mano llega nunca y la demo quemaria los tres
+     descartes de arrancada. Con dos cerebros distintos, el menu
+     muestra un juego que el auditor no esta midiendo. */
+  const cuota = (JU.objetivo - JU.puntaje) / Math.max(1, JU.manos);
+  if (JU.desc > 0 && j.total < cuota && JU.manos > 1){
+    const fuera = botDescarte();
+    if (fuera.length){ JU.sel = []; descarta(fuera); return; }
+  }
+  /* la demo ELIGE y despues tira, con un tiempo en el medio: sin
+     eso las cartas aparecen ya jugadas y no se ve que alguien las
+     esta eligiendo, que es lo unico que este menu tiene que decir */
+  if (JU.sel.length === 0){
+    JU.sel = j.cs.map(c => JU.mano.indexOf(c)).filter(i => i >= 0);
+    return;
+  }
+  const cs = JU.sel.map(i => JU.mano[i]);
+  const r = tira(cs);
+  if (r) animArranca(r, cs);
+  else JU.sel = [];
+}
+
+/* ---------- la vuelta ---------- */
+function vuelta(){
+  requestAnimationFrame(vuelta);
+  const t = performance.now() / 1000;
+  let dt = t - T_ANT; T_ANT = t;
+  if (dt > PASO_TOPE) dt = PASO_TOPE;
+  ACUM += dt;
+  let n = 0;
+  while (ACUM >= PASO && n++ < PASOS_MAX){
+    ACUM -= PASO;
+    JU.t += PASO;
+    aviPaso(PASO);
+    animPaso(PASO);
+    tutoPaso(PASO);
+    demoPaso(PASO);
+  }
+  /* el menu dibuja la mesa detras del velo, asi que la demo tiene
+     que pintarse con el mismo pintor del juego y no con uno propio */
+  const m = JU.modo;
+  if (m === 'menu' || m === 'pausa'){
+    const g = JU.modo;
+    JU.modo = (m === 'pausa') ? MODO_PREV : 'juega';
+    pinta();
+    JU.modo = g;
+  } else {
+    pinta();
+  }
+}
+
+/* ============================================================
+   LAS SONDAS
+   ============================================================ */
+function zonaCentro(id, dat){
+  for (const z of ZONAS){
+    if (z.id !== id) continue;
+    if (dat !== undefined && z.dat !== dat) continue;
+    return [z.x + z.w / 2, z.y + z.h / 2];
+  }
+  return null;
+}
+window.__naipe = {
+  est: () => ({
+    modo: JU.modo, ante: JU.ante, ronda: JU.ronda, ciega: CIEGAS[JU.ciegaIx].id,
+    jefe: JU.jefe, dinero: JU.dinero, manos: JU.manos, desc: JU.desc,
+    puntaje: JU.puntaje, objetivo: JU.objetivo, mano: JU.mano.length,
+    com: JU.com.slice(), cons: JU.cons.map(c => c.t + ':' + c.k),
+    sel: JU.sel.slice(), anim: !!JU.anim, tuto: TUTO.on ? TUTO.i : -1,
+    idioma: IDIOMA, rec: GUARDA.rec,
+  }),
+  /* EL CAMINO DEL DEDO. Se busca la zona donde el juego la dibujo
+     y se toca su centro: una sonda que llama a la accion directo
+     saltea justamente la parte que puede estar rota. */
+  zonas: () => ZONAS.map(z => z.id + (z.dat !== undefined ? ':' + z.dat : '')),
+  toc: (id, dat) => {
+    const c = zonaCentro(id, dat);
+    if (!c) return { err: 'sin ' + id, hay: ZONAS.map(z => z.id) };
+    toca(c[0], c[1]);
+    return { ok: true, en: c };
+  },
+  tocXY: (x, y) => { toca(x, y); return true; },
+  /* elegir cartas por indice, que es lo que hace el dedo */
+  elige: is => { is.forEach(i => { const c = zonaCentro('carta', i); if (c) toca(c[0], c[1]); });
+                 return JU.sel.slice(); },
+  /* adelantar el reloj sin dibujar: la animacion de puntuar dura
+     mas de un segundo y esperarla con sleep cuesta la corrida */
+  corre: seg => {
+    let n = Math.round(seg / PASO);
+    while (n-- > 0){ JU.t += PASO; aviPaso(PASO); animPaso(PASO); tutoPaso(PASO); demoPaso(PASO); }
+    return window.__naipe.est();
+  },
+  pinta: () => { pinta(); return true; },
+  modo: m => { JU.modo = m; pinta(); return JU.modo; },
+  panel: id => { verPanel(id); return id; },
+  tuto: () => ({ on: TUTO.on, i: TUTO.i, t: +TUTO.t.toFixed(2), fin: +TUTO.fin.toFixed(2),
+                 txt: TUTO.on ? TUTO_TXT()[TUTO.i] : '' }),
+  juega: (n, modo, tope) => audita(n || 8, modo || 'honesto', tope || 8),
+  manos: () => auditaManos(),
+  assets: () => ({ hay: Object.keys(IMG).length, fallan: (IMG.fallan || []).slice(),
+                   son: MUESTRAS ? Object.keys(MUESTRAS).length : 0 }),
+  son: k => { son(k); return k; },
+  lang: k => { ponIdioma(k); pinta(); return IDIOMA; },
+  /* cuanto cuesta un cuadro. Sin numero no hay afirmacion. */
+  costo: (n) => {
+    n = n || 60;
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++) pinta();
+    return { ms: +((performance.now() - t0) / n).toFixed(3), zonas: ZONAS.length };
+  },
+  /* solapamientos del DOM: los cuatro paneles y nada mas, porque
+     todo lo demas vive en el lienzo */
+  cajas: () => {
+    const p = document.querySelector('.pan.on');
+    if (!p) return { panel: null, choques: [], fuera: [] };
+    const hs = [...p.querySelectorAll('h1,h2,.sub,.dat,button,#pie')]
+      .filter(e => e.offsetWidth > 0)
+      .map(e => ({ id: e.id || e.className, t: e.offsetTop, h: e.offsetHeight,
+                   l: e.offsetLeft, w: e.offsetWidth }));
+    const ch = [], fu = [];
+    for (let i = 0; i < hs.length; i++){
+      const a = hs[i];
+      if (a.t < 0 || a.t + a.h > AL || a.l < 0 || a.l + a.w > AN) fu.push(a.id);
+      for (let j = i + 1; j < hs.length; j++){
+        const b = hs[j];
+        if (a.t < b.t + b.h && b.t < a.t + a.h && a.l < b.l + b.w && b.l < a.l + a.w)
+          ch.push(a.id + '×' + b.id);
+      }
+    }
+    return { panel: p.id, n: hs.length, choques: ch, fuera: fu };
+  },
+};
+
+/* ============================================================
+   ARRANQUE
+   ============================================================ */
+window.__errs = [];
+addEventListener('error', e => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', e => window.__errs.push('promesa: ' + e.reason));
+
+guardaLee();
+ajusta();
+imgCarga();
+sonDecodifica();
+panelesArma();
+demoArranca();
+vuelta();
+</script>
+</body>
+</html>

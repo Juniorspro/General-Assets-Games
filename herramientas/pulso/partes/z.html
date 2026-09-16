@@ -1,0 +1,437 @@
+
+/* ══════════════════════════ EL BUCLE ══════════════════════════ */
+function bucle(){
+  requestAnimationFrame(bucle);
+  const ahora = performance.now();
+  let dt = Math.min((ahora - ultimo)/1000, 0.25);   /* una pestaña dormida no simula un minuto de golpe */
+  ultimo = ahora;
+
+  if (MODO === 'juega' && !PAUSA){
+    acum += dt;
+    let n = 0;
+    while (acum >= PASO && n < 8){ pasoJuego(PASO); acum -= PASO; n++; }
+    ponCamara();
+    ponTabla();
+    pintaHud(dt);
+  } else if (MODO === 'menu'){
+    /* el pasillo sigue vivo detrás del menú, pero quieto */
+    ponCamara();
+  }
+  pasoFogonazo(dt);
+  if (GIRO.listo) calculaInclinacion();
+
+  ren.info.autoReset = false; ren.info.reset();
+  /* ══════ TRES PASADAS, Y EL ORDEN ES LO QUE SE MIDIÓ ══════
+     Un plano se saca adelante de todo con `depthTest:false`. Un MODELO no:
+     sin prueba de profundidad sus propias caras de atrás se dibujan encima de
+     las de adelante y la cosa sale del revés; y CON la prueba puesta, la pared
+     de una esquina —que está a un metro— lo entierra, que es el mismo defecto
+     que ya costó una vuelta con las caras. Medido: se veían los dos ojos
+     flotando y ni un pixel del cuerpo.
+     La salida es la de cualquier primera persona: cada cosa en su capa y una
+     pasada por capa, borrando la profundidad entre pasadas.
+
+         1. el mundo          (capa 0)
+         2. el susto modelo   (capa 3) — ninguna pared lo puede tapar
+         3. la tabla y el bol (capa 2) — SIEMPRE al final
+
+     Y la tercera pasada no es un detalle: con dos pasadas el modelo salía
+     dibujado ENCIMA del bol —medido en la captura, la figura parada arriba del
+     cuenco— porque el borrado de profundidad no distingue qué está más cerca.
+     La tabla es lo más cercano que hay y por eso va última.
+
+     TRAMPA DE three.js, y costó una medición: `autoClear = false` NO alcanza.
+     Cuando `scene.background` es un Color, `WebGLBackground.render()` pone
+     `forceClear = true` y limpia igual — el fondo no es un objeto de la escena,
+     es una orden de borrado disfrazada. Hay que sacarlo para las pasadas 2 y 3. */
+  ren.info.autoReset = false; ren.info.reset();
+  const hayModelo = !!(ACT.obj && ACT.s && ACT.s.fam === 'modelo');
+  const fondo = escena.background;
+  cam.layers.disable(2); cam.layers.disable(CAPA_SUSTO);
+  ren.render(escena, cam);
+  escena.background = null;
+  ren.autoClear = false;
+  if (hayModelo){
+    cam.layers.disable(0); cam.layers.enable(CAPA_SUSTO);
+    ren.clearDepth(); ren.render(escena, cam);
+    cam.layers.disable(CAPA_SUSTO);
+  } else cam.layers.disable(0);
+  cam.layers.enable(2);
+  ren.clearDepth(); ren.render(escena, cam);
+  ren.autoClear = true;
+  escena.background = fondo;
+  cam.layers.enable(0);
+  DIB = ren.info.render.calls; TRI = ren.info.render.triangles;
+
+  _cuadros++; _acumF += dt;
+  if (_acumF >= 0.5){ fps = Math.round(_cuadros/_acumF); _cuadros = 0; _acumF = 0; }
+}
+
+/* ══════════════════════════ LA INTERFAZ ══════════════════════════ */
+function pintaOpciones(){
+  const filas = [
+    ['oCal', 'calidad', [['baja','oBaja'],['media','oMedia'],['alta','oAlta']]],
+    ['oSens', 'sens', [['suave','oSuave'],['normal','oNormal'],['dura','oDura']]],
+    ['oSus', 'sustos', [['pocos','oPocos'],['todos','oTodos']]]
+  ];
+  for (const [cont, clave, vals] of filas){
+    const e = $(cont); if (!e) continue;
+    e.innerHTML = '';
+    for (const [v, k] of vals){
+      const b = document.createElement('button');
+      b.className = 'bt' + (CFG[clave] === v ? ' on' : '');
+      b.textContent = TX(k);
+      b.onclick = () => { CFG[clave] = v; guardaCfg(); aplicarCalidad(); pintaOpciones(); };
+      e.appendChild(b);
+    }
+  }
+  const e = $('oIdi'); if (e){
+    e.innerHTML = '';
+    for (const [v, n] of [['es','ES'],['en','EN'],['pt','PT']]){
+      const b = document.createElement('button');
+      b.className = 'bt' + (IDIOMA === v ? ' on' : '');
+      b.textContent = n;
+      b.onclick = () => { IDIOMA = v; guardaCfg(); pintaIdioma(); };
+      e.appendChild(b);
+    }
+  }
+}
+window.pintaOpciones = pintaOpciones;
+
+function pintaMenu(){
+  let r = 0; try { r = +(localStorage.getItem('pulso_record') || 0); } catch(e){}
+  $('mRecord').textContent = r > 0 ? TX('mRecord', r) : '';
+}
+window.pintaMenu = pintaMenu;
+
+function pan(id){
+  for (const p of document.querySelectorAll('.pan')) p.classList.remove('on');
+  if (id) $(id).classList.add('on');
+}
+
+/* ── LA CALIBRACIÓN, QUE ES LA PANTALLA MÁS IMPORTANTE DEL JUEGO ──
+   Y el aro con el punto no es decoración: es la única forma de que el jugador
+   vea que el sensor lo está escuchando ANTES de empezar. Si el punto no se
+   mueve, el juego no va a funcionar y hay que enterarse acá y no a los treinta
+   metros de pasillo. */
+let _calRAF = 0;
+function pantallaCalibrar(){
+  pan('cal');
+  $('cEstado').textContent = GIRO.hay ? TX('cGiro') : TX('cPide');
+  const pt = $('calPt');
+  const tic = () => {
+    _calRAF = requestAnimationFrame(tic);
+    if (GIRO.hay && !GIRO.listo){
+      /* antes de calibrar se muestra el crudo contra la vertical, sólo para que
+         se vea que se mueve */
+      const v = new T.Vector3(0, 1, 0).applyQuaternion(GIRO.q);
+      pt.style.transform = 'translate(' + (v.x*52).toFixed(1) + 'px,' + (v.z*52).toFixed(1) + 'px)';
+      $('cEstado').textContent = TX('cGiro');
+    } else if (GIRO.listo){
+      const i = inclinacion();
+      pt.style.transform = 'translate(' + (i.x*52).toFixed(1) + 'px,' + (i.z*52).toFixed(1) + 'px)';
+    } else {
+      const i = inclinacion();
+      pt.style.transform = 'translate(' + (i.x*52).toFixed(1) + 'px,' + (i.z*52).toFixed(1) + 'px)';
+      $('cEstado').textContent = TX('cSinGiro');
+    }
+  };
+  cancelAnimationFrame(_calRAF); tic();
+}
+
+$('cListo').onclick = () => {
+  cancelAnimationFrame(_calRAF);
+  if (GIRO.hay) calibrar();
+  DEDO.ix = DEDO.iz = 0;
+  armaAudio();
+  if (AUD && AUD.state === 'suspended') AUD.resume();
+  empieza();
+};
+
+for (const b of document.querySelectorAll('#idioma [data-lang]')){
+  b.onclick = () => {
+    IDIOMA = b.getAttribute('data-lang');
+    guardaCfg(); pintaIdioma();
+    pan('menu');
+    MODO = 'menu';
+  };
+}
+$('mJugar').onclick = async () => {
+  /* EL PERMISO SE PIDE ACÁ, dentro del gesto de tocar EMPEZAR: es el gesto que
+     todo el mundo hace. Pedirlo en un botón de opciones —que nadie toca— es
+     como no pedirlo, y en iOS fuera de un gesto lo rechaza sin mostrar nada. */
+  await pedirGiro();
+  pantallaCalibrar();
+};
+$('mOpc').onclick = () => { pintaOpciones(); pan('opc'); };
+$('oVolver').onclick = () => { pan('menu'); };
+$('fOtra').onclick = () => { armaAudio(); empieza(); };
+$('fMenu').onclick = () => { pan('menu'); MODO = 'menu'; pintaMenu(); };
+
+/* ══════════════════════════ LAS SONDAS ══════════════════════════
+   Sin esto no se puede afirmar nada del juego, y en éste menos que en ninguno:
+   todo lo que importa —si el bol se cae, cuánto derrama, si el susto sacude—
+   pasa en fracciones de segundo y no se ve en una captura. */
+window.__P = {
+  estado: () => ({ modo: MODO, d: +JUEGO.d.toFixed(2), meta: JUEGO.meta,
+                   vivo: JUEGO.vivo, causa: JUEGO.causa,
+                   agua: +BOL.agua.toFixed(3), cayo: BOL.cayo,
+                   bol: [+BOL.x.toFixed(4), +BOL.z.toFixed(4)],
+                   borde: +(Math.hypot(BOL.x, BOL.z)/TABLA.r).toFixed(3),
+                   ola: +Math.hypot(BOL.ox, BOL.oz).toFixed(4),
+                   sustos: SUSTOS_AGUANTADOS, activo: ACT.s ? ACT.s.id : -1 }),
+  costo: () => ({ fps, dib: DIB, tri: TRI, pix: CFG.pix, calidad: CFG.calidad,
+                  tam: [W, H] }),
+  mapa: () => ({ tramos: CAMINO.length, metros: +LARGO_TOTAL.toFixed(1),
+                 agenda: AGENDA.length, catalogo: SUSTOS.length,
+                 semilla: JUEGO.semilla }),
+  /* el catálogo entero, para poder comprobar que son 32 y que ninguno repite
+     familia+dónde */
+  catalogo: () => SUSTOS.map(s => s.fam + ':' + s.donde),
+  /* juega solo: mantiene la tabla derecha y camina. Es la prueba de que el
+     pasillo SE PUEDE terminar sin sustos — si con la tabla perfectamente quieta
+     el bol se cae, el juego es imposible y no es culpa del jugador. */
+  juegaSolo: (n, corrige) => new Promise(res => {
+    empieza();
+    let i = 0;
+    const paso = () => {
+      if (!JUEGO.vivo || i++ > n){
+        res(JSON.stringify({ vueltas: i, d: +JUEGO.d.toFixed(1), meta: JUEGO.meta,
+                             causa: JUEGO.causa, agua: +BOL.agua.toFixed(3),
+                             sustos: SUSTOS_AGUANTADOS, gano: JUEGO.d >= JUEGO.meta }));
+        return;
+      }
+      /* ── DOS JUGADORES AUTOMÁTICOS, Y HACEN FALTA LOS DOS ──
+         Con la tabla PERFECTAMENTE DERECHA el bol no vuelve solo: una tabla
+         plana no tiene fuerza que lo devuelva al centro, así que cada susto lo
+         deja donde lo dejó y a los nueve sustos se cae. Medido: perdió a los
+         106,3 m de 120. Eso NO es un defecto del juego — es el juego: hay que
+         inclinar para traerlo. Pero entonces el jugador quieto ya no sirve para
+         responder «¿se puede terminar?», y por eso hay un segundo.
+         El que corrige es un control proporcional-derivativo sobre la posición
+         y la velocidad del bol: la parte derivativa es la que importa, porque
+         con sólo la posición el bol pasa de largo y oscila hasta caerse — que
+         es exactamente lo que le pasa a una persona que reacciona tarde. */
+      if (corrige){
+        const k = (v, vv) => Math.max(-0.55, Math.min(0.55, v*7.5 + vv*3.4));
+        DEDO.ix = k(BOL.x, BOL.vx); DEDO.iz = k(BOL.z, BOL.vz);
+      } else DEDO.ix = DEDO.iz = 0;
+      requestAnimationFrame(paso);
+    };
+    paso();
+  }),
+  /* inclina la tabla a mano, para medir la física sin un sensor */
+  incl: (x, z) => { DEDO.ix = x; DEDO.iz = z; return inclinacion(); },
+  /* dispara un susto por id y devuelve lo que hizo */
+  /* comprueba que los treinta y dos caen DENTRO del cuadro. Es la única forma
+     de que no vuelva a pasar lo de la esquina en x = 1,155: un susto fuera de
+     pantalla no falla, no avisa, y se ve igual que uno que no se disparó. */
+  sustosEnCuadro: () => {
+    const fuera = [], v = new T.Vector3();
+    cam.updateMatrixWorld(true);
+    for (const s of SUSTOS){
+      if (['cara','sombra','bicho','modelo'].indexOf(s.fam) < 0) continue;
+      /* `atras` está DETRÁS del lente a propósito: es un susto que no se ve y
+         que sólo suena y sacude. Contarlo como «fuera de cuadro» sería exigirle
+         a la comprobación que desapruebe justo lo que se buscaba. */
+      if (s.donde === 'atras') continue;
+      const p = DONDE[s.donde]; if (!p) { fuera.push(s.donde + ':sin sitio'); continue; }
+      v.set(p[0], p[1], p[2]).applyMatrix4(cam.matrixWorld).project(cam);
+      const x = (v.x+1)/2, y = (1-v.y)/2;
+      if (x < 0.02 || x > 0.98 || y < 0.02 || y > 0.98 || v.z > 1)
+        fuera.push(s.fam + ':' + s.donde + ' → ' + x.toFixed(2) + ',' + y.toFixed(2));
+    }
+    return JSON.stringify({ mira: SUSTOS.filter(s => ['cara','sombra','bicho','modelo'].indexOf(s.fam) >= 0).length,
+                            fuera: fuera.length, cuales: fuera });
+  },
+  /* dispara un susto y lo DEJA quieto, para poder fotografiarlo */
+  sustoFijo: (id) => { const s = SUSTOS[id % SUSTOS.length];
+                   if (ACT.s){ if (ACT.obj) cam.remove(ACT.obj); ACT.obj = null; ACT.s = null; }
+                   disparaSusto(s); ACT.fijo = true;
+                   if (ACT.obj){ ACT.obj.scale.setScalar(1.15); ACT.obj.visible = true; }
+                   return JSON.stringify({ id: s.id, fam: s.fam, donde: s.donde }); },
+  sustoFuera: () => { if (ACT.obj) cam.remove(ACT.obj);
+                      ACT.obj = null; ACT.s = null; ACT.fijo = false; return true; },
+  susto: (id) => { const s = SUSTOS[id % SUSTOS.length];
+                   if (ACT.s){ if (ACT.obj) cam.remove(ACT.obj); ACT.obj = null; ACT.s = null; }
+                   disparaSusto(s);
+                   return JSON.stringify({ id: s.id, fam: s.fam, donde: s.donde,
+                                           sac: [+ACT.sac.x.toFixed(2), +ACT.sac.z.toFixed(2)] }); },
+  /* dónde CAE en pantalla el susto que está activo, y si el material se ve.
+     Un susto que se dispara y no se ve es indistinguible de uno que no se
+     disparó, y las dos cosas se arreglan en sitios distintos. */
+  dondeSusto: () => {
+    if (!ACT.obj) return JSON.stringify({ hay: false, activo: ACT.s ? ACT.s.id : -1 });
+    const v = new T.Vector3();
+    ACT.obj.updateMatrixWorld(true);
+    ACT.obj.getWorldPosition(v);
+    const l = v.clone(); cam.updateMatrixWorld(true);
+    cam.worldToLocal(l);
+    v.project(cam);
+    const m = ACT.obj.children[0];
+    return JSON.stringify({ hay: true, id: ACT.s.id, fam: ACT.s.fam,
+      local: [+l.x.toFixed(3), +l.y.toFixed(3), +l.z.toFixed(3)],
+      pantalla: [+((v.x+1)/2).toFixed(3), +((1-v.y)/2).toFixed(3)], z: +v.z.toFixed(3),
+      vis: ACT.obj.visible && m.visible, esc: +ACT.obj.scale.x.toFixed(2),
+      op: m.material.opacity, tex: !!m.material.map,
+      texTam: m.material.map ? m.material.map.image.width : 0 });
+  },
+  /* mide el costo de lo caro, apagándolo. `transmission` renderiza la ESCENA
+     ENTERA a un destino aparte por cuadro, sin importar que el objeto sea un
+     disco de cinco centímetros; y la sombra de la linterna es un segundo
+     recorrido de toda la geometría. Las dos cosas se pagan por cuadro y ninguna
+     se ve en `dib`/`tri`, así que hay que medirlas apagándolas. */
+  perf: async (que) => {
+    if (que === 'trans') matAgua.transmission = 0.55;
+    if (que === 'sin_sombra') luz.castShadow = false;
+    if (que === 'todo'){ matAgua.transmission = 0; luz.castShadow = true; }
+    await new Promise(r => setTimeout(r, 1600));
+    return JSON.stringify({ que, fps, dib: DIB, tri: TRI });
+  },
+  /* lee el búfer de verdad con `readPixels`. Un lienzo WebGL sin
+     `preserveDrawingBuffer` sale en cero con `drawImage`, así que ésta es la
+     única forma de saber si el pasillo está iluminado o si está negro. */
+  brillo: () => {
+    const gl = ren.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    const p = new Uint8Array(w*h*4);
+    ren.render(escena, cam);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, p);
+    let s = 0, mx = 0, enc = 0;
+    for (let i = 0; i < p.length; i += 4){
+      const v = 0.30*p[i] + 0.59*p[i+1] + 0.11*p[i+2];
+      s += v; if (v > mx) mx = v; if (v > 26) enc++;
+    }
+    const n = p.length/4;
+    return JSON.stringify({ medio: +(s/n).toFixed(1), max: mx|0,
+                            pctEncendido: +(100*enc/n).toFixed(1) });
+  },
+  /* mide los 32 gritos: dispara cada uno y lee el pico del analizador. Un
+     catálogo de gritos que no se mide es un catálogo de gritos que puede tener
+     la mitad en silencio y nadie se entera. */
+  gritos: async () => {
+    armaAudio();
+    if (AUD && AUD.state === 'suspended') await AUD.resume();
+    const out = [];
+    for (let i = 0; i < GRITOS.length; i++){
+      const G = grito(i, 1, AUD.currentTime + 0.01);
+      await new Promise(r => setTimeout(r, 190));
+      out.push({ id: i, timbre: G.timbre, f0: +G.f0.toFixed(0),
+                 dur: +G.dur.toFixed(2), q: G.quiebra ? 1 : 0, pico: pico() });
+      await new Promise(r => setTimeout(r, 40));
+    }
+    const p = out.map(o => o.pico);
+    return JSON.stringify({ n: out.length, mudos: p.filter(v => v < 0.02).length,
+      picoMin: Math.min(...p), picoMax: Math.max(...p),
+      timbres: [...new Set(out.map(o => o.timbre))],
+      f0s: [...new Set(out.map(o => o.f0))].length, quiebran: out.filter(o => o.q).length });
+  },
+  /* arma N pasillos con semillas distintas y mide los largos: es la única
+     forma de saber si la prohibición de cruzarse deja el pasillo corto, porque
+     con una sola semilla se ve el caso que tocó y nada más */
+  mapas: (n) => {
+    const L = [], V = [];
+    for (let i = 0; i < (n || 40); i++){
+      const r = armaCamino((i*2654435761 + 7) >>> 0, 120);
+      L.push(r.metros); V.push(r.vueltas);
+    }
+    return JSON.stringify({ n: L.length, min: Math.min(...L), max: Math.max(...L),
+      bajo120: L.filter(v => v < 120).length,
+      vueltasMin: Math.min(...V), vueltasMax: Math.max(...V) });
+  },
+  /* ══════ LA PRUEBA DE QUE NO ESTÁ INVERTIDO ══════
+     El reporte fue «cae la tabla y el bol sube, todo invertido». Lo que hay que
+     comprobar no es el signo de un sensor —cada teléfono reporta lo suyo— sino
+     una invariante que se puede escribir sin ambigüedad:
+
+         EL BOL SE MUEVE HACIA EL LADO BAJO DE LA TABLA QUE SE DIBUJA.
+
+     Así que se toma la tabla YA DIBUJADA, se le saca la normal de su propio
+     cuaternión, se proyecta al plano y se compara con hacia dónde se movió el
+     bol. Si el producto escalar es positivo, dibujo y física coinciden; si es
+     negativo, están invertidos — y da igual de qué lado esté el error. */
+  pruebaTabla: () => {
+    const casos = [[0.30, 0], [-0.30, 0], [0, 0.30], [0, -0.30], [0.21, 0.21]];
+    const out = [];
+    const n = new T.Vector3();
+    for (const [ix, iz] of casos){
+      reiniciaBol();
+      DEDO.ix = ix; DEDO.iz = iz;
+      ponTabla();
+      gTabla.updateMatrixWorld(true);
+      /* la normal de la tabla dibujada, en el marco de la cámara */
+      n.set(0, 1, 0).applyQuaternion(gTabla.quaternion);
+      for (let i = 0; i < 60; i++) pasoBol(1/60, null);
+      const dot = n.x*BOL.x + n.z*BOL.z;
+      out.push({ inc: [ix, iz], normal: [+n.x.toFixed(3), +n.z.toFixed(3)],
+                 bol: [+BOL.x.toFixed(3), +BOL.z.toFixed(3)],
+                 dot: +dot.toFixed(4), ok: dot > 0 });
+    }
+    reiniciaBol(); DEDO.ix = DEDO.iz = 0;
+    return JSON.stringify({ casos: out, todosOk: out.every(o => o.ok) });
+  },
+  /* ¿el jugador camina siempre por dentro del pasillo? Se recorre el largo
+     entero cada cinco centímetros y se mide la distancia a la línea de centro
+     del tramo más cercano. Más de medio ancho = está adentro de una pared. Una
+     diagonal por dentro de un muro dura un segundo y en una foto no se ve. */
+  paredes: () => {
+    let peor = 0, fuera = 0, pasos = 0, dPeor = 0;
+    for (let d = 0; d <= LARGO_TOTAL; d += 0.05){
+      const p = puntoCamino(d);
+      let mejor = 1e9;
+      for (const t of CAMINO){
+        const ax = t.x, az = t.z;
+        const bx = t.x + DIRS[t.dir][0]*t.largo, bz = t.z + DIRS[t.dir][1]*t.largo;
+        const vx = bx-ax, vz = bz-az, wx = p.x-ax, wz = p.z-az;
+        const L2 = vx*vx + vz*vz;
+        const u = Math.max(0, Math.min(1, (wx*vx + wz*vz)/L2));
+        const dx = p.x - (ax + vx*u), dz = p.z - (az + vz*u);
+        mejor = Math.min(mejor, Math.hypot(dx, dz));
+      }
+      pasos++;
+      if (mejor > peor){ peor = mejor; dPeor = d; }
+      if (mejor > ANCHO/2 - 0.05) fuera++;
+    }
+    return JSON.stringify({ pasos, fuera, peor: +peor.toFixed(3),
+                            enMetro: +dPeor.toFixed(1), medioAncho: ANCHO/2 });
+  },
+  /* ¿avanza hacia donde mira? Se compara el rumbo con la dirección en la que de
+     verdad se movió el punto. Un ángulo grande es caminar de costado. */
+  deFrente: () => {
+    let peor = 0, dPeor = 0; const h = 0.05;
+    for (let d = h; d <= LARGO_TOTAL - h; d += 0.05){
+      const p0 = puntoCamino(d - h), p1 = puntoCamino(d + h);
+      const mov = Math.atan2(p1.x - p0.x, p1.z - p0.z);
+      let dif = rumboEn(d) - mov;
+      while (dif > Math.PI) dif -= Math.PI*2;
+      while (dif < -Math.PI) dif += Math.PI*2;
+      dif = Math.abs(dif);
+      if (dif > peor){ peor = dif; dPeor = d; }
+    }
+    return JSON.stringify({ peorGrados: +(peor*180/Math.PI).toFixed(2), enMetro: +dPeor.toFixed(1) });
+  },
+  giro: () => ({ hay: GIRO.hay, listo: GIRO.listo, permiso: GIRO.permiso,
+                 crudo: GIRO.crudo, inc: inclinacion() }),
+  /* mete una orientación falsa, que es la única forma de probar el giroscopio
+     en un contenedor sin sensor */
+  giroFalso: (a, b, g) => { onOrientacion({ alpha: a, beta: b, gamma: g }); return GIRO.hay; },
+  calibrar: () => { calibrar(); return { listo: GIRO.listo, inc: inclinacion() }; },
+  pico: () => pico(),
+  empieza: () => { empieza(); return MODO; },
+  saltarA: (m) => { JUEGO.d = m; return +JUEGO.d.toFixed(1); },
+  pausar: (v) => { PAUSA = !!v; return PAUSA; }
+};
+
+/* ══════════════════════════ ARRANQUE ══════════════════════════ */
+aplicarCalidad();
+pintaIdioma();
+pintaMenu();
+/* el pasillo se arma YA, aunque estemos en el menú: así el menú tiene algo
+   detrás y el primer cuadro de la partida no llega con un tirón de carga */
+armaCamino(12345, 120);
+armaMapa();
+armaCatalogo();
+medir();
+bucle();
+</script>
+</div>
+</body></html>

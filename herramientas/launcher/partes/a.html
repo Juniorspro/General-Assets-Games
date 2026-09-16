@@ -1,0 +1,2246 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no,maximum-scale=1">
+<meta name="theme-color" content="#0a3d6b">
+<title>Aero</title>
+<style>
+/* ══════════════════════ AERO ══════════════════════
+   Frutiger Aero + Liquid Glass. Dos estéticas de dos décadas distintas que
+   comparten una sola idea: el vidrio muestra lo que hay detrás.
+
+   ── LA JERARQUÍA DEL VIDRIO, Y ES UNA DECISIÓN DE COSTO ──
+   `backdrop-filter` con un mapa de desplazamiento refracta de verdad, y cuesta:
+   el navegador tiene que recortar lo de atrás, filtrarlo y desplazarlo por cada
+   pieza. Con treinta iconos en pantalla eso hunde un teléfono.
+   Así que hay dos vidrios: el REFRACTADO va en las piezas grandes y pocas —el
+   reloj, la búsqueda, el dock, los paneles— donde la distorsión del borde se ve;
+   y el LISO —desenfoque y saturación— va en los iconos, que son muchos y chicos
+   y donde una refracción de dos píxeles no se percibe. */
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;
+  background:#0a3d6b;color:#fff;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  user-select:none;-webkit-user-select:none;touch-action:none}
+
+:root{
+  --ins-t:24px; --ins-b:16px;
+  /* ── EL TAMAÑO DEL ICONO Y CUÁNTAS COLUMNAS SON DATOS, NO CONSTANTES ──
+     Estaban escritos en cuatro sitios del CSS y en un `const COLS = 4`. Desde
+     que hay un asistente al que se le puede decir «agrandá las apps», tienen
+     que poder cambiar en caliente y desde un solo lugar; y las filas por página
+     ya se CALCULAN del alto libre, así que agrandar el icono mueve la cuenta
+     sola en vez de cortar la última fila. */
+  --ico:60px; --icoImg:46px; --cols:4;
+  /* ── LA CALIBRACIÓN DEL VIDRIO VIVE EN UNA VARIABLE, Y HACÍA FALTA ──
+     La vuelta pasada se recalibró la regla `.vid.refr` y **no llegó a ninguna
+     de las cuatro piezas grandes**: `vidrioInit()` escribe el filtro como
+     `style.backdropFilter`, o sea un estilo EN LÍNEA, que le gana a cualquier
+     regla. Medido ahora sobre el escritorio, el widget, el dock, el menú y la
+     hoja del asistente seguían en `saturate(2) brightness(1.14)` — justo el
+     número que se había descartado por dejar el dock verde lima.
+     Con la calibración en una variable la lee el CSS y la lee el JS, así que no
+     puede haber dos. */
+  /* dónde y cuánto mide la mascota. Las escribe `mascSitio()` según esté el
+     escritorio o el cajón: acá van los valores del escritorio, que es lo que se
+     ve en el primer cuadro. */
+  --masc-w:214px; --masc-h:292px; --masc-b:132px;
+  /* ── CUÁNTO SE ACERCA LA FOTO CON EL CAJÓN PUESTO ──
+     Estaba en 1,075, o sea **siete y medio por ciento**: medido contra el
+     reposo, eso mueve el 54,6 % de los píxeles más de 8 sobre 255 y lleva la
+     esquina de la foto **37 px** en los 340 ms del viaje. Eso no se lee a
+     profundidad, se lee a que la cámara hizo zoom — y es lo que el dueño
+     reportó con todas las letras. En 1,022 la esquina recorre **11 px** y el
+     medio de la pantalla 4,5: se siente y no se nombra, que es lo que un
+     indicio de profundidad tiene que hacer.
+     Va en una variable porque el horneado del vidrio la LEE (`frostHondo()` en
+     `c.js`): con el número escrito en los dos sitios, cambiarlo acá deja el
+     mapa de bits describiendo una foto que ya no está. */
+  --hondo:1.022;
+  /* los dos velos de arriba y de abajo, en variables porque los LEE el
+     horneado del vidrio (`frostUno()` en `c.js`) */
+  --velo-rgb:3,26,54;
+  --veloT-h:30%; --veloT-a:.50; --veloT-b:.30; --veloT-m:52%;
+  --veloB-h:21%; --veloB-a:.46; --veloB-b:.18; --veloB-m:60%;
+  --v-fil:blur(24px) saturate(120%) brightness(.90);
+  --v-filR:blur(19px) saturate(122%) brightness(.90);
+  --acento:#7fe3ff;
+  --verde:#a8e85c;
+  /* ── UN VIDRIO NO TIÑE: DESENFOCA Y TIENE CANTO ──
+     Es la diferencia entre esto y un panel pintado, y se mide. Con
+     `saturate(200%)` la saturación debajo del widget daba **0,80** contra 0,22
+     del fondo libre: el vidrio multiplicaba el color por 3,6 y lo que se veía
+     era un slab azul, no la foto a través de algo. El dock, sobre el pasto,
+     salía verde lima por lo mismo.
+     Así que la saturación queda apenas por encima de 1 —el vidrio la conserva,
+     no la inventa—, el brillo pone un techo para que el texto blanco se lea, y
+     el trabajo de "esto es vidrio" lo hacen el DESENFOQUE, la REFRACCIÓN del
+     canto y el ESPECULAR del borde, que es como se lee en iOS y en HyperOS. */
+  --v-fondo:rgba(10,38,70,.15);
+  --v-borde:rgba(255,255,255,.55);
+  --v-borde-b:rgba(255,255,255,.12);
+  --v-sombra:0 10px 30px rgba(3,22,46,.30),0 2px 6px rgba(3,22,46,.18);
+}
+
+/* ── EL FONDO ES UNA FOTO, CON UN DEGRADADO DEBAJO ──
+   El degradado no es decoración: es lo que se ve mientras la foto decodifica y
+   lo que queda si no decodifica nunca. Sin él, el primer cuadro del launcher es
+   un rectángulo vacío.
+   La deriva y el acercamiento son `transform` puro, o sea que los resuelve el
+   compositor y no cuestan un cuadro de JavaScript. El `scale(1.06)` de base
+   existe para que la deriva no descubra los bordes.
+
+   ── LA DERIVA VA A ESCALONES, Y ES EL HALLAZGO DE LA VUELTA 130 ──
+   Una animación continua del `transform` de la foto cambia la foto en CADA
+   cuadro, para siempre. Y cada `backdrop-filter` del launcher toma la foto de
+   abajo: o sea que el reloj, la búsqueda, el dock, cada baldosa y —abierto— el
+   cajón entero se volvían a FILTRAR sesenta veces por segundo aunque nadie
+   tocara nada, sólo porque el fondo se corría un centésimo de píxel. Ése es el
+   lag «de fondo» que el banco no puede ver, porque acá dibuja por software y
+   en el teléfono lo paga el compositor. Con `steps(48)` la foto se mueve 48
+   veces en 24 s —un cuarto de píxel cada medio segundo, que no se ve como
+   salto— y entre paso y paso NO CAMBIA: los filtros se rehacen dos veces por
+   segundo y no sesenta.
+   Y debajo de una hoja que la tapa la deriva se pausa del todo: con el cajón
+   abierto, mover la foto era rehacer un desenfoque de 34 px a pantalla
+   completa por cuadro para mostrar algo que no se ve. */
+#fondo{position:fixed;inset:0;z-index:0;
+  background:linear-gradient(180deg,#1d7fd6 0%,#3aa8e6 34%,#2fc4d8 58%,#1f9d84 100%);
+  background-size:cover;background-position:center;
+  transform:scale(1.06);
+  /* ── EL `will-change` APUNTABA A LA PROPIEDAD CONGELADA ──
+     Durante el deslizamiento lo que se mueve es `scale` (el `.hondo`), y la
+     deriva —que es la que anima `transform`— está PAUSADA desde la vuelta 135.
+     Medido a los 120 ms de abrir: `will-change:transform`,
+     `animation-play-state:paused`, `scale:1.06597`. O sea que el aviso estaba
+     puesto sobre lo único que no se movía y faltaba sobre lo único que sí.
+     `scale` es una propiedad aparte de `transform` en CSS, no un valor suyo. */
+  will-change:transform,scale;
+  /* ── LA FOTO TIENE QUE FRENAR CON LA HOJA, NO 80 ms DESPUÉS ──
+     Estaba en .42s contra los .34s del cajón: al cerrar, la foto seguía
+     escalándose ochenta milisegundos después de que la hoja ya había
+     aterrizado, y justo ahí es cuando el vidrio del escritorio vuelve. O sea
+     que los tres `feDisplacementMap` se armaban sobre un respaldo que todavía
+     se estaba moviendo, que es el peor instante posible. Mismo número que la
+     hoja: los dos terminan juntos. */
+  transition:scale .34s cubic-bezier(.22,.9,.24,1)}
+#fondo.ok{animation:deriva 24s steps(48) infinite alternate}
+/* `cajMueve` está en la lista porque el CIERRE saca `body.caj` en su primer
+   cuadro: sin esto, la deriva se DESPAUSA mientras la hoja baja y la foto pasa
+   a tener dos fuentes de transform a la vez —la deriva y el `scale` que se está
+   deshaciendo— durante todo el deslizamiento. Al abrir es al revés: se pausa en
+   el primer cuadro. Era la asimetría más grande entre subir y bajar y no la
+   había visto nadie. */
+/* `abriendo` entra por lo mismo que `cajMueve`: durante esos 170 ms el
+   launcher entero se escala hacia el icono, así que la foto —414.390 px— tendría
+   DOS fuentes de transform a la vez, la deriva y el zoom. Medido con `anims()`
+   a los 80 ms de `body.abriendo`: la deriva seguía corriendo. */
+body.caj #fondo.ok,body.cajMueve #fondo.ok,body.cc #fondo.ok,body.ccMueve #fondo.ok,body.pers #fondo.ok,
+body.fg #fondo.ok,body.bienv #fondo.ok,
+body.abriendo:not(.animViejaV) #fondo.ok{animation-play-state:paused}
+/* ── EL ACERCAMIENTO VA POR `scale`, LA PROPIEDAD INDIVIDUAL ──
+   Estaba escrito como `transform:scale(1.14)`, y una animación sobre
+   `transform` PISA la declaración: el acercamiento no corría nunca. Y llevaba
+   un `filter:saturate() brightness()` que es un filtro más a pantalla completa
+   por cuadro mientras el cajón está abierto, para oscurecer algo que el propio
+   vidrio del cajón ya oscurece con su `brightness(.84)`. `scale` se compone
+   con el `transform` animado, así que sí se ve, y el filtro se va. */
+#fondo.hondo{scale:var(--hondo)}
+/* ── EL LIENZO DEL AGUA VA ENTRE LA FOTO Y LOS VELOS ──
+   Encima del fondo, porque es una copia suya desplazada; debajo de `#oscuro` y
+   de las dos bandas, para que oscurecer el fondo y los degradados de los
+   textos sigan valiendo igual con el agua encendida. (Se probó ponerlo POR
+   ENCIMA del vidrio para que los filtros no se rehicieran: no cambia nada,
+   porque Chrome vuelve a aplicar un `backdrop-filter` cada vez que su
+   rectángulo cae en el área dañada, y un lienzo a pantalla completa la daña
+   entera esté donde esté — ver `r.js`.) Siempre en el documento y
+   transparente: prender y apagar el `display` le pedía al compositor una capa
+   nueva en cada toque. Y `pointer-events:none`, porque el toque que la
+   enciende tiene que seguir llegando a lo que haya debajo — un lienzo que se
+   come el gesto de subir mataría el cajón. */
+#agua{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+/* el velo de oscurecer: una capa encima de la foto y debajo de todo lo demás.
+   Un `filter:brightness()` sobre `#fondo` obligaría al compositor a repintar la
+   foto entera en cada cuadro de la transición. */
+#oscuro{position:fixed;inset:0;z-index:0;pointer-events:none;background:#02121f;
+  opacity:0;transition:opacity .2s}
+#veloT,#veloB{position:fixed;left:0;right:0;z-index:0;pointer-events:none}
+/* El velo se achicó al bajar el tinte del vidrio: con 44% al 60% el cielo
+   entero quedaba embarrado, y el cielo es lo único que este fondo tiene para
+   mostrar. Ahora cubre exactamente lo que lleva texto —barra de estado, widget
+   y búsqueda terminan en el 25% del alto— y suelta el medio. */
+/* ── LOS OCHO NÚMEROS DE LOS VELOS SON VARIABLES PORQUE EL HORNEADO LOS LEE ──
+   Un `backdrop-filter` desenfoca TODO lo que hay debajo de la pieza, y debajo
+   de las tres piezas del escritorio están estos dos velos. El horneado sale de
+   la foto cruda: sin reponerlos, el widget salía **42,3 de 255 más claro** que
+   su propio filtro —medido— porque le faltaba justo el velo que oscurece la
+   franja de arriba. Es el mismo defecto que la vuelta 131 encontró en la hoja
+   del centro de control, en otro sitio.
+   Escritos dos veces —acá y en `frostUno()`— el día que se toque uno el
+   horneado pasa a describir una pantalla que no existe. Se declaran una vez. */
+#veloT{top:0;height:var(--veloT-h);
+  background:linear-gradient(180deg,
+    rgba(var(--velo-rgb),var(--veloT-a)) 0%,
+    rgba(var(--velo-rgb),var(--veloT-b)) var(--veloT-m),
+    rgba(var(--velo-rgb),0) 100%)}
+#veloB{bottom:0;height:var(--veloB-h);
+  background:linear-gradient(0deg,
+    rgba(var(--velo-rgb),var(--veloB-a)) 0%,
+    rgba(var(--velo-rgb),var(--veloB-b)) var(--veloB-m),
+    rgba(var(--velo-rgb),0) 100%)}
+@keyframes deriva{
+  from{transform:scale(1.06) translate3d(-.9%,-.5%,0)}
+  to  {transform:scale(1.09) translate3d(.9%,.6%,0)}}
+/* quien pidió menos movimiento no ve ninguno */
+@media (prefers-reduced-motion:reduce){#fondo.ok{animation:none}}
+#svgdefs{position:fixed;width:0;height:0;pointer-events:none}
+
+#capa{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;
+  padding:var(--ins-t) 0 var(--ins-b)}
+
+/* ══════════ EL VIDRIO ══════════ */
+.vid{position:relative;background:var(--v-fondo);
+  border:1px solid transparent;
+  border-radius:26px;
+  /* las cinco sombras internas son el ESPESOR: sin ellas el vidrio es un
+     rectángulo translúcido y no una pieza con canto. De arriba abajo: el filo
+     de arriba, el filo de abajo —que en un vidrio de verdad recoge la luz del
+     fondo y por eso no es negro—, el contorno entero, la luz que se acumula
+     por dentro del canto de arriba, y la sombra que le da fondo al de abajo. */
+  box-shadow:var(--v-sombra),
+    inset 0 1px 0 rgba(255,255,255,.62),
+    inset 0 -1px 0 rgba(255,255,255,.20),
+    inset 0 0 0 1px rgba(255,255,255,.07),
+    inset 0 7px 18px -9px rgba(255,255,255,.38),
+    inset 0 -9px 20px -11px rgba(2,22,48,.42);
+  backdrop-filter:var(--v-fil);
+  -webkit-backdrop-filter:var(--v-fil);
+  overflow:hidden}
+/* ── EL BORDE ES UN DEGRADADO Y NO UN COLOR ──
+   Un borde parejo se lee a contorno dibujado; el canto de un vidrio de verdad
+   brilla arriba a la izquierda y se apaga abajo a la derecha, porque es una
+   superficie curva reflejando una luz. Va con `mask` de dos capas, que es la
+   única forma de tener un degradado SOLO en el borde. */
+.vid::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;
+  background:linear-gradient(140deg,rgba(255,255,255,.95) 0%,rgba(255,255,255,.42) 20%,
+    rgba(255,255,255,.05) 48%,rgba(255,255,255,.14) 74%,rgba(255,255,255,.40) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask-composite:exclude;pointer-events:none;z-index:2}
+/* ── EL ESPECULAR ES UNA FRANJA FINA, NO UN LAVADO ──
+   Un degradado blanco sobre la mitad de arriba de la pieza no se lee a reflejo:
+   se lee a que el vidrio está sucio, y encima aclara justo donde va el texto.
+   Un vidrio real concentra la luz en los primeros milímetros del canto. Por eso
+   son dos franjas cortas —una arriba y una abajo, la de abajo mucho más floja,
+   que es la que recoge el fondo— y el medio queda limpio. */
+.vid::after{content:'';position:absolute;inset:0;
+  border-radius:inherit;pointer-events:none;z-index:1;
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,.10) 9%,
+      rgba(255,255,255,0) 20%),
+    linear-gradient(0deg,rgba(255,255,255,.16) 0%,rgba(255,255,255,.04) 7%,
+      rgba(255,255,255,0) 16%)}
+.vid>*{position:relative;z-index:3}
+
+/* ── EL REFRACTADO ──
+   Además del desenfoque, el fondo se DESPLAZA cerca del canto: eso es lo que
+   hace que el borde se lea a lente y no a recorte.
+   OJO: `.vid.refr` son dos clases y le gana a `.vid`, así que su filtro no es
+   un agregado sino un REEMPLAZO. Escrito con otro `saturate`/`brightness`, las
+   cuatro piezas grandes —widget, búsqueda, dock y menú— quedaban con una
+   calibración que la de `.vid` ya había descartado, y el dock salía verde.
+   Lo único que puede diferir es el desenfoque, y por una razón: el
+   desplazamiento ya revuelve el fondo, así que hace falta menos. */
+.vid.refr{backdrop-filter:var(--v-mapa, url(#refr)) var(--v-filR);
+  -webkit-backdrop-filter:var(--v-mapa, url(#refr)) var(--v-filR)}
+
+/* ══════════ BARRA DE ARRIBA ══════════
+   ── EN EL TELÉFONO NO SE DIBUJA, PORQUE YA ESTÁ DIBUJADA ──
+   El launcher va de borde a borde, o sea que la barra de estado del SISTEMA
+   —con su hora y su batería— queda encima de la página. Con ésta puesta
+   debajo, el reporte fue exacto: «la batería, la hora y eso ya lo vemos». Se
+   queda sólo en la vista previa del navegador, donde no hay barra de sistema y
+   sin ella la maqueta no se parece a un teléfono. */
+body.and #barra{display:none}
+#barra{flex:0 0 auto;display:flex;align-items:center;gap:8px;
+  padding:2px 20px 0;font-size:13px;font-weight:700;letter-spacing:.04em;
+  color:#fff;text-shadow:0 1px 2px rgba(0,32,64,.9),0 0 8px rgba(0,40,80,.6)}
+#bIzq{flex:1;opacity:.9}
+#bat{display:flex;align-items:center;gap:5px}
+#batCaja{width:26px;height:13px;border:1.6px solid rgba(255,255,255,.85);
+  border-radius:4px;position:relative;padding:1.6px}
+#batCaja::after{content:'';position:absolute;right:-4px;top:3px;width:2.4px;height:5px;
+  background:rgba(255,255,255,.85);border-radius:0 2px 2px 0}
+#batLlena{height:100%;border-radius:1.5px;background:#b8f078;
+  box-shadow:0 0 6px rgba(184,240,120,.8);transition:width .4s}
+
+/* ══════════ RELOJ ══════════ */
+/* ── EL WIDGET ──
+   Con el inicio sin apps, esto es lo único que hay arriba del dock, así que
+   tiene que valer la pantalla que ocupa: hora grande, día y fecha, el aro de
+   batería con su porcentaje y el saludo de la franja del día. Todo sale de
+   datos que el launcher YA tiene — nada de red, nada de permisos nuevos. */
+/* la franja: los widgets puestos, apilados, con el mismo margen del reloj */
+#wid{flex:0 0 auto;display:flex;flex-direction:column;gap:10px;margin:0 18px 10px}
+.wCard{padding:13px 16px;border-radius:24px;display:flex;align-items:center;gap:14px;
+  position:relative;overflow:hidden}
+#reloj{margin:0;padding:13px 16px;border-radius:24px;
+  display:flex;align-items:center;gap:14px}
+#wIzq{flex:1;min-width:0}
+#wDer{flex:0 0 auto;width:70px;position:relative;
+  display:flex;flex-direction:column;align-items:center;justify-content:center}
+#wAro{width:52px;height:52px;transform:rotate(-90deg)}
+#wAro circle{fill:none;stroke-width:5;stroke-linecap:round}
+#wAro .wPista{stroke:rgba(255,255,255,.28)}
+/* 2πr con r=25 → 157,08: el trazo se recorta moviendo el offset */
+#wAro .wCarga{stroke:#b8f078;stroke-dasharray:157.08;stroke-dashoffset:47;
+  filter:drop-shadow(0 0 5px currentColor);transition:stroke-dashoffset .5s ease}
+#wPct{position:absolute;top:17px;font:800 13px/1 system-ui,sans-serif;
+  text-shadow:0 1px 2px rgba(0,32,64,.95),0 0 9px rgba(0,38,76,.8)}
+#wSaludo{margin-top:3px;font-size:9px;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;opacity:.94;text-align:center;line-height:1.15;
+  text-shadow:0 1px 2px rgba(0,32,64,.95),0 0 9px rgba(0,38,76,.85)}
+/* ── LA SOMBRA SE CALIBRA CONTRA EL CIELO MÁS CLARO, NO CONTRA EL DE AHORA ──
+   Todo el texto de este launcher es blanco y el fondo cambia solo a lo largo
+   del día: a las 13 el cielo llega a rgb(218,237,239) y una nube encima de eso
+   es casi blanco puro. Medido, con la sombra floja la fecha desaparecía sobre
+   la nube que cae a la derecha del reloj. Van dos: una dura y pegada, que da el
+   filo, y una ancha y difusa, que baja el fondo alrededor de la letra. */
+#hora{font-size:50px;font-weight:200;line-height:.92;letter-spacing:-.03em;
+  text-shadow:0 1px 2px rgba(0,38,74,.55),0 2px 20px rgba(0,44,84,.75)}
+#fecha{font-size:11px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;
+  text-shadow:0 1px 2px rgba(0,34,68,.85),0 0 10px rgba(0,40,80,.65);
+  opacity:.88;padding-bottom:9px;line-height:1.45}
+
+/* ══════════ BÚSQUEDA ══════════ */
+#buscaCaja{flex:0 0 auto;margin:12px 20px 0;padding:0 16px;height:46px;
+  display:flex;align-items:center;gap:10px;border-radius:23px}
+#buscaCaja svg{flex:0 0 auto;opacity:.85}
+#busca{flex:1;background:transparent;border:0;outline:0;color:#fff;
+  font-size:15px;font-weight:500;font-family:inherit;min-width:0;
+  text-shadow:0 1px 2px rgba(0,32,64,.9),0 0 10px rgba(0,38,76,.7)}
+#busca::placeholder{color:rgba(255,255,255,.74)}
+
+/* ══════════ PÁGINAS DE ICONOS ══════════ */
+/* ── EL INICIO NO TIENE APPS ──
+   Se pidió así, y cambia lo que la hoja es: ya no es una reja que hay que
+   llenar sino el aire entre el widget y el dock. Sigue existiendo porque es
+   donde se registra el gesto de subir y donde vive el fondo que se ve. */
+#hoja{flex:1 1 auto;min-height:0;position:relative;overflow:hidden}
+#tira{display:flex;height:100%;will-change:transform}
+.pag{flex:0 0 100%;height:100%;display:grid;
+  grid-template-columns:repeat(var(--cols),1fr);align-content:start;
+  gap:6px 0;padding:10px 8px}
+
+.ap{display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:8px 2px 6px;border-radius:20px;cursor:pointer;position:relative}
+.ap:active{transform:scale(.92)}
+.ap{transition:transform .16s cubic-bezier(.2,.9,.3,1.4)}
+/* ── EL ICONO VIVE EN UNA BALDOSA DE VIDRIO ──
+   Frutiger Aero es skeuomórfico: cada icono es un objeto con volumen, brillo y
+   sombra propia. La baldosa da eso sin tocar el icono de la app, que llega como
+   viene del sistema. */
+/* ── LA TEXTURA DEL ICONO ──
+   El agua, el pasto o las nubes DETRÁS del icono de cada app. Va en el CSS y no
+   en el nodo: así alcanza a todas las apps instaladas y no a una lista de
+   cincuenta que envejece con cada app que se instala. Lo que se ve encima es el
+   icono real del sistema, o sea el logo de verdad, con el fondo Aero. */
+.baldosa{width:var(--ico);height:var(--ico);border-radius:calc(var(--ico)*.283);
+  position:relative;
+  background-color:rgba(255,255,255,.16);
+  background-image:var(--bTex, none);
+  background-size:cover;background-position:center;
+  box-shadow:0 5px 14px rgba(4,26,52,.30),
+    inset 0 1px 0 rgba(255,255,255,.60),
+    inset 0 -6px 12px rgba(0,40,80,.10);
+  backdrop-filter:blur(12px) saturate(120%) brightness(.92);
+  -webkit-backdrop-filter:blur(12px) saturate(120%) brightness(.92);
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+/* ── LA BALDOSA DEL PACK AERO ──
+   Trae su propia foto de fondo, así que es OPACA: el `backdrop-filter` de
+   `.baldosa` sería un desenfoque de lo que hay detrás de algo que tapa lo que
+   hay detrás. Y no es un matiz de estilo: cada baldosa con filtro es una
+   pasada más que el compositor tiene que rehacer cada vez que algo de abajo se
+   mueve — o sea en cada cuadro del agua, treinta veces. */
+.baldosa.aero{backdrop-filter:none;-webkit-backdrop-filter:none;
+  background-color:transparent}
+.glf{width:64%;height:64%;fill:#fff;
+  filter:drop-shadow(0 2px 3px rgba(0,30,60,.42)) drop-shadow(0 0 1px rgba(0,30,60,.30))}
+/* ── EL BRILLO YA VIENE EN LA BALDOSA ──
+   Las cuatro de la vuelta 125 son vidrio Aero generado y traen su propia barrida
+   especular. Con el 30 % que le pone `.baldosa` encima quedan DOS brillos, y el
+   de arriba lava justo la mitad donde el generado tiene su gracia. Queda un
+   resto, que es lo que sigue separando el canto de arriba del fondo. */
+.baldosa.aero::after{height:36%;
+  background:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,0))}
+/* ── LA BALDOSA GENERADA NO LLEVA NADA ENCIMA ──
+   La celda recortada YA es la baldosa: trae su canto redondeado, su filo
+   blanco, su barrida especular y sus gotas. El `box-shadow` interior de
+   `.baldosa` y el `::after` de `.aero` serían un segundo canto y un segundo
+   brillo dibujados encima del primero, corridos unos píxeles — que es lo que
+   se lee como «icono pegado sobre otro icono». Queda sólo la sombra de
+   contacto, que es lo único que la despega del fondo de pantalla. */
+.baldosa.gen{box-shadow:0 5px 14px rgba(4,26,52,.30);background-color:transparent}
+.baldosa.gen::after{display:none}
+/* ══════════ LOS PACKS ══════════
+   ── VIDRIO PURO ──
+   Pedido textual: «el fondo puro líquid glass». O sea que la baldosa NO trae
+   foto: deja su `backdrop-filter` puesto y lo que se ve detrás del glifo es el
+   fondo de pantalla desenfocado y desaturado. Eso es lo que hace que el icono
+   sea del fondo y no un cuadrado pegado encima — y es la única baldosa del
+   launcher que cambia con el fondo de pantalla sin que nadie la toque.
+   El canto es el que hace que se lea a vidrio y no a un agujero: filo blanco
+   arriba, contorno, y la luz que se acumula por dentro del canto de arriba. */
+/* ── EL VIDRIO ABSORBE LUZ, Y ESO NO ES DECORACIÓN ──
+   Medido sobre la baldosa peor —la que cae encima de la nube más clara del
+   fondo— el glifo blanco daba 2,61:1 de contraste, y el piso aceptado para un
+   objeto gráfico es 3:1. La palanca correcta no es oscurecer la baldosa con un
+   color encima —eso deja de ser vidrio— sino bajarle el `brightness` al filtro,
+   que es literalmente lo que hace un vidrio: se come parte de la luz. */
+.baldosa.vidrioPuro{
+  backdrop-filter:blur(14px) saturate(125%) brightness(.72);
+  -webkit-backdrop-filter:blur(14px) saturate(125%) brightness(.72);
+  background-color:rgba(255,255,255,.10);
+  box-shadow:0 6px 16px rgba(4,26,52,.34),
+    inset 0 1.5px 0 rgba(255,255,255,.78),
+    inset 0 0 0 1px rgba(255,255,255,.20),
+    inset 0 10px 18px -10px rgba(255,255,255,.42),
+    inset 0 -8px 14px rgba(0,40,80,.14)}
+.baldosa.vidrioPuro::after{height:44%;
+  background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,.04) 70%,rgba(255,255,255,0))}
+/* ── LAS TRES CARAS DIBUJADAS, PARA QUE SIETE PACKS SEAN SIETE ──
+   Son el respaldo de `bliss`, `tinta` y `neon` mientras su foto no esté. Van
+   con `aero`, o sea opacas y con el `backdrop-filter` apagado: la baldosa ya no
+   deja pasar el fondo, así que no cuesta una pasada de filtro por icono.
+   Y las tres tienen que separarse **de una ojeada y a 60 px**, que es todo lo
+   que mide un icono en el cajón: no alcanza con cambiar el tono, hay que
+   cambiar de familia. Bliss es la loma clara —verde abajo, cielo arriba—,
+   tinta es una losa oscura mate, y neon es casi negro con el canto encendido
+   del color de acento. */
+.baldosa.pkBliss{
+  background-image:linear-gradient(178deg,#7ec6f2 0%,#a8dcf6 38%,#79bf5a 62%,#4e9a3c 100%);
+  box-shadow:0 6px 16px rgba(4,26,52,.34),
+    inset 0 1.5px 0 rgba(255,255,255,.72),
+    inset 0 0 0 1px rgba(255,255,255,.18)}
+/* ── LA CARA DE RESPALDO DEL PACK DE CRISTAL ──
+   Va SIN fondo opaco a propósito: la baldosa conserva su `backdrop-filter`, o
+   sea que lo que se ve por dentro es el fondo de pantalla desenfocado, igual
+   que en la celda generada. Lo único que se dibuja es lo que un vidrio agrega:
+   el canto muy claro —el bisel de la celda mide (207,211,216) medido sobre la
+   hoja— y la barrida especular de la esquina de arriba. */
+.baldosa.pkCristal{
+  background-image:linear-gradient(147deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,.13) 26%,
+    rgba(255,255,255,0) 27%,rgba(255,255,255,0) 100%);
+  box-shadow:0 6px 16px rgba(0,6,14,.42),
+    inset 0 2px 0 rgba(232,240,250,.86),
+    inset 0 -2px 0 rgba(198,214,232,.46),
+    inset 0 0 0 1.5px rgba(214,228,244,.52),
+    inset 0 0 12px rgba(255,255,255,.16)}
+.baldosa.pkTinta{
+  background-image:linear-gradient(180deg,#2b3a4d 0%,#1b2635 62%,#141c27 100%);
+  box-shadow:0 6px 16px rgba(0,10,22,.42),
+    inset 0 1.5px 0 rgba(255,255,255,.28),
+    inset 0 0 0 1px rgba(255,255,255,.10)}
+/* el canto va FUERTE a propósito: al lado de la losa de tinta, un neón con el
+   borde discreto se distingue a tamaño completo y **no a 60 px**, que es lo que
+   mide un icono en el cajón. El contorno de dos píxeles y el halo hacia afuera
+   son lo que lo separa de una ojeada. */
+.baldosa.pkNeon{
+  background-image:radial-gradient(120% 100% at 50% 0%,
+    color-mix(in srgb, var(--acento) 20%, #0a0d12) 0%, #07090d 72%);
+  box-shadow:0 6px 16px rgba(0,0,0,.5),
+    inset 0 0 0 2px var(--acento),
+    inset 0 2px 0 rgba(255,255,255,.5),
+    inset 0 -12px 20px -8px color-mix(in srgb, var(--acento) 40%, transparent),
+    0 0 14px -1px color-mix(in srgb, var(--acento) 55%, transparent)}
+/* el brillo de arriba es la barrida especular del vidrio Aero; en la losa mate
+   de tinta no va, porque una losa mate no tiene barrida */
+.baldosa.pkBliss::after{height:46%;
+  background:linear-gradient(180deg,rgba(255,255,255,.40),rgba(255,255,255,.06) 72%,rgba(255,255,255,0))}
+.baldosa.pkTinta::after{display:none}
+.baldosa.pkNeon::after{height:38%;
+  background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,0))}
+/* la burbuja es la misma pieza redonda: es la forma de las capturas del centro
+   de control, y a 60 px un círculo se lee más limpio que un cuadrado */
+.baldosa.redon{border-radius:50%}
+.baldosa.redon::after{border-radius:50%}
+/* y con tinte oscuro el glifo blanco se lee sobre CUALQUIER fondo de pantalla,
+   que es lo que un cuadrado translúcido claro no garantiza */
+.baldosa.tOscuro{background-color:rgba(6,16,28,.46);
+  backdrop-filter:blur(16px) saturate(112%) brightness(.62);
+  -webkit-backdrop-filter:blur(16px) saturate(112%) brightness(.62)}
+.baldosa.tOscuro::after{background:linear-gradient(180deg,rgba(255,255,255,.20),rgba(255,255,255,0))}
+
+/* ══════════ LA BIENVENIDA ══════════ */
+#bienv{position:fixed;inset:0;z-index:9;display:flex;align-items:center;
+  justify-content:center;padding:18px;opacity:0;pointer-events:none;
+  background:rgba(2,14,30,.52);transition:opacity .34s ease}
+#bienv.on{opacity:1;pointer-events:auto}
+#bvCaja{width:100%;max-width:400px;max-height:92vh;overflow-y:auto;
+  padding:20px 18px 16px;border-radius:28px;
+  background:linear-gradient(180deg,rgba(9,44,84,.46),rgba(6,30,60,.60));
+  backdrop-filter:blur(30px) saturate(120%) brightness(.88);
+  -webkit-backdrop-filter:blur(30px) saturate(120%) brightness(.88);
+  box-shadow:0 24px 60px rgba(2,18,40,.50),inset 0 1px 0 rgba(255,255,255,.30);
+  transform:translateY(16px) scale(.97);transition:transform .34s cubic-bezier(.22,1,.3,1)}
+#bienv.on #bvCaja{transform:none}
+#bvPuntos{display:flex;gap:6px;justify-content:center;padding-bottom:14px}
+#bvPuntos i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.34)}
+#bvPuntos i.act{width:20px;border-radius:3px;background:var(--acento)}
+#bvTit{font-weight:800;font-size:21px;line-height:1.2;text-align:center}
+#bvSub{font-weight:500;font-size:12px;line-height:1.4;opacity:.78;text-align:center;padding:6px 6px 14px}
+#bvOps{display:flex;flex-direction:column;gap:9px}
+/* ── LA OPCIÓN ES SU PROPIA MUESTRA ──
+   La fila no lleva un rótulo con un cuadradito de color al lado: lleva las
+   cuatro baldosas que ese pack va a dibujar de verdad. */
+.bvOp{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:18px;
+  background:rgba(255,255,255,.09);cursor:pointer;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
+  transition:background .16s ease,box-shadow .16s ease}
+.bvOp.sel{background:rgba(255,255,255,.18);
+  box-shadow:inset 0 0 0 2px var(--acento),0 0 16px -6px var(--acento)}
+.bvOp span{font-weight:700;font-size:13px;line-height:1.2}
+.bvM{display:flex;gap:6px;flex:0 0 auto}
+.bvM .baldosa{--ico:34px;width:34px;height:34px;border-radius:11px}
+/* ── Y LA REDONDA SIGUE SIENDO REDONDA ──
+   `.bvM .baldosa` y `.baldosa.redon` valen lo mismo, así que gana la que está
+   más abajo: sin esta línea, el pack Burbuja se muestra CUADRADO en la
+   bienvenida y redondo en el cajón, o sea que la muestra miente. */
+.bvM .baldosa.redon{border-radius:50%}
+.bvM .baldosa .glf{width:64%;height:64%}
+#bvPie{display:flex;gap:10px;padding-top:16px}
+.bvBt{flex:1;height:46px;border:0;border-radius:16px;cursor:pointer;
+  font-weight:800;font-size:14px;line-height:1;color:#06263f;background:var(--acento);
+  box-shadow:0 8px 18px rgba(2,18,40,.34)}
+.bvBt.sec{flex:0 0 34%;color:#fff;background:rgba(255,255,255,.14);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+
+/* ══════════ EL CENTRO DE CONTROL ══════════
+   Baja desde arriba, ocupa lo que necesita y deja ver el fondo debajo: es una
+   hoja de vidrio, no una pantalla. El velo de atrás es lo que hace que tocar
+   afuera se lea a «cerrar». */
+#cc{position:fixed;inset:0;z-index:7;pointer-events:none}
+#cc.on{pointer-events:auto}
+/* ── EL VELO ES UNA CAPA CON OPACIDAD, NO UN COLOR DE FONDO QUE CAMBIA ──
+   `background-color` NO ES COMPONIBLE. Animado sobre un `inset:0` obliga a
+   REPINTAR los **367.504 px de la pantalla entera** en cada uno de los ~16
+   cuadros de los 260 ms, y —peor— daña la pantalla entera en cada uno de esos
+   cuadros, o sea que fuerza a rehacer TODOS los `backdrop-filter` de la
+   página aunque ninguno se mueva. Es exactamente el mecanismo que la vuelta
+   130 midió con el lienzo del agua.
+
+   Y no era una sospecha: `anims()` devolvía **`caras: 1` bajando el centro de
+   control y `caras: 0` en los otros seis estados barridos**. De todo el
+   launcher, ésta era la ÚNICA animación no componible que había — y caía justo
+   en el gesto que se reportó.
+
+   Con la opacidad de un pseudo lo resuelve el compositor y no cuesta un
+   repintado. Va en un pseudo y no en `#cc` porque una opacidad sobre el padre
+   se llevaría también a la hoja —que tiene que DESLIZARSE, no fundirse— y
+   además crearía un grupo de composición que le cambia el respaldo al
+   `backdrop-filter` del hijo. */
+#cc::before{content:'';position:absolute;inset:0;
+  background:rgba(2,14,30,.42);opacity:0;transition:opacity .26s ease}
+#cc.on::before{opacity:1}
+/* el A/B en el mismo binario: `__A.ccVieja(true)` devuelve el velo viejo. Sin
+   esto, «mejoró» sería un recuerdo y no una medición. */
+body.ccViejaV #cc::before{display:none}
+body.ccViejaV #cc{background:rgba(2,14,30,0);transition:background .26s ease}
+body.ccViejaV #cc.on{background:rgba(2,14,30,.42)}
+/* ── CERRADO NO CUESTA UNA PASADA DE FILTRO ──
+   Es la regla de la vuelta 123: un `backdrop-filter` sobre una pieza escondida
+   se compone igual, y en este launcher lo que cuesta es la PASADA y no el
+   radio. La hoja mide 412 × 481 px, o sea la segunda pieza más grande después
+   del cajón: dejarla filtrando todo el tiempo para no mostrar nada sería
+   deshacer justo lo que esa vuelta midió. `visibility` además la saca del
+   compositor, que `transform` fuera de pantalla no garantiza. */
+#cc:not(.on){visibility:hidden}
+#cc:not(.on) #ccHoja{backdrop-filter:none;-webkit-backdrop-filter:none}
+#bienv:not(.on){visibility:hidden}
+#bienv:not(.on) #bvCaja{backdrop-filter:none;-webkit-backdrop-filter:none}
+/* ── Y TIENE QUE TAPAR ──
+   La primera versión iba al 13 % de blanco y el widget del reloj y la barra de
+   búsqueda se leían A TRAVÉS de la hoja: dos relojes y dos fechas en el mismo
+   sitio, que no es vidrio, es una hoja que no llegó. El tinte es el mismo
+   degradado del cajón —que ya está calibrado contra este fondo— más el
+   desenfoque, que es lo que de verdad separa una capa de la otra. */
+#ccHoja{position:absolute;left:0;right:0;top:0;
+  padding:calc(var(--ins-t,24px) + 14px) 14px 10px;
+  border-radius:0 0 30px 30px;
+  background:linear-gradient(180deg,rgba(9,44,84,.40) 0%,rgba(8,38,74,.50) 45%,rgba(6,30,60,.60) 100%);
+  backdrop-filter:blur(34px) saturate(118%) brightness(.84);
+  -webkit-backdrop-filter:blur(34px) saturate(118%) brightness(.84);
+  box-shadow:0 18px 42px rgba(2,18,40,.42),
+    inset 0 -1.5px 0 rgba(255,255,255,.34),
+    inset 0 1px 0 rgba(255,255,255,.30);
+  transform:translateY(-102%);transition:transform .34s cubic-bezier(.22,1,.3,1)}
+#cc.on #ccHoja{transform:translateY(0)}
+/* ── Y EL VIDRIO DE LA HOJA SE HORNEA, IGUAL QUE EL DEL CAJÓN ──
+   Un `backdrop-filter` sobre algo que se TRASLADA se rehace en cada cuadro por
+   construcción: el rectángulo mira otra parte del fondo. Medido, la hoja son
+   **288.220 px de desenfoque de 34 px rehechos veinte veces** en los 340 ms de
+   cada viaje, más las tres piezas del escritorio detrás: 384.621 px por cuadro
+   contra los 96.401 del escritorio quieto.
+
+   Y NO SE PUEDE ARREGLAR APAGÁNDOLO: fotografiado sin filtro, el fondo se lee
+   NÍTIDO a través de la hoja —los peces, el widget, dos relojes en el mismo
+   sitio— que es exactamente lo que el comentario de arriba dice que no puede
+   pasar. La hoja depende del desenfoque para tapar; su degradado solo va al
+   40-60 %.
+
+   Lo que sí se puede es calcularlo UNA VEZ: el fondo es una foto estática y la
+   deriva está pausada con el centro puesto, así que las veinte pasadas de cada
+   viaje calculan siempre lo mismo. Es el horneado de la vuelta 131, y es
+   LITERALMENTE la misma imagen —`cajFrostHornea` desenfoca la pantalla
+   entera— colocada desde arriba. Ver `cajFrostHornea` en `c.js`.
+
+   Mientras viaja, el mapa de bits se traslada con la hoja y muestra la parte de
+   arriba de la foto en vez de lo que hay detrás en ese instante. Es el mismo
+   precedente que la vuelta 131 dejó anotado y aceptado para el cajón, y acá es
+   más benigno: la hoja ESTÁ arriba, así que la parte de arriba de la foto es
+   aproximadamente lo que tiene detrás. */
+/* Y LLEVA EL VELO ADENTRO, que es la parte que no es obvia: el
+   `backdrop-filter` vivo desenfoca TODO lo que hay debajo de la hoja, y debajo
+   está el velo de `#cc::before`. El horneado sale de la foto CRUDA, así que sin
+   reponerlo la hoja queda más clara — medido, [63,89,120] el vivo contra
+   [83,123,170] el horneado, con el fondo congelado y **0,0 de diferencia fuera
+   de la hoja**, o sea que la medición es del vidrio y no de la deriva.
+   El color es el del velo pasado por el mismo filtro que el horneado
+   (`saturate(118%) brightness(.84)` sobre `rgb(2,14,30)`), y va como capa
+   propia porque el degradado del tinte es un valor vivo del CSS. */
+body.frost:not(.ccViejaV) #ccHoja{
+  background-image:linear-gradient(180deg,rgba(9,44,84,.40) 0%,rgba(8,38,74,.50) 45%,rgba(6,30,60,.60) 100%),
+    linear-gradient(rgba(0,12,28,.42),rgba(0,12,28,.42)),var(--cajFrost);
+  background-size:auto,auto,100% 100vh;
+  background-position:top,top,top;background-repeat:no-repeat;
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+#ccTop{display:grid;grid-template-columns:auto 1fr auto;align-items:baseline;
+  gap:0 10px;padding:0 6px 12px}
+#ccHora{font-weight:800;font-size:34px;line-height:1;letter-spacing:-.5px;
+  text-shadow:0 1px 0 rgba(0,20,40,.34),0 2px 12px rgba(0,20,40,.30)}
+#ccFecha{font-weight:600;font-size:12px;line-height:1.2;opacity:.86}
+#ccBat{font-weight:700;font-size:13px;line-height:1;opacity:.92}
+/* ── LOS DOS DESLIZADORES SON PASTILLAS Y NO RANURAS ──
+   El dedo va sobre la pastilla entera: una ranura de cuatro píxeles con un
+   pomo es imposible de agarrar de primera en un teléfono, y acá se agarra
+   justo cuando la pantalla está a oscuras o el volumen molesta. */
+#ccSlids{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 4px 12px}
+.ccSl{position:relative;height:56px;border-radius:18px;overflow:hidden;
+  background:rgba(255,255,255,.12);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.42),inset 0 0 0 1px rgba(255,255,255,.16),
+    inset 0 -8px 14px rgba(0,40,80,.14);
+  display:flex;align-items:center;touch-action:none;cursor:pointer}
+.ccSlF{position:absolute;left:0;top:0;bottom:0;width:50%;
+  background:linear-gradient(180deg,rgba(255,255,255,.52),rgba(255,255,255,.24));
+  transition:width .06s linear}
+.ccSlI{position:relative;padding-left:14px;font-size:19px;
+  text-shadow:0 1px 2px rgba(0,20,40,.44)}
+#ccReja{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 6px;padding:0 2px 8px}
+.ccB{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.ccB .ccGl{width:26px;height:26px;fill:#fff;
+  filter:drop-shadow(0 1px 2px rgba(0,30,60,.42))}
+/* la pastilla redonda del interruptor: es la misma pieza de vidrio que la
+   baldosa del pack `burbuja`, así que el centro se lee de la misma familia */
+.ccB::before{content:'';position:absolute}
+.ccB{position:relative;padding-top:52px}
+.ccB .ccGl{position:absolute;top:13px}
+.ccB::before{left:50%;top:0;width:48px;height:48px;margin-left:-24px;border-radius:50%;
+  background:rgba(255,255,255,.13);
+  box-shadow:inset 0 1.5px 0 rgba(255,255,255,.52),inset 0 0 0 1px rgba(255,255,255,.16),
+    inset 0 -7px 12px rgba(0,40,80,.16);
+  transition:background .18s ease,box-shadow .18s ease}
+.ccB.on::before{background:var(--acento);
+  box-shadow:inset 0 1.5px 0 rgba(255,255,255,.66),0 0 16px -2px var(--acento)}
+.ccB:active::before{transform:scale(.93)}
+/* ── EL RÓTULO VA EN DOS LÍNEAS, Y NO ES UN GUSTO ──
+   Con una sola línea y puntos suspensivos, en inglés tres de los doce salían
+   ilegibles —«Mobile ...», «Bluetoo...», «Do not ...»— o sea que el rótulo
+   dejaba de decir qué hace el botón, que es todo su trabajo. Acortar las
+   cadenas arreglaría el inglés y volvería a romper con el próximo idioma; y
+   medir el ancho por rótulo son doce medidas × tres idiomas para algo que el
+   propio navegador sabe hacer. Dos líneas con **alto fijo** los dejan entrar a
+   todos, y el alto fijo es la parte importante: sin él la fila de tres palabras
+   mide más que la de una y la reja da un salto. */
+/* El alto va en `em`: 2,4em con `line-height:1.2` son **dos cajas de línea
+   justas** contadas contra el propio tamaño de letra, así que no hay ningún
+   número que recalcular si mañana cambia el cuerpo. */
+.ccT{font-weight:600;font-size:10px;line-height:1.2;text-align:center;opacity:.9;
+  width:84px;height:2.4em;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+/* ── EL ATAJO LLEVA SU FLECHITA, Y ESO NO ES ADORNO ──
+   Es lo único que separa «esto prende la linterna» de «esto te lleva a donde se
+   prende el wifi». Sin la marca, los doce se leen como llaves y once mienten. */
+.ccB.atajo::after{content:'↗';position:absolute;top:2px;left:calc(50% + 12px);
+  font-weight:700;font-size:10px;line-height:1;opacity:.66;text-shadow:0 1px 2px rgba(0,20,40,.5)}
+/* ── LOS DE ACCESIBILIDAD NO LLEVAN ↗, PORQUE NO ABREN NINGÚN PANEL ──
+   Hacen la cosa: bajan la barra del sistema, muestran recientes o bloquean.
+   Su marca es un punto, y sólo aparece cuando falta el permiso — o sea que la
+   marca dice «esto todavía no funciona» y no «esto es un atajo». */
+.ccB.acc.falta::after{content:'';position:absolute;top:6px;left:calc(50% + 13px);
+  width:6px;height:6px;border-radius:50%;background:#ffd166;
+  box-shadow:0 0 6px rgba(255,209,102,.8)}
+.ccB.acc.falta{opacity:.62}
+/* ── LA LISTA DE NOTIFICACIONES ──
+   Cada fila es una tarjeta de vidrio: icono, título con el tiempo, texto, y la
+   × sólo si esa notificación se puede descartar (las persistentes no). */
+#ccNotis{display:flex;flex-direction:column;gap:7px;padding:4px 2px 10px;
+  max-height:38vh;overflow-y:auto;overscroll-behavior:contain}
+.ccNCab{display:flex;align-items:center;justify-content:space-between;
+  padding:2px 6px 2px;font-weight:800;font-size:10px;line-height:1;letter-spacing:.10em;opacity:.72}
+.ccNLimpia{border:0;background:none;color:#fff;cursor:pointer;
+  font-weight:700;font-size:10px;line-height:1;opacity:.82;padding:4px 2px}
+.ccN{position:relative;display:flex;align-items:center;gap:10px;
+  padding:9px 30px 9px 10px;border-radius:16px;cursor:pointer;
+  background:rgba(255,255,255,.11);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.26),inset 0 0 0 1px rgba(255,255,255,.10)}
+.ccN:active{background:rgba(255,255,255,.20)}
+.ccNIco{width:26px;height:26px;flex:0 0 auto;border-radius:8px;object-fit:contain}
+.ccNTxt{min-width:0;flex:1}
+.ccNT{font-weight:700;font-size:11px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ccNX{font-weight:500;font-size:11px;line-height:1.3;opacity:.80;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ccNX2{position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:22px;height:22px;border:0;border-radius:50%;cursor:pointer;
+  background:rgba(255,255,255,.14);color:#fff;font-weight:700;font-size:14px;line-height:1}
+/* ── Y EL AVISO NO ES UNA LISTA VACÍA ──
+   Sin el permiso del sistema la lista SIEMPRE está vacía, y vacía se lee a «no
+   tenés notificaciones»: es falso y no dice qué hacer. */
+.ccAviso{display:flex;flex-direction:column;gap:9px;padding:12px;border-radius:18px;
+  background:rgba(255,255,255,.10);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+.ccAviso span{font-weight:600;font-size:11px;line-height:1.4;opacity:.88}
+.ccAviso .ccBt{height:38px;border:0;border-radius:13px;cursor:pointer;
+  font-weight:800;font-size:12px;line-height:1;color:#06263f;background:var(--acento)}
+.ccVacio{font-weight:600;font-size:11px;line-height:1.3;opacity:.6;text-align:center;padding:10px 8px}
+#ccPie{font-weight:600;font-size:10px;line-height:1.35;opacity:.62;text-align:center;padding:2px 10px 6px}
+#ccManija{height:22px;display:flex;align-items:center;justify-content:center}
+#ccManija i{width:44px;height:4px;border-radius:3px;background:rgba(255,255,255,.62)}
+
+/* ── SÓLO PARA MEDIR ──
+   Apaga el vidrio de todo lo que lo tiene, que es la única forma de saber qué
+   parte del costo de un cuadro es del agua y qué parte es del compositor
+   rehaciendo treinta desenfoques. No la usa el juego. */
+/* ── SÓLO LAS BALDOSAS QUE SE VEN LLEVAN VIDRIO ──
+   Medido con 150 apps y el cajón abierto: **159 pasadas de `backdrop-filter` y
+   874.179 píxeles filtrados**, y 150 de esas pasadas son las baldosas. La regla
+   de la vuelta 123 sigue valiendo — lo que cuesta es la PASADA, no el radio —
+   así que el problema no es cuánto desenfoca cada una sino que haya ciento
+   cincuenta.
+   En el cajón entran unas quince a la vez. Un `IntersectionObserver` les pone
+   `lejos` a las que están fuera de la ventana y ahí el vidrio no cuesta nada:
+   filtrar lo que nadie ve es trabajo puro. El margen del observador es de
+   cuatro filas, así que ninguna aparece sin vidrio al scrollear. */
+#cajLista .ap.lejos .baldosa{backdrop-filter:none;-webkit-backdrop-filter:none}
+body.sinVidrio *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.sinBald .baldosa{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.sinPanel .vid,body.sinPanel #cajon,body.sinPanel #menu,body.sinPanel .hoja{
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.sinRefr .vid.refr{backdrop-filter:var(--v-filR)!important;
+  -webkit-backdrop-filter:var(--v-filR)!important}
+body.blurBajo{--v-fil:blur(4px) saturate(112%) brightness(.94);
+  --v-filR:blur(4px) saturate(112%) brightness(.94)}
+
+/* ══════════ LO CERRADO NO FILTRA NADA ══════════
+   ── EL HALLAZGO MÁS GRANDE DE LA VUELTA, Y NO SE VE EN NINGUNA CAPTURA ──
+   `#cajon`, `#menu`, `#pers`, `#carp`, `#ini`, `#asis` y `#velo` viven SIEMPRE
+   en el documento: cerrados se corren fuera de pantalla con un `transform` o se
+   apagan con `opacity`. Pero un `backdrop-filter` no se apaga porque el
+   elemento esté corrido: el compositor lo sigue calculando. O sea que el
+   launcher estaba haciendo, en cada cuadro y para siempre, un desenfoque de 34
+   píxeles a pantalla completa (el cajón), cinco refractados con
+   `feDisplacementMap` (las cinco hojas) y un desenfoque más (el velo) para
+   dibujar cosas que NO SE VEN.
+   Un id más una clase le gana a dos clases, así que esto le gana a `.vid.refr`
+   sin un solo `!important`. */
+#cajon:not(.on),#velo:not(.on),#menu:not(.on),#pers:not(.on),#carp:not(.on),
+#ini:not(.on),#asis:not(.on),#fondos:not(.on),#aviso:not(.on),
+#cajon:not(.on) .vid,#cajon:not(.on) .baldosa,
+#asis:not(.on) .vid,#pers:not(.on) .vid,#fondos:not(.on) .vid{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ══════════ EL VIDRIO MIENTRAS EL AGUA CORRE: SE QUEDA ══════════
+   Acá vivía una escalera de tres escalones (`body.aguaN1..3`) que apagaba el
+   vidrio mientras duraba la ráfaga, porque un lienzo que repinta la pantalla
+   obliga a rehacer cada filtro en cada cuadro (medido: 47,6 ms contra 20,8).
+   Desde la vuelta 130 el vidrio se queda: una clase en el `body` recalculaba el
+   estilo del documento entero dos veces por toque y repintaba cada pieza, y
+   además el ajuste que elegía el escalón estaba roto y caía siempre al último.
+   Lo que queda de escalera es sacar la refracción de tres piezas, en línea y
+   sin tocar el desenfoque (ver `aguaRefr` en `r.js`).
+
+   ── LAS BALDOSAS DEL CAJÓN, MIENTRAS EL CAJÓN SE DESLIZA ──
+   Un `backdrop-filter` anidado dentro de otro que se está MOVIENDO es una
+   pasada que se rehace en cada cuadro de la transición, y en el cajón entran
+   unas cuarenta a la vez encima de un desenfoque de 34 px a pantalla completa
+   que también se mueve. Durante los 420 ms de la apertura las baldosas van sin
+   filtro —su fondo de color ya las separa— y lo recuperan al asentarse. */
+#cajon.on.abre .baldosa,#cajon.on.abre #cajBusca{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ── Y EL ESCRITORIO TAMPOCO FILTRA MIENTRAS LA HOJA VIAJA ──
+   Medido con `cajCarga` durante el deslizamiento: **tres pasadas y 96.401 px**,
+   y las tres son `.vid.refr`, o sea que además del desenfoque llevan el
+   `feDisplacementMap` de `url(#refr)` — un filtro de SVG, que es lo que la
+   vuelta 130 anotó que en un WebView puede caerse al procesador.
+
+       #reloj    43.193 px      #dock  36.096 px      #buscaCaja  17.112 px
+
+   Se rehacen en CADA cuadro de los 340 ms, y no por culpa de ellas: el fondo
+   se está acercando (`#fondo.hondo`), o sea que su respaldo cambia. Con el
+   vidrio de la hoja horneado, esto es lo único que quedaba filtrando.
+
+   Y no hace falta que exista: **el dock lo tapa la hoja en los primeros
+   cuadros** y las otras dos a los doscientos y pico de milisegundos. Las tres
+   conservan su tinte, su borde y sus cinco sombras internas —o sea que siguen
+   leyéndose a pieza de vidrio— y lo único que se van son 340 ms de desenfoque
+   detrás de algo que está por taparse.
+
+   Va por clase del `body` y no por `#cajon.on.abre` porque el CIERRE también
+   desliza, y ahí `.on` ya no está. */
+/* y las baldosas del DOCK con ellas: son `.baldosa` y no `.vid`, así que la
+   regla de arriba no las alcanza —medido con el pack `cristal`, cuatro pasadas
+   y 14.400 px seguían vivas durante los 340 ms— y el dock es justamente lo
+   primero que la hoja tapa. */
+body.cajMueve #capa .vid,body.cajMueve #capa .baldosa{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ── Y EL CENTRO DE CONTROL PAGA LO MISMO QUE EL CAJÓN, POR LO MISMO ──
+   Medido a los 90 y a los 260 ms de bajarlo, con `vidrios()`:
+
+       escritorio quieto        3 pasadas ·  96.401 px
+       bajando el centro        4 pasadas · **384.621 px**   (cuatro veces)
+
+   Los 288.220 que aparecen son **la propia hoja**: `#ccHoja` lleva
+   `blur(34px)` y se TRASLADA, y un `backdrop-filter` sobre algo que se mueve
+   se rehace en cada cuadro por construcción — el rectángulo mira otra parte
+   del fondo. Y detrás siguen filtrando el reloj, la búsqueda y el dock, que la
+   hoja va a tapar de todos modos.
+
+   Mientras viaja, ninguno filtra. La hoja conserva su degradado, su borde y
+   sus tres sombras internas —o sea que se sigue leyendo a pieza de vidrio— y
+   lo único que pierde son 340 ms de desenfoque mientras cruza la pantalla.
+   Es el mismo trato de la vuelta 132.
+
+   Va por clase del `body` y no por `#cc.on` porque el CIERRE también desliza,
+   y ahí `.on` ya no está: repartido, la mitad de los casos queda sin cubrir.
+
+   LA HOJA NO ENTRA EN ESTA REGLA, y es la corrección que costó una captura:
+   entre que el launcher arranca y que `cajPrepara` hornea en el ocio hay unos
+   segundos con foto y SIN horneado, y ahí apagarle el filtro la deja
+   transparente — el fondo se lee nítido a través, dos relojes en el mismo
+   sitio. Con el horneado puesto la hoja ya no tiene filtro que apagar, así que
+   la regla no compraría nada y sólo podría romper esa ventana. */
+body.ccMueve:not(.ccViejaV) #capa .vid,body.ccMueve:not(.ccViejaV) #capa .baldosa{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+/* ── Y CON LA HOJA ASENTADA, LO QUE TAPA DEJA DE FILTRAR ──
+   La hoja mide **699 px de alto sobre una pantalla de 892**, así que el reloj y
+   la barra de búsqueda quedan debajo al cien por cien: filtrarlos es trabajo
+   puro. Es la regla de `cajQ` aplicada a lo que de verdad tapa esta hoja, que
+   no es lo mismo que tapa la del cajón.
+
+   ── Y EL DOCK TAMBIÉN, AUNQUE SE VEA, PORQUE TIENE HORNEADO ──
+   Cuando esta regla se escribió el dock conservaba su filtro vivo *porque queda
+   a la vista*, y era lo correcto entonces: apagárselo lo habría dejado sin
+   vidrio. Con el horneado de la vuelta 139 esa disyuntiva no existe — se lee a
+   vidrio igual y no cuesta una pasada. Y el horneado es EXACTO acá: lo que un
+   `backdrop-filter` del dock desenfoca es lo que hay DEBAJO, o sea la foto y
+   sus velos, y el velo del centro (`#cc::before`, z-index 7) está por ENCIMA.
+   Con esto el centro asentado pasa de 1 pasada / 36.096 px a **cero**. */
+body.ccQ:not(.ccViejaV) #reloj,body.ccQ:not(.ccViejaV) #buscaCaja,
+body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #dock{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ── PERO APAGAR EL FILTRO NO PUEDE SER APAGAR EL VIDRIO ──
+   Reportado por el dueño mirando el cajón: *«cuando bajas la ventana de apps
+   los widgets y cristales se vuelven opacos en vez de transparentes»*. Tenía
+   razón, y fotografiado a 412×892 se ve exactamente qué pasa: sin desenfoque,
+   el pasto y un pez del fondo se leen **NÍTIDOS a través del dock**, así que la
+   pieza deja de ser una lámina de vidrio y pasa a ser un contorno dibujado
+   encima de la foto — y las baldosas de adentro, que reciben esa misma foto
+   nítida, se leen a cuadraditos impresos. Medido: entre el viaje y el control,
+   **11,5 % de los píxeles cambian más de 8 sobre 255, con máximo 119**, y todo
+   el cambio cae en dos bandas: el reloj con la búsqueda y el dock.
+
+   Y no alcanza con devolverles el filtro donde se ven, porque el dock se ve
+   durante TODO el viaje del centro de control —la hoja mide 699 px de 892— y
+   eso son 36.096 px de desenfoque por cuadro justo en el gesto que la vuelta
+   138 acababa de llevar de 23 a 60 cuadros por segundo.
+
+   Lo que sí se puede es lo mismo que ya se hizo dos veces: **darles el vidrio
+   HORNEADO**. Las tres piezas no se mueven, así que con `background-attachment:
+   fixed` y `background-size:100vw 100vh` cada una recibe exactamente la franja
+   del horneado que le toca, sin una sola cuenta por pieza y corrigiéndose sola
+   al cambiar de tamaño o de insets. Cero pasadas de filtro y sigue habiendo
+   vidrio.
+
+   LAS BALDOSAS DEL DOCK SE QUEDAN SIN NADA, y es correcto: lo que una baldosa
+   desenfoca es el dock, y el dock ya es un mapa de bits desenfocado. Ponerles
+   el horneado de la FOTO sería desenfocar dos veces la misma imagen y mostrar
+   lo que hay detrás del dock en vez de lo que hay detrás de la baldosa.
+
+   EL TINTE VA COMO CAPA Y NO COMO COLOR, porque el horneado es un JPEG opaco y
+   tapa el `background-color` de `.vid`. Con el color abajo, `--v-fondo` no se
+   vería y las piezas saldrían más claras que su propio filtro.
+
+   `body.frost` es la marca de que hay horneado: sin foto no hay nada que
+   hornear y las reglas de arriba dejan las piezas sin filtro, que es lo que ya
+   hacían. Y `vidFrostV` es el A/B en el mismo binario. */
+body.frost:not(.vidFrostV).cajMueve #capa .vid,
+body.frost:not(.vidFrostV).cajQ #capa .vid,
+body.frost:not(.vidFrostV).ccMueve:not(.ccViejaV) #capa .vid,
+body.frost:not(.vidFrostV).ccQ:not(.ccViejaV) #dock{
+  background-image:linear-gradient(var(--v-fondo),var(--v-fondo)),var(--vidFrost);
+  background-size:auto,100vw 100vh;
+  background-position:left top,left top;
+  background-attachment:scroll,fixed;
+  background-repeat:no-repeat}
+
+/* ── Y CON EL VIDRIO HORNEADO, LAS BALDOSAS TAMPOCO FILTRAN NADA ──
+   Lo que una baldosa del cajón desenfoca es la hoja, y la hoja ya es un mapa de
+   bits desenfocado a 34 px: **desenfocar 12 px lo que ya está desenfocado 34 no
+   cambia la imagen**. Medido apagándolas sobre la misma captura del cajón
+   asentado: **0,40 % de los píxeles cambian, con una media de 0,06 sobre 255**.
+
+   Lo que sí cambia es lo que cuesta, y en dos sitios: las quince a cuarenta
+   pasadas del cajón asentado, y —peor— el ESCALÓN del final del deslizamiento,
+   donde `.abre` se sacaba y las quince se encendían todas en el mismo cuadro,
+   justo cuando la hoja aterriza.
+
+   La regla de `.abre` se queda igual: si no hay foto no hay horneado, y ahí el
+   filtro de la hoja sigue vivo y las baldosas lo siguen anidando. */
+#cajon.hor .baldosa,#cajon.hor #cajBusca{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+
+/* ── Y LA HOJA SE QUEDA PROMOVIDA MIENTRAS SE MUEVE Y MIENTRAS ESTÁ PUESTA ──
+   Sin el `backdrop-filter` la hoja dejó de necesitar una superficie de render
+   propia, así que promoverla pasa a depender de que el navegador reconozca la
+   transición de `transform`. La pista lo dice sin ambigüedad, y de paso le
+   avisa al gestor de baldosas que este contenido va a entrar: lo que la vuelta
+   130 vio en el video del teléfono —«la hoja a mitad de subida con SÓLO DOS
+   baldosas pintadas»— es la firma de un rasterizado que llega tarde.
+   No va permanente: son 412×892 a densidad 3, o sea trece megas de textura, y
+   con el cajón cerrado y asentado no hay nada que sostener. */
+#cajon.on,#cajon.abre{will-change:transform}
+/* SE PROBÓ `will-change:transform` EN LA HOJA Y SE SACÓ, que es lo que
+   corresponde con un ajuste que no mide mejor. La idea era la de la vuelta
+   132: la hoja vive con `visibility:hidden`, así que al abrirla hay que
+   rasterizar de cero 412 × 699 px con dieciséis botones y sus glifos, y una
+   promoción anticipada le avisaría al gestor de baldosas. Medido, el pico del
+   viaje se quedó donde estaba —108 a 183 ms con y sin— y la promoción cuesta
+   trece megas de textura. Lo que sí está medido es que el pico NO es de tener
+   el centro puesto: abierto y quieto da peor 17,5 ms y CERO cuadros perdidos. */
+.baldosa::after{content:'';position:absolute;left:6%;right:6%;top:0;height:46%;
+  border-radius:0 0 60% 60%/0 0 34% 34%;
+  background:linear-gradient(180deg,rgba(255,255,255,.44),rgba(255,255,255,0));
+  pointer-events:none}
+.baldosa img{width:var(--icoImg);height:var(--icoImg);display:block;
+  filter:drop-shadow(0 2px 3px rgba(0,30,60,.35))}
+/* ── SOBRE TEXTURA, EL ICONO NECESITA MÁS SOMBRA ──
+   El agua y el pasto tienen contraste propio: con la sombra floja, un logo claro
+   —que son la mitad— se pierde adentro de las cáusticas. Y un velo oscuro debajo
+   del icono, que es lo que separa la marca del fondo sin taparlo. */
+body.icoTex .baldosa img{filter:drop-shadow(0 2px 5px rgba(0,26,54,.62))
+  drop-shadow(0 0 12px rgba(0,30,62,.45))}
+/* el velo va DENTRO de `--bTex` y no en un `::before`: un pseudo posicionado
+   crea contexto de apilado y le queda ENCIMA a la inicial de la baldosa, que es
+   texto del propio elemento. Medido en la vista previa: las letras salían
+   apagadas justo con la textura puesta. */
+body.icoTex .baldosa{text-shadow:0 1px 3px rgba(0,26,54,.75),0 0 10px rgba(0,30,62,.6)}
+.ap .nom{font-size:11px;font-weight:600;letter-spacing:.01em;max-width:74px;
+  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-shadow:0 1px 2px rgba(0,30,62,.95),0 1px 6px rgba(0,36,72,.85),0 0 14px rgba(0,40,80,.6)}
+
+/* ══════════ PUNTOS DE PÁGINA ══════════ */
+
+.pt{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.32);
+  transition:all .25s}
+.pt.on{background:#fff;width:18px;border-radius:3px;box-shadow:0 0 10px rgba(255,255,255,.8)}
+
+/* ══════════ DOCK ══════════ */
+#dock{flex:0 0 auto;margin:0 14px;padding:10px 6px 8px;border-radius:30px;
+  display:grid;grid-template-columns:repeat(var(--cols),1fr);gap:0}
+#dock.vacio{visibility:hidden}
+
+/* ══════════ CAJÓN ══════════ */
+/* ── LA HOJA ESMERILADA DEJA VER EL FONDO, Y ESO NO ES ADORNO ──
+   Con el tinte al 90% el cajón tapaba el cielo entero y la mitad de arriba del
+   teléfono se volvía un rectángulo azul plano: se perdía justo lo único que
+   este launcher tiene para mostrar. El desenfoque hace el trabajo de separar
+   los iconos del fondo; el tinte sólo tiene que garantizar que el texto blanco
+   se lea sobre lo más claro que el cielo pueda ponerse al mediodía. */
+#cajon{position:fixed;inset:0;z-index:3;transform:translateY(100%);
+  transition:transform .34s cubic-bezier(.22,.9,.24,1);
+  /* ── EL CAJÓN NECESITA MÁS QUE EL INSET ──
+     El inset es donde TERMINA la barra de estado; pegar la búsqueda ahí deja el
+     borde del vidrio rozando los iconos del sistema, que es lo que se vio en el
+     teléfono. Ocho píxeles de aire lo separan sin comerse pantalla. */
+  display:flex;flex-direction:column;padding:calc(var(--ins-t) + 8px) 0 var(--ins-b);
+  background:linear-gradient(180deg,rgba(9,44,84,.34) 0%,rgba(8,38,74,.44) 40%,rgba(6,30,60,.56) 100%);
+  backdrop-filter:blur(34px) saturate(118%) brightness(.84);
+  -webkit-backdrop-filter:blur(34px) saturate(118%) brightness(.84)}
+/* ── CON EL VIDRIO HORNEADO, LA HOJA NO FILTRA NADA ──
+   El degradado del tinte se queda en el CSS y el mapa de bits entra como
+   segunda capa: así el tinte sigue siendo un valor vivo y lo único que pone el
+   JavaScript es la foto. `100% 100%` y no `cover` porque el horneado ya se hizo
+   en espacio de pantalla, o sea que su proporción ES la de la hoja.
+   Ver `cajFrostHornea` en `c.js`. */
+#cajon.hor{
+  background-image:linear-gradient(180deg,rgba(9,44,84,.34) 0%,rgba(8,38,74,.44) 40%,rgba(6,30,60,.56) 100%),var(--cajFrost);
+  background-size:auto,100% 100%;background-repeat:no-repeat;
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+/* ── Y CON LA HOJA OPACA, EL ESCRITORIO DE ATRÁS NO SE VE ──
+   El horneado es un JPEG: cubre la hoja entera y la hoja cubre la pantalla
+   entera, así que con el cajón asentado no queda un solo píxel del escritorio a
+   la vista. Pero sus cuatro piezas de vidrio se seguían filtrando —el reloj, la
+   búsqueda, el dock y las baldosas— y filtrar lo que nadie ve es trabajo puro,
+   que es la misma lección de la vuelta 129 con las baldosas de afuera de la
+   ventana. Se apaga recién cuando la hoja LLEGÓ: durante los 340 ms del
+   deslizamiento el escritorio asoma por encima del canto y apagarlo ahí sería
+   un parpadeo. Y sólo con `.hor`: sin horneado la hoja es translúcida y esto se
+   vería.
+
+   ── Y ESCONDERLO NO ERA LA FORMA CORRECTA DE APAGARLO ──
+   Reporte de la vuelta 134: «ahora el lag es al bajar». El cierre no es la
+   apertura al revés, y el primer cuadro lo explica: `verCajon(false)` saca
+   `body.cajQ`, o sea que `#capa` pasa de `visibility:hidden` a visible y el
+   escritorio ENTERO vuelve a la vista **en el mismo cuadro en que la hoja
+   arranca**. Medido con `capaPeso`: **98 nodos, 367.504 px, 3 piezas de vidrio
+   y 4 fondos de imagen** que el compositor tiene que volver a rasterizar y
+   subir justo ahí. Es la misma familia que las 150 animaciones de entrada de
+   la vuelta 130, con otro disfraz.
+
+   Y lo que la vuelta 131 midió que `cajQ` ahorraba era **el FILTRO** —ocho
+   pasadas y 40.720 px— no el pintado: el escritorio es estático, así que
+   dejarlo compuesto cuesta textura y no milisegundos por cuadro. Así que se
+   apaga lo que costaba y se deja quieto lo que no: la misma regla que
+   `cajMueve`, sin tocar la visibilidad. Con eso el ahorro con el cajón abierto
+   es el mismo y en el cierre no hay nada que rasterizar de nuevo. */
+body.cajQ #capa .vid,body.cajQ #capa .baldosa{
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+/* el A/B vive en el mismo binario: sin esto, «mejoró» sería un recuerdo y no
+   una medición (ver `__A.cajQModo`) */
+body.cajQvis.cajQ #capa{visibility:hidden}
+/* ══════════ Y CON LA HOJA PUESTA, NADIE SOSTIENE UNA CAPA QUE NO SE VE ══════════
+   `will-change:transform` no es una sugerencia: le pide al compositor que
+   RESERVE una superficie de render. Medido con el cajón abierto y quieto, lo
+   que quedaba reservado:
+
+       #fondo  478.879 px      #tira  229.948 px      #cajon  367.504 px
+
+   A densidad 3 eso son **38,9 MB de textura**, y **25,5 de esos son de cosas
+   que la hoja opaca tapa por completo**: la foto —cuya deriva encima está
+   PAUSADA con el cajón puesto— y la tira de páginas del escritorio, a la que no
+   se le puede cambiar de página sin cerrar el cajón. Más `#agua`, que desde la
+   vuelta 130 vive siempre en el documento y transparente: un lienzo visible de
+   pantalla completa es otra capa, y son 13,2 MB más.
+
+   Nada de esto cuesta milisegundos por cuadro, y por eso ninguna sonda de
+   tiempo lo veía. Cuesta MEMORIA DE VIDEO, y cuando el presupuesto de baldosas
+   se acaba el compositor desaloja y vuelve a rasterizar — que es exactamente la
+   hipótesis que la vuelta 135 dejó anotada como «no se pudo comprobar desde
+   acá». Con la hoja puesta se sueltan las tres.
+
+   EL `will-change` VUELVE EN EL PRIMER CUADRO DEL CIERRE, porque `cajQ` sale
+   ahí (`verCajon`) y en ese mismo cuadro arranca la transición del `scale` de
+   `#fondo`: la promoción se pide igual, así que no hay escalón que agregar.
+   EL LIENZO DEL AGUA VUELVE TARDE, con `cajMueve`, que es el mismo trato de la
+   vuelta 135 — durante el deslizamiento no puede haber agua (`AGUA_TAPAN` ya lo
+   prohíbe) y reservar trece megas en el cuadro en que la hoja arranca sería el
+   escalón que las tres vueltas anteriores estuvieron sacando.
+
+   `:not(.cajCapasV)` es el A/B en el mismo binario: ver `__A.cajCapas`. */
+body.cajQ:not(.cajCapasV) #fondo,body.cajQ:not(.cajCapasV) #tira{will-change:auto}
+body.cajQ:not(.cajCapasV) #agua,body.cajMueve:not(.cajCapasV) #agua{visibility:hidden}
+/* ── Y DURANTE EL ARRASTRE TAMPOCO HAY NADA QUE PROMOVER ──
+   La razón de arriba —«el `will-change` vuelve en el primer cuadro del cierre
+   porque en ese mismo cuadro arranca la transición del `scale` de `#fondo`»— es
+   cierta para el cierre por BOTÓN y falsa para el arrastre: ahí `fondoProfundo`
+   no corre hasta que se suelta, así que `#fondo` y `#tira` están perfectamente
+   quietos y se sostienen sus texturas para nada. Y el arrastre saca `cajQ` en
+   el PRIMER `pointermove` (ver `pone`), o sea que la reserva cae justo en el
+   cuadro en que el dedo empieza a tirar — el peor posible.
+   `cajTira` la pone el `pointerdown` y la saca `suelta`, o sea ANTES de
+   `verCajon(false)`: cuando la transición del `scale` arranca de verdad, la
+   promoción ya volvió. */
+body.cajTira:not(.cajCapasV) #fondo,body.cajTira:not(.cajCapasV) #tira{will-change:auto}
+body.cajTira:not(.cajCapasV) #agua{visibility:hidden}
+/* ── Y EL CENTRO DE CONTROL NO TENÍA NADA DE ESTO ──
+   La vuelta 136 midió el cajón y nadie llevó la regla al otro panel: medido con
+   la hoja del centro asentada, `capas()` seguía devolviendo **4 capas y 35,5 MB**
+   detrás de una hoja opaca de 700 px sobre 892. Es el mismo gasto y el mismo
+   remedio.
+
+   LO QUE CAMBIA ES QUE ESTA HOJA NO TAPA LA PANTALLA ENTERA, así que el criterio
+   no es el mismo pieza por pieza. Medido con la hoja puesta: `#reloj` 41-156 y
+   `#buscaCaja` 178-224 quedan **tapados al cien por cien** —por eso pierden
+   también el horneado, que sería pintar para nadie— y `#tira` 224-782 asoma 82
+   px por debajo del canto. `will-change:auto` no esconde nada: deja que el
+   compositor desaloje la textura y vuelva a rasterizar lo poco que se ve.
+
+   EL AGUA SÍ SE ESCONDE, y se puede porque ya está muerta: `#cc.on` está en
+   `AGUA_TAPAN` desde la vuelta 126, o sea que con el centro abierto el lienzo no
+   dibuja un solo píxel. Y vuelve tarde, con `ccMueve`, por lo mismo que en el
+   cajón: reservar trece megas en el cuadro en que la hoja arranca es el escalón
+   que estas vueltas estuvieron sacando. */
+body.ccQ:not(.ccCapasV) #fondo,body.ccQ:not(.ccCapasV) #tira{will-change:auto}
+body.ccQ:not(.ccCapasV) #agua,body.ccMueve:not(.ccCapasV) #agua{visibility:hidden}
+/* ── EL ARRASTRE VA POR VARIABLE Y NO POR `style.transform` ──
+   Escribiendo el transform inline, `verCajon(false)` saca `.on` pero el inline
+   le gana por especificidad y el cajón queda clavado donde estaba el dedo.
+   Con una variable que sólo lee la regla `.on`, cerrar vuelve a valer siempre:
+   sin `.on` no hay quien la mire. */
+/* ── Y LA VARIABLE VA DECLARADA `inherits:false`, QUE ES EL ARREGLO GRANDE ──
+   Reporte: «la pantalla de apps cuando baja da lag ... al tocar botón hacia
+   atrás ahí no hay lag y baja fluido». Esa asimetría es la pista entera: el
+   botón no escribe esta variable NUNCA —saca `.on` y deja la transición al
+   compositor— y el arrastre la escribe en cada `pointermove`.
+   Las custom properties HEREDAN, así que escribir `--caj-y` en `#cajon` marca
+   para recálculo de estilo a **los 2.537 nodos** que cuelgan de él (150 apps,
+   el riel, la búsqueda). Medido con el flush forzado, escritura por escritura:
+
+     `--caj-y` en `#cajon` (2.537 descendientes) ...... 85,4 ms
+     la misma variable en `#cajManija` (0 descend.) ...  0,17 ms
+     `transform` inline en `#cajon` ...................  2,08 ms
+
+   Declarada sin herencia, la invalidación se queda en el propio elemento:
+   **85,4 → 0,248 ms**, o sea 344 veces, y empata con el transform inline.
+   DEGRADA SOLO: un WebView sin `@property` ignora la at-rule entera y la
+   variable vuelve a ser heredable, o sea al comportamiento de hoy — no ahorra,
+   pero no rompe. Y `initial-value` es lo que `removeProperty` devuelve al
+   soltar, así que la declaración de abajo pasa a ser redundante y se queda por
+   claridad. */
+@property --caj-y{syntax:'<length>';inherits:false;initial-value:0px}
+#cajon{--caj-y:0px}
+#cajon.on{transform:translateY(var(--caj-y))}
+#cajon.tira{transition:none}
+#cajTit{flex:0 0 auto;padding:0 20px 4px;font-size:10px;font-weight:700;
+  letter-spacing:.16em;opacity:.72;text-transform:uppercase;
+  text-shadow:0 1px 3px rgba(0,20,45,.6)}
+/* ── LA BÚSQUEDA VIVE ADENTRO DEL CAJÓN ──
+   Estaba en el escritorio, o sea DEBAJO del cajón: enfocarla abría el cajón y
+   el cajón la tapaba, así que se escribía a ciegas — medido, tecleando «mer»
+   la lista filtraba y el cuadro de texto no se veía por ningún lado. Hay un
+   solo campo que recibe letras y está donde se está mirando; el del escritorio
+   pasa a ser el botón que lo abre. */
+#cajBusca{flex:0 0 auto;margin:0 12px 6px;padding:0 13px;height:40px;
+  display:flex;align-items:center;gap:9px;border-radius:20px}
+#cajBusca input{flex:1;background:none;border:0;outline:none;color:#fff;
+  font:600 14px/1 system-ui,sans-serif;min-width:0}
+#cajBusca input::placeholder{color:rgba(255,255,255,.82);font-weight:500}
+#cajBusca input::-webkit-search-cancel-button{-webkit-appearance:none}
+/* ── LA MANIJA: SE VE Y SE AGARRA ──
+   `touch-action:none` es todo el arreglo de «no baja»: acá el gesto vertical es
+   nuestro y el navegador no lo cancela a mitad de camino. */
+#cajManija{flex:0 0 auto;height:20px;display:flex;align-items:center;
+  justify-content:center;touch-action:none;cursor:grab}
+#cajManija i{width:40px;height:4px;border-radius:3px;background:rgba(255,255,255,.62);
+  box-shadow:0 0 10px rgba(255,255,255,.4)}
+#cajon.tira #cajManija{cursor:grabbing}
+
+#cajCuerpo{flex:1 1 auto;min-height:0;display:flex;position:relative}
+#cajLista{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  touch-action:pan-y;display:grid;grid-template-columns:repeat(var(--cols),1fr);
+  align-content:start;gap:2px 0;padding:4px 26px 26px 10px}
+/* la fila de buscar en la web y el «sin resultados» cruzan la reja entera */
+#cajLista .vacio{grid-column:1/-1;text-align:center;opacity:.72;padding:22px 12px 6px;
+  font-size:14px;text-shadow:0 1px 3px rgba(0,20,45,.7)}
+#cajLista .web{grid-column:1/-1;margin:10px 6px 0;padding:12px 14px;border-radius:18px;
+  display:flex;align-items:center;gap:11px;font-size:14px;font-weight:600;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4);cursor:pointer;
+  text-shadow:0 1px 3px rgba(0,20,45,.7)}
+#cajLista .web:active{background:rgba(255,255,255,.26)}
+#cajLista .web .lupa{flex:0 0 auto;opacity:.9}
+#cajLista .web span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* el encabezado de letra cruza la reja entera */
+/* ── EL RESALTADO DEL RIEL EN EL CAJÓN «TODO JUNTO» ──
+   Un aro del color de acento y la baldosa levantada: es lo único que puede
+   decir «éstas son de esa letra» en una lista que no tiene encabezados. */
+#cajLista.junto .ap{transition:transform .18s ease,opacity .18s ease}
+#cajLista.junto .ap.res{transform:scale(1.06)}
+#cajLista.junto .ap.res .baldosa{box-shadow:0 6px 16px rgba(4,26,52,.34),
+  0 0 0 2.5px var(--acento),0 0 14px -2px var(--acento)}
+#cajLista.junto.hayRes .ap:not(.res){opacity:.45}
+#cajLista .let{grid-column:1/-1;padding:7px 6px 1px;font:800 10px/1 system-ui,sans-serif;
+  letter-spacing:.18em;opacity:.9;color:var(--acento);
+  text-shadow:0 1px 3px rgba(0,20,45,.7)}
+
+/* ── EL RIEL DE LETRAS ──
+   Sólo lleva las letras que TIENEN apps: un riel con las 26 fijas manda a la
+   nada en la mitad de los toques, y eso se siente a que el riel está roto. */
+/* ── EL ÍNDICE ES UNA BARRA, NO UNA COLUMNA DE LETRAS ──
+   Pedido textual: «el buscador por letra lo quería así por la barra nomás».
+   Y es mejor: una columna con las 26 letras a 10 px es un blanco de diez
+   píxeles por letra, se lee a lista de tipos y ocupa ancho permanente. Una
+   barra fina —la de Xiaomi, la de iOS— no ocupa nada, se agarra donde uno la
+   ve, y la letra sale en una burbuja mientras el dedo va. El ancho de la zona
+   sensible NO es el de la barra: la barra mide 4 px y la zona 30, porque hay
+   que poder agarrarla sin apuntar. Y los 30 arrancan a 12 px del canto, que es
+   lo que deja afuera al gesto de «atrás» de Android. */
+#riel{position:absolute;top:0;bottom:0;right:0;width:30px;touch-action:none;
+  display:flex;align-items:center;justify-content:center;z-index:2;
+  user-select:none;-webkit-user-select:none}
+#rielPista{position:absolute;top:10px;bottom:10px;right:13px;width:4px;
+  border-radius:2px;background:rgba(255,255,255,.16)}
+#rielPomo{position:absolute;right:12px;width:6px;border-radius:3px;
+  background:rgba(255,255,255,.62);box-shadow:0 0 8px rgba(255,255,255,.5);
+  transition:width .14s,background .14s,box-shadow .14s}
+#riel.on #rielPomo{width:8px;right:11px;background:var(--acento);
+  box-shadow:0 0 14px color-mix(in srgb,var(--acento) 80%,transparent)}
+
+/* la burbuja con la letra grande, sólo mientras el dedo va por el riel */
+#burbuja{position:absolute;right:44px;top:50%;transform:translateY(-50%) scale(.7);
+  width:64px;height:64px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font:800 30px/1 system-ui,sans-serif;color:#062a44;
+  background:radial-gradient(circle at 34% 28%,#eafcff,#8fe0f7 62%,#4fc0e8);
+  box-shadow:0 8px 22px rgba(0,40,80,.45),inset 0 2px 0 rgba(255,255,255,.9);
+  opacity:0;pointer-events:none;transition:opacity .14s,transform .14s;z-index:3}
+#burbuja.on{opacity:1;transform:translateY(-50%) scale(1)}
+
+/* ── LA MASCOTA ES EL MODELO 3D DEL USUARIO, RIGGEADO ──
+   Ya no son láminas: es la malla generada a partir de su propio render, con 23
+   huesos, y las cinco animaciones se escriben sobre esos huesos (ver `g.js`).
+   Eso es lo que permite que duerma SENTADA —una pose que ninguna biblioteca de
+   clips del proveedor tiene y que pedida como lámina volvió de pie— y que el
+   cabeceo se mezcle encima sin pelearse con la animación. */
+/* El recorte va en `#mVent` y no en `#mascota` porque las zetas del sueño salen
+   POR ENCIMA de la cabeza: recortando arriba de todo, la mitad del gesto se
+   pierde. */
+/* ── DOS SITIOS Y UN SOLO ELEMENTO ──
+   Reparentar el lienzo movería el contexto de WebGL de un lado al otro en cada
+   apertura del cajón; con `position:fixed` y dos reglas, lo único que cambia es
+   dónde y cuánto mide. En el escritorio es GRANDE —es lo único que hay en esa
+   franja, que está vacía a propósito— y en el cajón es chica, porque ahí lo que
+   importa es la lista. */
+#mascota{position:fixed;left:50%;z-index:3;
+  bottom:var(--masc-b);width:var(--masc-w);height:var(--masc-h);
+  margin-left:calc(var(--masc-w)/-2);
+  opacity:0;transform:translateY(14px) scale(.86);pointer-events:none;
+  transition:opacity .22s ease,transform .28s cubic-bezier(.22,1.4,.36,1),
+             width .26s ease,height .26s ease,bottom .26s ease;
+  filter:drop-shadow(0 8px 18px rgba(0,40,80,.55))}
+#mascota.on{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;cursor:pointer}
+#mascota:active{filter:drop-shadow(0 4px 10px rgba(0,40,80,.6)) brightness(1.12)}
+/* ── EL LIENZO SE DIBUJA CHICO Y CSS LO ESTIRA ──
+   Y ahí el pixelado que se pidió y la optimización son LA MISMA COSA: se
+   rellenan 64×83 píxeles en vez de 139×180, o sea cinco veces menos, y el
+   escalón que deja `pixelated` pega con un muñeco que ya es de vóxeles. Un
+   filtro de pixelado encima habría costado los 139×180 igual. */
+#mVent{width:100%;height:100%;overflow:hidden}
+#mLien{width:100%;height:100%;display:block;
+  image-rendering:pixelated;image-rendering:crisp-edges}
+/* el cabeceo va encima del esqueleto: es de la CÁMARA, no del muñeco, así que
+   no hay que gastarle huesos */
+#mascota.on{animation:chill 1.32s ease-in-out infinite alternate}
+@keyframes chill{from{transform:translateY(2px) rotate(-3deg)}
+                 to  {transform:translateY(-4px) rotate(3deg)}}
+/* ── LAS ZETAS VAN DIBUJADAS POR CÓDIGO ──
+   Pedidas con todas las letras: «durmiendo con z saliendo de su cabeza». No van
+   en la hoja generada por dos razones: pesan cero, y sobre todo se MUEVEN — una
+   zeta quieta pintada en el cuadro se lee a calcomanía. Salen de un costado de
+   la cabeza, suben y se apagan, las tres desfasadas: con las tres en fase se
+   leen a un solo gesto repetido. */
+/* el 18% del alto de la celda es donde arranca la cabeza en los cuadros del
+   sueño (medido: 28 px de 151), así que la zeta sale de la sien y no del aire */
+#mZ{position:absolute;left:60%;top:18%;width:0;height:0}
+#mZ span{position:absolute;font:800 13px/1 system-ui,sans-serif;color:#eafcff;
+  text-shadow:0 1px 3px rgba(0,36,72,.95),0 0 8px rgba(0,44,86,.7);opacity:0}
+#mZ span:nth-child(2){font-size:11px}
+#mZ span:nth-child(3){font-size:9px}
+#mascota.zzz #mZ span{animation:zeta 2.7s ease-out infinite}
+#mascota.zzz #mZ span:nth-child(2){animation-delay:.9s}
+#mascota.zzz #mZ span:nth-child(3){animation-delay:1.8s}
+@keyframes zeta{
+  0%  {opacity:0;transform:translate(0,6px) scale(.55) rotate(-10deg)}
+  16% {opacity:1}
+  100%{opacity:0;transform:translate(22px,-26px) scale(1.2) rotate(14deg)}}
+@media (prefers-reduced-motion:reduce){
+  #mascota.on{animation:none}
+  #mascota.zzz #mZ span{animation:none;opacity:.85}}
+/* ── EL TIRADOR SE VE Y NO SE TOCA ──
+   Medido: la barra caía en y 848-874 y el dock termina en 876, así que se le
+   montaba encima 26 px justo sobre dos de los cuatro iconos —
+   `elementFromPoint(206, 870)` devolvía `tirador`, o sea que el dedo que iba a
+   una app abría el cajón. El gesto de subir vive en el escritorio, en la fila
+   de puntos y en el dock (ver `enganchaSubir`); esto es sólo la marca que dice
+   que ese gesto existe. */
+#tirador{position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(var(--ins-b) + 2px);width:120px;height:26px;z-index:2;
+  pointer-events:none;
+  display:flex;align-items:flex-end;justify-content:center;padding-bottom:7px}
+#tirador i{width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.55);
+  box-shadow:0 0 10px rgba(255,255,255,.45)}
+
+/* ══════════ MENÚ DE UNA APP ══════════ */
+#velo{position:fixed;inset:0;z-index:4;background:rgba(4,24,48,.42);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  opacity:0;pointer-events:none;transition:opacity .2s}
+#velo.on{opacity:1;pointer-events:auto}
+/* ══════════ EL ASISTENTE ══════════
+   ── ES UNA HOJA Y NO UNA PANTALLA APARTE ──
+   Lo que se le pide cambia el launcher que está DETRÁS —el tamaño de los
+   iconos, las columnas, la mascota—, así que taparlo entero con un panel opaco
+   sería esconder justo lo que uno acaba de mandar a cambiar. Sube desde abajo,
+   ocupa el 72% del alto y el resto queda a la vista a través del velo. */
+#asis{position:fixed;z-index:6;left:0;right:0;bottom:0;height:72%;
+  border-radius:28px 28px 0 0;display:flex;flex-direction:column;
+  transform:translateY(102%);transition:transform .28s cubic-bezier(.2,.9,.3,1);
+  padding:10px 12px calc(var(--ins-b) + 10px)}
+#asis.on{transform:translateY(0)}
+#asCab{display:flex;align-items:center;gap:10px;padding:4px 4px 10px;flex:0 0 auto}
+#asTit,#persTit{flex:1 1 auto;font-size:16px;font-weight:800;letter-spacing:.01em}
+.asBtn{width:34px;height:34px;border-radius:12px;display:flex;align-items:center;
+  justify-content:center;font-size:16px;cursor:pointer;
+  background:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+.asBtn:active{background:rgba(255,255,255,.26)}
+#asLista{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  display:flex;flex-direction:column;gap:8px;padding:4px 2px 8px}
+.asMsg{max-width:86%;padding:9px 13px;border-radius:16px;font-size:14px;
+  line-height:1.35;white-space:pre-wrap;word-break:break-word;
+  text-shadow:0 1px 2px rgba(0,25,52,.6)}
+.as-yo{align-self:flex-end;background:color-mix(in srgb,var(--acento) 26%,transparent);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35);border-bottom-right-radius:6px}
+.as-bot{align-self:flex-start;background:rgba(255,255,255,.13);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3);border-bottom-left-radius:6px}
+.asFirma{margin-top:6px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+  opacity:.62;font-weight:700}
+#asPie{flex:0 0 auto;display:flex;gap:8px;align-items:center;padding-top:6px}
+#asTxt,#asLlave{flex:1 1 auto;min-width:0;background:rgba(255,255,255,.14);
+  border:0;outline:0;color:#fff;font-weight:600;font-size:14px;line-height:1;padding:12px 14px;
+  border-radius:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+#asTxt::placeholder,#asLlave::placeholder{color:rgba(255,255,255,.6)}
+#asMandar{flex:0 0 auto;width:44px;height:42px;border-radius:16px;border:0;
+  background:color-mix(in srgb,var(--acento) 34%,transparent);color:#fff;font-size:17px;cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45)}
+#asAyuda{flex:0 0 auto;font-size:11px;opacity:.7;padding:0 4px 6px;font-weight:600}
+/* la llave se pide en un cajoncito que está cerrado por omisión: es lo que uno
+   toca una vez y no vuelve a mirar, y ocupa el sitio del teclado */
+#asLlaveCaja{flex:0 0 auto;display:none;flex-direction:column;gap:8px;
+  padding:10px;border-radius:18px;background:rgba(0,22,48,.30);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22);margin-bottom:8px}
+#asLlaveCaja.on{display:flex}
+#asLlaveTit{font-size:11px;opacity:.78;font-weight:700;line-height:1.4}
+#asLlaveFila{display:flex;gap:8px}
+#asGuardar,#asBorrar{flex:0 0 auto;border:0;border-radius:14px;padding:0 14px;
+  font-weight:700;font-size:12px;line-height:1;color:#fff;cursor:pointer;
+  background:rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+#asGuardar{background:rgba(168,232,92,.30)}
+
+/* ══════════ PERSONALIZACIÓN ══════════
+   Misma familia que la hoja del asistente: sube desde abajo y deja ver el
+   launcher detrás, porque TODO lo que se toca acá cambia lo que está atrás. */
+/* ── LA HOJA MIDE MENOS QUE LA DEL ASISTENTE, Y ES POR EL PREVIO ──
+   Con 86 % la hoja llegaba a 632 px de 892 y arriba quedaban 104 px libres
+   entre el widget y su borde: ahí no entra una mascota de 202, así que los
+   cinco botones de pose no mostraban nada. Con 64 % quedan 320 px de franja
+   —lo único que este panel tiene para enseñar— y el cuerpo, que ya scrollea,
+   no pierde un solo control. */
+#pers{position:fixed;z-index:6;left:0;right:0;bottom:0;max-height:64%;
+  border-radius:28px 28px 0 0;display:flex;flex-direction:column;
+  transform:translateY(102%);transition:transform .28s cubic-bezier(.2,.9,.3,1);
+  padding:10px 12px calc(var(--ins-b) + 12px)}
+#pers.on{transform:translateY(0)}
+/* ── Y LA FRANJA SE DESPEJA ──
+   El reloj y la barra de búsqueda no los cambia ningún control del panel, y
+   son justo lo que se interpone entre el ojo y la mascota. Lo que sí queda
+   es la reja, que es lo que mueven el tamaño de icono y las columnas. */
+body.pers #reloj,body.pers #buscaCaja{opacity:0;pointer-events:none;
+  transition:opacity .22s ease}
+/* ── Y LA MASCOTA SUBE POR ENCIMA DEL VELO ──
+   El velo desenfoca 3 px todo lo que queda debajo, y lo que este panel tiene
+   que dejar ver nítido es justamente el muñeco. Entre el velo (4) y la hoja (6)
+   hay un escalón libre; el menú de app, que también vive en 5, lo cierra
+   `persAbre` antes de abrir. */
+body.pers #mascota{z-index:5}
+#persCuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:2px 2px 6px;display:flex;flex-direction:column;gap:14px}
+
+
+/* ══════════════════════ LAS ANIMACIONES ══════════════════════
+   Pedido: «necesito animaciones, muchas».
+   ── LA REGLA QUE LAS HACE POSIBLES A TODAS ──
+   Sólo se animan `transform` y `opacity`. Son las dos únicas propiedades que el
+   compositor resuelve sin volver a maquetar ni a repintar, y por eso son las
+   únicas que pueden ir a 120 cuadros por segundo con treinta iconos en
+   pantalla. Animar `width`, `top`, `box-shadow` o `filter` sobre una lista es
+   pedirle al navegador que rehaga la página en cada cuadro. */
+
+/* ── LOS ICONOS ENTRAN ESCALONADOS ──
+   Todos a la vez es un bloque que aparece; escalonados de a 18 ms se lee a que
+   la reja se llena. `--i` lo escribe quien pinta, y es el índice del icono. */
+@keyframes apEntra{
+  from{opacity:0;transform:translateY(14px) scale(.82)}
+  to{opacity:1;transform:none}}
+.ap.entra{animation:apEntra .34s cubic-bezier(.2,1.1,.3,1) backwards;
+  animation-delay:calc(var(--i,0)*18ms)}
+/* el cajón trae muchos más, así que el escalón es más corto o la última fila
+   entraría medio segundo tarde */
+#cajLista .ap.entra{animation-duration:.28s;animation-delay:calc(var(--i,0)*11ms)}
+#carpRejilla .ap.entra{animation-delay:calc(var(--i,0)*28ms)}
+
+/* ── APRETAR UN ICONO SE SIENTE ──
+   Sin esto no hay forma de saber si el toque entró hasta que la app abre, que
+   en un teléfono lento es medio segundo de nada. */
+.ap{transition:transform .13s cubic-bezier(.3,1.4,.4,1)}
+.ap:active{transform:scale(.9)}
+body.arrastrando .ap{transition:none}
+
+/* ── LA CUADRÍCULA DEL ARRASTRE ──
+   Vive dentro de `#hoja` y no encima de todo: tiene que quedar DEBAJO del
+   fantasma que sigue al dedo —si no, la casilla encendida taparía justo el
+   icono que se está llevando— y por encima de la reja de apps, que es lo que
+   la hace legible sobre iconos claros.
+   Punteada la vacía y llena la que está bajo el dedo: con las veinte iguales,
+   la cuadrícula dice dónde están las celdas pero no en cuál va a caer. */
+#reja{position:absolute;inset:0;pointer-events:none;z-index:3;
+  opacity:0;transition:opacity .16s ease}
+#reja.on{opacity:1}
+#reja i{position:absolute;border-radius:16px;
+  border:1.5px dashed rgba(255,255,255,.30);
+  background:rgba(255,255,255,.05);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.13);
+  transition:background .12s ease,border-color .12s ease,box-shadow .12s ease}
+#reja i.aqui{border-style:solid;border-color:rgba(255,255,255,.82);
+  background:rgba(190,232,255,.20);
+  box-shadow:0 0 16px rgba(140,214,255,.5),inset 0 1px 0 rgba(255,255,255,.42)}
+
+/* ── ABRIR UNA APP: EL ICONO SE COME LA PANTALLA ──
+   El launcher entero se va hacia el icono que se tocó —de ahí `--zx`/`--zy`— y
+   el icono crece y se apaga. Es la animación que dice «esto se convirtió en
+   aquello» en vez de «la pantalla parpadeó». */
+/* ── EL DOCK SE ESTABA YENDO AL DOBLE DE VELOCIDAD QUE EL LAUNCHER ──
+   `#dock` es HIJO de `#capa` (mirá el marcado), así que ya se escala con él:
+   nombrarlo aparte lo escalaba DOS VECES. Medido a mitad de la animación, en
+   el mismo instante: `#capa` 412 → 450,6 px (×1,094) y `#dock` 384 → 459,4
+   (×1,196). O sea que la fila de abajo salía volando más rápido que la pantalla
+   en la que está apoyada — y encima costaba una segunda capa animada de 40.483
+   px para hacerlo mal.
+
+   ── Y EL CAJÓN SE ANIMABA CERRADO ──
+   Abriendo una app DESDE EL ESCRITORIO, `#cajon` está en `translateY(100%)`: no
+   se ve un solo píxel suyo. Igual se le escalaba y se le fundía la opacidad
+   durante 170 ms, y mide 389.198 px — o sea el objeto más caro de la animación,
+   invisible. Ahora sólo entra cuando el cajón está puesto (`body.caj`), que es
+   justamente cuando SÍ es lo que se ve. Medido con `anims()` a los 80 ms:
+   7 animaciones vivas → 4, y las dos que se van son las dos más grandes. */
+body.abriendo #capa,body.abriendo.caj #cajon{
+  transform-origin:var(--zx,50%) var(--zy,50%);
+  transition:transform .17s ease-in,opacity .17s ease-in;
+  transform:scale(1.14);opacity:0}
+/* el A/B en el mismo binario: `__A.anim(true)` devuelve las tres capas viejas */
+body.animViejaV.abriendo #dock,body.animViejaV.abriendo #cajon{
+  transform-origin:var(--zx,50%) var(--zy,50%);
+  transition:transform .17s ease-in,opacity .17s ease-in;
+  transform:scale(1.14);opacity:0}
+.ap.saliendo{animation:apSale .17s ease-in forwards}
+@keyframes apSale{to{transform:scale(2.2);opacity:0}}
+
+/* ── LA HOJA DE UNA CARPETA CRECE DESDE SU BALDOSA ──
+   El punto de origen lo escribe `carpOrigen` midiendo dónde está el icono. */
+/* cerrada no hay nada que sostener: es la regla de la vuelta 136 aplicada
+   donde faltaba. Medido en el escritorio, `capas()` la contaba con 3.810 px. */
+#carp.on{will-change:transform,opacity}
+
+/* ── EL WIDGET ENTRA ──
+   Una tarjeta que aparece de golpe empuja la reja de un cuadro al otro. */
+@keyframes wEntra{from{opacity:0;transform:translateY(-10px) scale(.96)}to{opacity:1;transform:none}}
+.wCard.entra{animation:wEntra .3s cubic-bezier(.2,1.1,.3,1) backwards;
+  animation-delay:calc(var(--i,0)*45ms)}
+
+/* ── Y NADA DE ESTO CORRE SI EL SISTEMA PIDE QUIETO ──
+   No es una cortesía: hay gente a la que el movimiento le da náuseas, y el
+   sistema ya tiene la respuesta. */
+@media (prefers-reduced-motion:reduce){
+  .ap.entra,.wCard.entra,.ap.saliendo,.ap.late .baldosa,.ap.destino .baldosa{animation:none}
+  .ap,.ap.fantasma>*,#aviso,#carp{transition-duration:.01s}
+  body.abriendo #capa,body.abriendo #dock,body.abriendo #cajon{transition-duration:.01s}
+}
+
+/* ══════════ ARRASTRAR, CARPETAS Y SALPICADURA ══════════ */
+/* el que se está llevando se queda como hueco: sin eso parecen dos */
+.ap.llevada{opacity:.18;pointer-events:none}
+/* ── EL FANTASMA VA EN EL BODY Y NO EN LA REJA ──
+   Adentro de `#tira` lo recortaría el `overflow` de la página y no podría cruzar
+   al dock ni salir del cajón. */
+.ap.fantasma{position:fixed;z-index:9;pointer-events:none;margin:0;
+  left:0;top:0;will-change:transform;
+  filter:drop-shadow(0 10px 22px rgba(0,30,60,.55))}
+/* ── LA ESCALA VA EN EL HIJO ──
+   El `transform` del fantasma lo escribe el dedo cuadro a cuadro; metiendo la
+   escala ahí habría que reescribirla en cada movimiento y no habría transición
+   de la que agarrarse. */
+.ap.fantasma>*{transform:scale(1.04);
+  transition:transform .2s cubic-bezier(.2,1.6,.4,1)}
+.ap.fantasma.vivo>*{transform:scale(1.2)}
+body.arrastrando{cursor:grabbing}
+/* el que recibiría la carpeta: un aro, no un color, porque el icono tiene que
+   seguir viéndose para saber con cuál se va a juntar */
+.ap.destino .baldosa{box-shadow:0 0 0 3px var(--acento),0 6px 18px rgba(0,30,60,.45);
+  animation:recibe .9s ease-in-out infinite}
+@keyframes recibe{0%,100%{transform:scale(.88)}50%{transform:scale(.96)}}
+/* la carpeta recién hecha late una vez: dos iconos que se funden en uno se lee
+   a que uno de los dos se perdió si nada lo marca */
+.ap.late .baldosa{animation:late .6s cubic-bezier(.2,1.4,.35,1)}
+@keyframes late{0%{transform:scale(.72)}55%{transform:scale(1.12)}100%{transform:scale(1)}}
+
+.cBald{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+  gap:calc(var(--ico)*.06);padding:calc(var(--ico)*.12);
+  /* .baldosa es flex con align-items:center, y en una reja eso deja a cada hijo
+     con la altura de su contenido — o sea CERO, porque son divs vacíos. Medido:
+     columnas de 21 px y filas de 21, con los hijos en 0. Hay que reponerlo. */
+  place-items:stretch;place-content:stretch;
+  background:rgba(255,255,255,.16);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),inset 0 0 0 1px rgba(255,255,255,.14)}
+.cMini{border-radius:26%;overflow:hidden;background:rgba(255,255,255,.2)}
+.cMini img{width:100%;height:100%;display:block;object-fit:cover}
+
+/* ══════════ LOS VEINTE WIDGETS ══════════
+   Todo dibujado: no entra una imagen. Un widget muestra algo que cambia, y una
+   foto de un reloj miente a los sesenta segundos. */
+.wgHora{flex:1;font-size:46px;font-weight:200;letter-spacing:-.03em;line-height:1;
+  text-shadow:0 1px 2px rgba(0,38,74,.55),0 2px 20px rgba(0,44,84,.75)}
+.wgSub{font-size:20px;font-weight:300;opacity:.7}
+.wgEsf{width:100px;height:100px;flex:0 0 auto}
+.wgEsfB{fill:rgba(255,255,255,.10);stroke:rgba(255,255,255,.30);stroke-width:1.6}
+.wgM{stroke:rgba(255,255,255,.55);stroke-width:1.4;stroke-linecap:round}
+.wgMg{stroke:#fff;stroke-width:2.6}
+.wgH{stroke:#fff;stroke-width:4;stroke-linecap:round}
+.wgMin{stroke:#fff;stroke-width:2.6;stroke-linecap:round}
+.wgS{stroke:var(--acento);stroke-width:1.4;stroke-linecap:round}
+.wgEje{fill:#fff}
+.wgLado{flex:1;text-align:right}
+.wgLadoH{font-size:28px;font-weight:300;letter-spacing:-.02em}
+.wgLadoF{font-size:10px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;opacity:.8}
+.wgDia{font-size:52px;font-weight:200;line-height:.9;letter-spacing:-.04em;
+  text-shadow:0 2px 18px rgba(0,44,84,.7)}
+.wgDias{font-size:44px;font-weight:200;line-height:.9;letter-spacing:-.04em}
+.wgFCol{flex:1;min-width:0}
+.wgFSem{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.wgFMes{font-size:11px;font-weight:600;opacity:.8;text-transform:capitalize}
+.wgFecha{background:rgba(255,255,255,.14);border:0;border-radius:9px;color:#fff;
+  font:600 11px/1 system-ui,sans-serif;padding:5px 7px;margin-top:5px;
+  color-scheme:dark;max-width:100%}
+.wgSem{flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.wgSemD{display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:5px 0;border-radius:11px}
+.wgSemD.hoy{background:var(--acento);box-shadow:0 0 12px rgba(255,255,255,.35)}
+.wgSemL{font-size:9px;font-weight:800;letter-spacing:.05em;opacity:.72}
+.wgSemN{font-size:14px;font-weight:700}
+.wCard[data-k=calendario],.wCard[data-k=progreso],.wCard[data-k=nota]{
+  flex-direction:column;align-items:stretch;gap:8px}
+.wgCalTit{font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  text-align:center;opacity:.92}
+.wgCal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.wgCalC{font-size:11px;font-weight:600;text-align:center;padding:3px 0;border-radius:8px}
+.wgCalH{font-size:9px;font-weight:800;opacity:.6}
+.wgCalC.hoy{background:var(--acento);font-weight:800}
+.wgBatN{font-size:34px;font-weight:200;letter-spacing:-.03em}
+.wgBatCol{flex:1;min-width:0}
+.wgBatEt{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.85}
+.wgBatBar{height:9px;border-radius:5px;background:rgba(255,255,255,.20);
+  overflow:hidden;margin-top:6px}
+.wgBatLl{height:100%;border-radius:5px;transition:width .4s}
+.wgCron{flex:1;font-size:34px;font-weight:200;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums}
+.wgCron.wgAlarma{color:#ffd36e;animation:alarma 1s infinite}
+@keyframes alarma{50%{opacity:.3}}
+.wgBtns{flex:0 0 auto;display:flex;gap:7px}
+.wgB{min-width:38px;height:38px;padding:0 9px;border-radius:12px;
+  background:rgba(255,255,255,.17);display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:800;cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+.wgB:active{background:rgba(255,255,255,.30)}
+.wgNota{flex:1;width:100%;background:transparent;border:0;color:#fff;resize:none;
+  font:500 13px/1.45 system-ui,sans-serif;outline:none}
+.wgNota::placeholder{color:rgba(255,255,255,.55)}
+.wgFrase{flex:1;font-size:14px;font-weight:500;line-height:1.4;font-style:italic;
+  text-shadow:0 1px 2px rgba(0,34,68,.85)}
+.wgLuna{width:88px;height:88px;flex:0 0 auto}
+.wgLunaB{fill:#16233c}
+.wgLunaL{fill:#eaf4ff}
+.wgNivel{width:100px;height:100px;flex:0 0 auto}
+.wgNivAro{fill:none;stroke:rgba(255,255,255,.34);stroke-width:1.6}
+.wgNivCruz{stroke:rgba(255,255,255,.18);stroke-width:1.2}
+.wgNivBur{fill:var(--acento);transition:cx .12s linear,cy .12s linear}
+.wgNivBur.plano{fill:#b8f078;filter:drop-shadow(0 0 7px #b8f078)}
+.wgAtajos{flex:1;display:grid;grid-template-columns:repeat(4,1fr);
+  justify-items:center;gap:6px}
+.wgTar{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0}
+.wgTarF{display:flex;align-items:center;gap:9px}
+.wgTarB{flex:0 0 18px;height:18px;border-radius:6px;cursor:pointer;
+  background:rgba(255,255,255,.16);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.42)}
+.wgTarF.ok .wgTarB{background:var(--acento);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.6)}
+.wgTarT{flex:1;min-width:0;background:transparent;border:0;color:#fff;outline:none;
+  font:600 12px/1.2 system-ui,sans-serif}
+.wgTarT::placeholder{color:rgba(255,255,255,.5)}
+.wgTarF.ok .wgTarT{opacity:.55;text-decoration:line-through}
+.wgDado{width:82px;height:82px;flex:0 0 auto;cursor:pointer}
+.wgDadoC{fill:rgba(255,255,255,.90)}
+.wgDadoP{fill:#123;transition:opacity .12s}
+.wgDado:active{transform:scale(.92)}
+.wgDadoT{flex:1;font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;opacity:.8;text-align:right}
+.wgMundo{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.wgMundoC{text-align:center}
+.wgMundoN{font-size:10px;font-weight:800;letter-spacing:.10em;opacity:.72}
+.wgMundoH{font-size:22px;font-weight:300;font-variant-numeric:tabular-nums}
+.wgProg{display:flex;flex-direction:column;gap:7px;width:100%}
+.wgProgF{display:flex;align-items:center;gap:9px}
+.wgProgE{flex:0 0 46px;font-size:10px;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;opacity:.8}
+.wgProgB{flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,.20);overflow:hidden}
+.wgProgL{height:100%;border-radius:4px;background:var(--acento);transition:width .5s}
+.wgProgN{flex:0 0 34px;text-align:right;font-size:11px;font-weight:700;
+  font-variant-numeric:tabular-nums}
+
+/* ── LA GALERÍA TIENE DOS SOLAPAS ──
+   Un solo gesto —mantener el dedo en un hueco— y las dos cosas que se ponen en
+   el escritorio. Con dos gestos distintos habría que enseñarle uno más a alguien
+   que acaba de instalar el launcher. */
+.fgTabs{display:flex;gap:6px}
+.fgTab{padding:6px 12px;border-radius:13px;font-size:11px;font-weight:800;
+  letter-spacing:.06em;text-transform:uppercase;opacity:.6;cursor:pointer}
+.fgTab.on{opacity:1;background:rgba(255,255,255,.20);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+#fgWid{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px}
+/* ── LA SOLAPA DE WIDGETS VA MÁS CERRADA QUE LA DE FONDOS ──
+   La galería es translúcida para poder VER el fondo que se está eligiendo; en
+   la de widgets no hay nada que mirar detrás —lo que se pone aparece ARRIBA de
+   la hoja— y con el mismo velo los veinte renglones quedaban ilegibles sobre el
+   agua. Medido mirando la captura: las apps del escritorio se leían a través de
+   la lista. */
+#fondos.wid{background:linear-gradient(180deg,rgba(4,26,52,0),rgba(4,26,52,.62) 10%,rgba(4,26,52,.80))}
+.fgW{display:flex;align-items:center;gap:11px;padding:10px 13px;border-radius:16px;
+  background:rgba(6,28,54,.46);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.09);
+  cursor:pointer}
+.fgW.sel{background:rgba(12,52,96,.62);box-shadow:inset 0 0 0 2px var(--acento)}
+.fgWN{flex:1;font-size:13px;font-weight:700}
+.fgWT{font-size:11px;font-weight:800;opacity:.7}
+
+/* ══════════ LA GALERÍA DE FONDOS ══════════
+   Ocupa el 62 % de abajo y NO la pantalla entera: lo que se está eligiendo vive
+   arriba —el reloj, el widget, el vidrio— y taparlo mientras se elige es elegir
+   a ciegas. */
+#fondos{position:fixed;left:0;right:0;bottom:0;height:62%;z-index:6;
+  display:none;flex-direction:column;gap:10px;
+  padding:12px 12px calc(var(--ins-b) + 12px);
+  background:linear-gradient(180deg,rgba(4,26,52,0),rgba(4,26,52,.42) 14%,rgba(4,26,52,.62));
+  transform:translateY(12px);opacity:0;transition:opacity .22s,transform .22s}
+#fondos.on{display:flex;transform:none;opacity:1}
+#fgCab{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;
+  border-radius:18px}
+#fgTit{flex:1;font-size:14px;font-weight:700;letter-spacing:.02em}
+#fondos.wid #fgRejilla,#fondos.wid #fgMia{display:none}
+#fondos:not(.wid) #fgWid{display:none}
+#fondos.wid #fgGen,#fondos.wid #fgIdeas{display:none}
+#fgGen{flex:0 0 auto;display:flex;gap:8px;padding:8px 12px 0}
+#fgGenT{flex:1;min-width:0;height:40px;padding:0 13px;border:0;border-radius:14px;
+  outline:none;color:#fff;font-weight:600;font-size:12px;line-height:1;
+  background:rgba(255,255,255,.13);box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
+#fgGenT::placeholder{color:rgba(255,255,255,.72);font-weight:500}
+#fgGenB{flex:0 0 auto;height:40px;padding:0 15px;border:0;border-radius:14px;
+  cursor:pointer;font-weight:800;font-size:12px;line-height:1;color:#06263f;background:var(--acento)}
+#fgGenB:disabled{opacity:.6;cursor:default}
+/* ── CANCELAR EXISTE PORQUE LA ESPERA MIDE HASTA 45 SEGUNDOS ──
+   Medido contra el generador de verdad. Sin salida, el dueño que se
+   arrepiente sólo puede mirar; y como el botón de generar queda apagado
+   mientras tanto, la fila entera parecía muerta. */
+#fgGenX{display:none;flex:0 0 auto;height:40px;padding:0 13px;border:0;border-radius:14px;
+  background:rgba(255,255,255,.16);color:#fff;font:700 13px system-ui,sans-serif}
+#fgGenX.on{display:block}
+/* ── LAS IDEAS SON SEIS Y NO UNA LISTA LARGA ──
+   Un campo de texto vacío no dice qué se puede pedir. Seis fichas cortas lo
+   dicen y de paso son el camino de un toque para el que no quiere escribir. */
+#fgIdeas{flex:0 0 auto;display:flex;gap:7px;overflow-x:auto;padding:8px 12px 2px}
+#fgIdeas .fgId{flex:0 0 auto;padding:7px 11px;border-radius:12px;cursor:pointer;
+  font-weight:600;font-size:11px;line-height:1;background:rgba(255,255,255,.11);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+#fgIdeas .fgId:active{background:rgba(255,255,255,.22)}
+#fgRejilla{flex:1;overflow-y:auto;display:grid;gap:10px;
+  grid-template-columns:repeat(3,1fr);align-content:start;padding:2px}
+.fgIt{display:flex;flex-direction:column;gap:5px;cursor:pointer}
+.fgMini{aspect-ratio:9/16;border-radius:14px;background-size:cover;
+  background-position:center;
+  box-shadow:0 4px 12px rgba(4,26,52,.34),inset 0 0 0 1px rgba(255,255,255,.22)}
+/* el elegido lleva un aro y no un tilde: un tilde tapa la miniatura justo en el
+   que uno quiere mirar */
+.fgIt.sel .fgMini{box-shadow:0 4px 12px rgba(4,26,52,.34),
+  0 0 0 3px var(--acento),inset 0 0 0 1px rgba(255,255,255,.5)}
+.fgNom{font-size:10px;font-weight:600;text-align:center;opacity:.9;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-shadow:0 1px 2px rgba(0,30,62,.9)}
+#fgArch{display:none}
+
+/* ── LA SALPICADURA ES DOM Y NO EL LIENZO DEL AGUA ──
+   Es otro efecto y de otra cosa: el del fondo es el agua de la pantalla, éste es
+   la app cayendo en su sitio. Y así funciona aunque el lienzo de WebGL no exista
+   —un aparato viejo, el fondo que no cargó— porque son doce spans. */
+.salpi{position:fixed;z-index:8;pointer-events:none;width:0;height:0}
+.salpi i{position:absolute;display:block;border-radius:50%;
+  background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.95),rgba(150,225,255,.75) 55%,rgba(90,190,240,0) 100%)}
+.sGota{animation:gota .52s cubic-bezier(.2,.7,.3,1) forwards;animation-delay:var(--gd)}
+@keyframes gota{
+  from{transform:translate(0,0) scale(.5);opacity:.95}
+  to  {transform:translate(var(--gx),var(--gy)) scale(1);opacity:0}}
+.sAro{width:12px;height:12px;margin:-6px 0 0 -6px;background:none;
+  border:2.5px solid rgba(210,245,255,.9);animation:aro .5s ease-out forwards}
+@keyframes aro{
+  from{transform:scale(.3);opacity:.9}
+  to  {transform:scale(5.4);opacity:0;border-width:.5px}}
+@media (prefers-reduced-motion:reduce){.sGota,.sAro{animation:none;opacity:0}}
+
+/* ══════════════════ LA CÁMARA AERO ══════════════════
+   El visor es una TARJETA sobre el fondo Frutiger, no una imagen a sangre: eso
+   es literalmente el pedido —«de fondo una foto frutiger que solamente se verán
+   en las partes que no se vean la cámara»— y con el visor a pantalla completa
+   no queda una sola parte donde el fondo se vea. */
+#cam{position:fixed;inset:0;z-index:12;display:none;
+  flex-direction:column;align-items:center;
+  padding:calc(var(--ins-t,24px) + 6px) 0 calc(var(--ins-b,16px) + 6px)}
+#cam.on{display:flex}
+/* el fondo: la misma foto de la familia agua del pack, o sea la referencia que
+   mandó el usuario. Va con su propio degradado encima para que el vidrio de
+   arriba tenga contra qué contrastar. */
+#camFondo{position:absolute;inset:0;z-index:0;
+  background:linear-gradient(#0a3b6e,#0e6f9c 42%,#0b8fa8 70%,#0a5f86);
+  background-size:cover;background-position:center}
+#camFondo::after{content:'';position:absolute;inset:0;
+  background:radial-gradient(120% 70% at 50% 0%,rgba(255,255,255,.30),transparent 62%),
+             linear-gradient(180deg,rgba(4,26,48,.42),transparent 26%,transparent 72%,rgba(4,26,48,.52))}
+
+/* ── EL VISOR ──
+   `--asp` la pone `camPinta` desde la relación elegida; con `lleno` la tarjeta
+   se estira y el marco se reduce a los cantos redondeados. */
+#camVisorC{position:relative;z-index:2;width:calc(100% - 26px);flex:1;
+  display:flex;align-items:center;justify-content:center;min-height:0}
+#camVisor{position:relative;border-radius:26px;overflow:hidden;
+  width:100%;aspect-ratio:var(--asp,0.75);max-height:100%;
+  background:#04121f;
+  box-shadow:0 18px 44px rgba(2,20,40,.55),
+             inset 0 1px 0 rgba(255,255,255,.55),
+             inset 0 0 0 1px rgba(255,255,255,.22)}
+#camVisorC.lleno #camVisor{aspect-ratio:auto;height:100%}
+#camVid{width:100%;height:100%;object-fit:cover;display:block;
+  transform-origin:center;transition:transform .22s ease}
+#camVid.espejo{scale:-1 1}
+/* el brillo de vidrio del canto: es lo que hace que la tarjeta se lea a pieza
+   Frutiger y no a un `<video>` con border-radius */
+#camVisor::after{content:'';position:absolute;inset:0;pointer-events:none;
+  border-radius:26px;
+  background:linear-gradient(180deg,rgba(255,255,255,.30),transparent 16%,transparent 88%,rgba(255,255,255,.10));
+  box-shadow:inset 0 2px 8px rgba(255,255,255,.28)}
+
+#camReja{position:absolute;inset:0;pointer-events:none}
+#camReja.r33,#camReja.r44{background-image:
+  linear-gradient(90deg,rgba(255,255,255,.34) 1px,transparent 1px),
+  linear-gradient(rgba(255,255,255,.34) 1px,transparent 1px)}
+#camReja.r33{background-size:33.33% 33.33%}
+#camReja.r44{background-size:25% 25%}
+
+#camHdr{position:absolute;right:6px;top:12px;color:#fff;font-weight:800;font-size:12px;line-height:1;
+  letter-spacing:.06em;writing-mode:vertical-rl;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+#camEstado{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  display:none;max-width:78%;text-align:center;color:#fff;font-weight:700;font-size:13px;line-height:1.45;
+  background:rgba(6,28,50,.62);padding:12px 16px;border-radius:16px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28)}
+#camEstado.on{display:block}
+#camFlash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+#camFlash.on{animation:camFlash .28s ease-out}
+@keyframes camFlash{from{opacity:.92}to{opacity:0}}
+#camRec{position:absolute;left:12px;top:12px;display:none;align-items:center;gap:7px;
+  background:rgba(8,20,34,.55);border-radius:20px;padding:5px 11px;
+  color:#fff;font-weight:800;font-size:12px;line-height:1}
+#camRec.on{display:flex}
+#camRec .pt{width:9px;height:9px;border-radius:50%;background:#ff4141;
+  animation:camPt 1s ease-in-out infinite}
+@keyframes camPt{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ── LA FRANJA DE ARRIBA ── */
+#camTop{position:relative;z-index:3;width:calc(100% - 26px);
+  display:flex;align-items:center;gap:10px;margin-bottom:8px;
+  padding:7px 12px;border-radius:20px;color:#fff;font-weight:800;font-size:13px;line-height:1}
+#camTop .ctB{background:0;border:0;color:rgba(255,255,255,.8);font-size:16px;padding:4px 6px}
+#camTop .ctB.act{color:#ffd36b}
+#camTop .ctPil{margin-left:auto;margin-right:auto;background:rgba(255,255,255,.18);
+  border:0;color:#fff;border-radius:14px;padding:3px 16px;font-size:15px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+#camTop .ctT{opacity:.95;letter-spacing:.04em;font-size:13px}
+
+/* ── EL PANEL DEL CHEVRON ── */
+#camRapido{position:absolute;left:13px;right:13px;top:calc(var(--ins-t,24px) + 58px);
+  z-index:6;display:none;grid-template-columns:repeat(4,1fr);gap:2px;
+  border-radius:20px;padding:12px 6px;overflow:hidden}
+#camRapido.on{display:grid}
+#camRapido button{background:0;border:0;color:#fff;display:flex;flex-direction:column;
+  align-items:center;gap:6px;padding:9px 2px;font-weight:600;font-size:10.5px;line-height:1.2;opacity:.92}
+#camRapido button b{font-weight:800;font-size:15px;line-height:1;opacity:.95}
+#camRapido button.act{color:#bfe9ff}
+#camRapido .crCfg{grid-column:1}
+
+/* ── LOS FILTROS DE DOCUMENTOS: COLUMNA A LA DERECHA ──
+   Es donde los pone la cámara de verdad, y ahí no tapan el visor. */
+#camFiltros{position:absolute;right:18px;top:46%;z-index:5;display:none;
+  flex-direction:column;gap:4px;padding:6px;border-radius:22px}
+#camFiltros.on{display:flex}
+#camFiltros button{background:0;border:0;color:#fff;border-radius:16px;
+  padding:8px 12px;font-weight:700;font-size:12px;line-height:1}
+#camFiltros button.act{background:#fff;color:#0b3a5c}
+
+/* ── EL ZOOM VA SOBRE EL VISOR ──
+   Es donde lo pone la cámara de verdad, y ahí no le come alto a la repisa. */
+#camZoom{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
+  z-index:4;display:flex;gap:2px;padding:4px;border-radius:22px}
+#camZoom button{background:0;border:0;color:#fff;border-radius:18px;
+  width:40px;height:32px;font-weight:800;font-size:12px;line-height:1;opacity:.85}
+#camZoom button.act{background:rgba(255,255,255,.22);color:#ffd36b;opacity:1;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+
+/* ── LA REPISA DE VIDRIO ──
+   Una sola pieza que sostiene los modos y el obturador. Sin ella, nueve
+   rótulos y tres botones quedan sueltos sobre un acuario. */
+#camPie{position:relative;z-index:3;width:calc(100% - 26px);margin-top:10px;
+  border-radius:26px;padding:8px 0 10px;overflow:hidden}
+/* ── EL BRILLO FRUTIGER ──
+   El vidrio del launcher es sobrio a propósito —un escritorio no puede tener
+   una pieza que grite— y una cámara Frutiger sí: lo que la separa de un panel
+   translúcido cualquiera es el filo encendido de arriba y el reflejo que baja
+   en la primera mitad. Va como `::after` sobre las piezas de la cámara y no
+   tocando `.vid`, que lo usa el launcher entero. */
+#camPie::after,#camTop::after,#camZoom::after,#camRapido::after,
+#camFiltros::after,#camElige::after{
+  content:'';position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,.06) 46%,transparent 60%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.62),
+             inset 0 -1px 0 rgba(255,255,255,.14),
+             inset 0 0 0 1px rgba(255,255,255,.18)}
+#camPie>*,#camTop>*,#camZoom>*,#camRapido>*,#camFiltros>*,#camElige>*{position:relative;z-index:1}
+
+/* ── EL CARRUSEL DE MODOS ── */
+#camModos{position:relative;z-index:3;width:100%;display:flex;gap:22px;
+  overflow-x:auto;scrollbar-width:none;padding:4px 50%;
+  scroll-behavior:smooth}
+#camModos::-webkit-scrollbar{display:none}
+#camModos button{background:0;border:0;color:rgba(255,255,255,.82);
+  font-weight:700;font-size:14px;line-height:1;white-space:nowrap;padding:6px 2px}
+#camModos button.act{color:#ffd36b;font-weight:800}
+
+/* ── LA BARRA DEL OBTURADOR ── */
+#camBarra{position:relative;z-index:3;width:100%;display:flex;align-items:center;
+  justify-content:space-around;padding:6px 22px 0}
+#camThumb{width:48px;height:48px;border-radius:12px;border:2px solid rgba(255,255,255,.85);
+  background-size:cover;background-position:center;background-color:rgba(255,255,255,.14)}
+#camThumb.vacia{opacity:.45}
+#camFlip{width:44px;height:44px;border-radius:50%;border:0;color:#fff;font-size:20px;
+  background:rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+#camDisp{width:74px;height:74px;border-radius:50%;border:0;padding:0;
+  background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 6px 18px rgba(2,20,40,.4)}
+#camDisp span{display:block;border-radius:50%;transition:all .18s cubic-bezier(.2,1.3,.3,1)}
+#camDisp.foto span{width:60px;height:60px;background:#fff;
+  box-shadow:0 0 0 3px rgba(11,58,92,.35) inset}
+#camDisp.grabar span,#camDisp.lapso span{width:56px;height:56px;background:#e83a30}
+#camDisp.lapso{border:3px dashed rgba(255,255,255,.85)}
+#camDisp.grabando span{width:30px;height:30px;border-radius:8px}
+
+/* ── EL SELECTOR ──
+   Es lo primero que aparece: «al abrirla te deje elegir entre la frutiger o la
+   normal con un botón». */
+#cam #camTop,#cam #camVisorC,#cam #camPie{
+  transition:opacity .22s,transform .22s}
+#cam.eligiendo #camTop,#cam.eligiendo #camPie{
+  opacity:0;pointer-events:none}
+#cam.eligiendo #camVisorC{opacity:.35;transform:scale(.94)}
+#camElige{position:absolute;left:22px;right:22px;top:50%;z-index:8;
+  transform:translateY(-50%) scale(.9);opacity:0;pointer-events:none;
+  border-radius:26px;padding:22px 18px 18px;color:#fff;text-align:center;
+  transition:opacity .24s,transform .3s cubic-bezier(.2,1.15,.3,1)}
+#cam.eligiendo #camElige{opacity:1;transform:translateY(-50%) scale(1);pointer-events:auto}
+#camElige .ceTit{font-weight:800;font-size:20px;line-height:1.25;margin-bottom:6px}
+#camElige .ceSub{font-weight:600;font-size:12.5px;line-height:1.5;opacity:.8;margin-bottom:16px}
+#camElige .ceBt{display:block;width:100%;margin:0 0 9px;border:0;border-radius:17px;
+  padding:14px;font-weight:800;font-size:15px;line-height:1;color:#0b3a5c;
+  background:linear-gradient(180deg,#eafaff,#a9e2f7);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 5px 14px rgba(2,26,50,.35)}
+#camElige .ceBt.sec{color:#fff;background:rgba(255,255,255,.16);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+#camElige .ceX{position:absolute;right:12px;top:10px;background:0;border:0;
+  color:#fff;opacity:.7;font-size:16px}
+
+/* ── LOS AJUSTES ── */
+/* ── LOS AJUSTES TAPAN DE VERDAD ──
+   Con la hoja translúcida a secas, el visor —que es lo más saturado de la
+   pantalla— se veía a través de las once filas y no se leía ninguna. Y encima
+   el `<video>` seguía componiéndose para no verse: se esconde, que es la misma
+   regla que apaga el agua debajo de una hoja. */
+#camAj{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;
+  color:#fff;padding:calc(var(--ins-t,24px) + 6px) 12px calc(var(--ins-b,16px) + 8px);
+  background:linear-gradient(180deg,rgba(6,32,58,.94),rgba(5,44,68,.96) 45%,rgba(4,30,54,.97))}
+#cam.conAjustes #camVisorC,#cam.conAjustes #camPie,#cam.conAjustes #camTop,
+#cam.conAjustes #camFiltros{visibility:hidden}
+#cam.conAjustes #camAj{display:flex}
+#camAj .cajTop{display:flex;align-items:center;gap:10px;padding:4px 4px 12px}
+#camAj .cajTop button{background:0;border:0;color:#fff;font-weight:700;font-size:18px;line-height:1;width:32px}
+#camAj .cajTit{flex:1;text-align:center;font-weight:800;font-size:19px;line-height:1}
+#camAj #cajI{border:1.5px solid rgba(255,255,255,.6);border-radius:50%;
+  width:24px;height:24px;font-weight:700;font-size:12px;line-height:1}
+#camAj .cajTabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 2px 12px}
+#camAj .cajTabs button{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);
+  color:rgba(255,255,255,.66);border-radius:16px;padding:11px 4px;font-weight:700;font-size:14px;line-height:1}
+#camAj .cajTabs button.act{background:rgba(255,255,255,.2);color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+#camAj .cajCuerpo{flex:1;overflow-y:auto;min-height:0}
+#camAj .cajG{background:rgba(255,255,255,.08);border-radius:22px;padding:4px 16px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+#camAj .cajF{display:flex;align-items:center;gap:12px;padding:15px 0;
+  border-bottom:1px solid rgba(255,255,255,.09)}
+#camAj .cajF:last-child{border-bottom:0}
+#camAj .cajL{flex:1;min-width:0}
+#camAj .cajN{font-weight:600;font-size:15.5px;line-height:1.25}
+#camAj .cajS{font-weight:500;font-size:12px;line-height:1.4;opacity:.6;margin-top:4px}
+#camAj .cajV{background:0;border:0;color:rgba(255,255,255,.62);font-weight:600;font-size:13.5px;line-height:1;
+  white-space:nowrap}
+#camAj .cajSw{width:46px;height:27px;border:0;border-radius:14px;flex:0 0 auto;
+  background:rgba(255,255,255,.22);position:relative;transition:background .2s}
+#camAj .cajSw::after{content:'';position:absolute;left:3px;top:3px;width:21px;height:21px;
+  border-radius:50%;background:#fff;transition:transform .2s cubic-bezier(.2,1.3,.3,1)}
+#camAj .cajSw.on{background:#3d7dff}
+#camAj .cajSw.on::after{transform:translateX(19px)}
+
+/* la foto que se acaba de sacar */
+#camVer{position:fixed;inset:0;z-index:14;background:rgba(3,16,30,.9);
+  display:flex;align-items:center;justify-content:center}
+#camVer img{max-width:94%;max-height:82%;border-radius:18px;
+  box-shadow:0 18px 44px rgba(0,0,0,.6)}
+#camVer button{position:absolute;right:16px;top:calc(var(--ins-t,24px) + 8px);
+  background:rgba(255,255,255,.16);border:0;color:#fff;border-radius:50%;
+  width:38px;height:38px;font-size:16px}
+
+@media (prefers-reduced-motion:reduce){
+  #camElige,#camVid,#camDisp span{transition-duration:.01s}
+  #camFlash.on{animation:none}
+}
+
+/* ══════════ LA CARPETA ABIERTA ══════════ */
+#carp{position:fixed;z-index:6;left:12px;right:12px;top:50%;transform:translateY(-50%) scale(.30);
+  border-radius:26px;padding:14px 14px 18px;opacity:0;pointer-events:none;
+  transition:opacity .18s ease,transform .34s cubic-bezier(.18,1.12,.28,1);
+  max-height:70%;display:flex;flex-direction:column;gap:10px}
+#carp.on{opacity:1;transform:translateY(-50%) scale(1);pointer-events:auto}
+#carpCab{display:flex;align-items:center;gap:10px}
+/* el nombre es un campo y no un rótulo: renombrar tiene que ser tocar el nombre */
+#carpNom{flex:1;background:rgba(255,255,255,.14);border:0;outline:0;color:#fff;
+  border-radius:12px;padding:9px 12px;font-weight:800;font-size:15px;line-height:1;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+#carpRejilla{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;
+  overflow-y:auto;min-height:0;padding:2px}
+#carpPie{font-weight:600;font-size:11.5px;line-height:1.4;opacity:.72;text-align:center}
+
+/* ══════════ PANTALLA DE INICIO ══════════
+   Hoja corta: dos botones y tres renglones de explicación. `max-height` y no
+   `height`, porque lo que mide es lo que dice — y lo que dice cambia según sea
+   o no el inicio. */
+#ini{position:fixed;z-index:6;left:0;right:0;bottom:0;max-height:70%;
+  border-radius:28px 28px 0 0;display:flex;flex-direction:column;
+  transform:translateY(102%);transition:transform .28s cubic-bezier(.2,.9,.3,1);
+  padding:10px 12px calc(var(--ins-b) + 14px)}
+#ini.on{transform:translateY(0)}
+#iniCuerpo{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:2px 4px 6px;display:flex;flex-direction:column;gap:12px}
+#iniCuerpo .iEst{font-weight:800;font-size:15px;line-height:1.35;text-shadow:0 1px 2px rgba(0,25,52,.6)}
+#iniCuerpo .iNota{font-weight:600;font-size:12.5px;line-height:1.45;opacity:.78}
+/* el botón grande ocupa el ancho: es la acción de la pantalla, no una opción
+   entre varias */
+#iniCuerpo .iBtn{padding:14px 16px;border-radius:16px;font-weight:800;font-size:14px;line-height:1;
+  cursor:pointer;text-align:center;background:rgba(255,255,255,.15);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34);text-shadow:0 1px 2px rgba(0,25,52,.6)}
+#iniCuerpo .iBtn.pri{background:color-mix(in srgb,var(--acento) 34%,rgba(255,255,255,.12));
+  box-shadow:inset 0 0 0 1.4px color-mix(in srgb,var(--acento) 62%,transparent),
+             inset 0 1px 0 rgba(255,255,255,.4)}
+#iniCuerpo .iBtn.no{opacity:.42;pointer-events:none}
+.pGrupo{display:flex;flex-direction:column;gap:8px}
+.pTit{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;
+  opacity:.7;padding-left:4px}
+.pFila{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pOp{flex:0 0 auto;padding:9px 14px;border-radius:14px;font-weight:700;font-size:13px;line-height:1;
+  cursor:pointer;background:rgba(255,255,255,.13);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32);text-shadow:0 1px 2px rgba(0,25,52,.6)}
+.pOp:active{background:rgba(255,255,255,.26)}
+.pOp.sel{background:color-mix(in srgb,var(--acento) 34%,transparent);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 0 0 1px color-mix(in srgb,var(--acento) 60%,transparent)}
+.pCol{width:34px;height:34px;border-radius:12px;flex:0 0 auto;cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 8px rgba(0,25,52,.35)}
+.pCol.sel{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 0 0 3px #fff,0 3px 10px rgba(0,25,52,.4)}
+.pRango{flex:1 1 120px;min-width:110px;-webkit-appearance:none;appearance:none;
+  height:6px;border-radius:3px;background:rgba(255,255,255,.22);outline:0}
+.pRango::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;
+  border-radius:50%;background:var(--acento);box-shadow:0 2px 6px rgba(0,25,52,.5)}
+.pVal{flex:0 0 auto;min-width:44px;text-align:right;font-weight:800;font-size:13px;line-height:1;opacity:.9}
+
+#menu{position:fixed;z-index:5;left:50%;transform:translate(-50%,10px) scale(.94);
+  width:min(300px,82vw);border-radius:24px;padding:8px;opacity:0;pointer-events:none;
+  transition:opacity .18s,transform .18s cubic-bezier(.2,.9,.3,1.3)}
+#menu.on{opacity:1;pointer-events:auto;transform:translate(-50%,0) scale(1)}
+#menuTit{padding:12px 16px 10px;font-size:15px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mop{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:16px;
+  font-size:15px;font-weight:600;cursor:pointer}
+.mop:active{background:rgba(255,255,255,.18)}
+.mop.peli{color:#ffb3b8}
+.mop .ic{width:20px;text-align:center;opacity:.85}
+
+/* ── LOS ATAJOS DE LA APP, ARRIBA Y SEPARADOS ──
+   Van ANTES de fijar/info/desinstalar y con una línea en el medio, porque son
+   de otra clase de cosa: los tres de abajo actúan sobre el icono y éstos abren
+   la app en un sitio. Mezclados, «Desinstalar» queda a un dedo de «Chat nuevo». */
+#menuAt{display:none}
+#menuAt.on{display:block;border-bottom:1px solid rgba(255,255,255,.14);
+  margin-bottom:6px;padding-bottom:6px}
+.mat{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:16px;
+  font-size:14px;font-weight:600;cursor:pointer}
+.mat:active{background:rgba(255,255,255,.18)}
+.mat .ic{width:20px;text-align:center;opacity:.7;font-size:12px}
+.mat span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── EL PUNTO DE NOTIFICACIÓN ──
+   Va en el canto de arriba a la derecha, que es donde no hay logo: los iconos
+   del pack tienen el dibujo centrado y los del sistema llevan su relleno hasta
+   el borde, así que cualquier otra esquina tapa algo. El número sólo aparece a
+   partir de dos —con una, el punto ya lo dice y el «1» es ruido. */
+.insig{position:absolute;top:5px;right:calc(50% - var(--ico)/2 - 4px);min-width:16px;height:16px;
+  border-radius:9px;background:var(--acento,#5bc8ff);color:#04182c;
+  font-size:10px;font-weight:800;line-height:16px;text-align:center;
+  padding:0 4px;box-sizing:border-box;pointer-events:none;
+  box-shadow:0 2px 6px rgba(4,26,52,.45),0 0 0 2px rgba(4,26,52,.30)}
+.insig.pto{min-width:11px;width:11px;height:11px;padding:0;top:7px;
+  right:calc(50% - var(--ico)/2 - 2px)}
+
+/* ── LA FILA DE SUGERIDAS ──
+   No es una sección más del cajón: va pegada arriba, sin encabezado de letra y
+   con su propio rótulo, para que no se confunda con la lista alfabética. */
+#cajSug{display:none;padding:2px 4px 10px}
+#cajSug.on{display:block}
+#cajSugT{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;
+  opacity:.55;padding:0 8px 8px}
+#cajSugR{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+
+.pBt{flex:0 0 auto;padding:9px 14px;border-radius:14px;font-weight:700;font-size:13px;
+  line-height:1;background:rgba(255,255,255,.14);cursor:pointer;
+  border:1px solid rgba(255,255,255,.16);color:#fff}
+.pBt:active{background:rgba(255,255,255,.26)}
+.pTxt{width:100%;min-height:74px;border-radius:14px;padding:10px 12px;box-sizing:border-box;
+  background:rgba(2,16,34,.42);border:1px solid rgba(255,255,255,.16);color:#fff;
+  font:500 11px/1.45 ui-monospace,monospace;resize:vertical}
+.pNota{font-size:11px;line-height:1.5;opacity:.6}
+
+/* ══════════ AVISO ══════════ */
+#aviso{position:fixed;left:50%;transform:translateX(-50%);z-index:6;
+  bottom:calc(var(--ins-b) + 84px);padding:11px 20px;border-radius:22px;
+  font-size:13px;font-weight:600;opacity:0;pointer-events:none;
+  /* ── ENTRA DESDE ABAJO ──
+     Apareciendo y desapareciendo en el sitio se lee a error del navegador y no
+     a un aviso. Y va con el `translateX(-50%)` adentro del mismo `transform`,
+     porque son la misma propiedad: escrito aparte, uno pisa al otro. */
+  transform:translate(-50%,14px) scale(.94);
+  transition:opacity .2s,transform .26s cubic-bezier(.2,1.3,.35,1);
+  white-space:nowrap}
+#aviso.on{opacity:1;transform:translate(-50%,0) scale(1)}
+
+/* ══════════ CARGANDO ══════════ */
+#carga{position:fixed;inset:0;z-index:7;display:flex;align-items:center;
+  justify-content:center;flex-direction:column;gap:16px;
+  background:linear-gradient(180deg,#1a6fb8,#4fb3e8 55%,#a8e2f7);
+  transition:opacity .5s}
+#carga.off{opacity:0;pointer-events:none}
+#cargaT{font-size:34px;font-weight:200;letter-spacing:.3em;
+  text-shadow:0 2px 20px rgba(0,60,110,.5)}
+#cargaB{width:120px;height:3px;border-radius:2px;background:rgba(255,255,255,.28);overflow:hidden}
+#cargaB i{display:block;height:100%;width:34%;border-radius:2px;background:#fff;
+  box-shadow:0 0 12px #fff;animation:vaiven 1.1s ease-in-out infinite}
+@keyframes vaiven{0%{margin-left:-34%}100%{margin-left:100%}}
+</style>
+</head>
+<body>
+<div id="fondo"></div>
+<!-- ── LOS VELOS SON LO QUE HACE LEGIBLE EL TEXTO BLANCO ──
+     Medido sobre la foto: debajo de la barra de búsqueda la luminancia daba 200
+     sobre 255 y el vidrio recalibrado la dejó en 159 — texto blanco sobre 159
+     es 1,6:1 de contraste, o sea que no se lee. Bajar más el vidrio lo
+     convierte en un panel opaco y se pierde el vidrio.
+     La salida es la de cualquier sistema: un degradado detrás de las franjas
+     que llevan texto, y nada en el medio, que es donde la foto tiene que
+     verse. Cuesta dos elementos sin repintado y no toca el vidrio. -->
+<div id="veloT"></div>
+<div id="veloB"></div>
+<svg id="svgdefs" aria-hidden="true"><defs>
+  <!-- el mapa de desplazamiento lo dibuja d.js y lo mete acá: es una imagen
+       cuyo canal rojo dice cuánto correr en x y el verde cuánto en y -->
+  <filter id="refr" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feImage id="refrMapa" result="mapa" preserveAspectRatio="none"/>
+    <feDisplacementMap id="refrDesp" in="SourceGraphic" in2="mapa"
+      scale="42" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</defs></svg>
+
+<div id="capa">
+  <div id="barra">
+    <div id="bIzq">—</div>
+    <div id="bat"><span id="batN">—</span><div id="batCaja"><div id="batLlena" style="width:70%"></div></div></div>
+  </div>
+
+  <!-- ── LA FRANJA DE LOS WIDGETS ──
+       El reloj de siempre pasa a ser UNO del catálogo y lo arma `w.js` con los
+       mismos ids, así que `pintaReloj` y `ponBateria` no cambian una línea.
+       `#hoja` es lo elástico de esta columna: agregar un widget le come filas a
+       la reja de apps sin una sola cuenta. -->
+  <div id="wid"></div>
+
+  <div class="vid refr" id="buscaCaja">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"
+      stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.6"/><path d="M15.6 15.6L21 21"/></svg>
+    <input id="busca" type="search" autocomplete="off" autocorrect="off" readonly
+      autocapitalize="none" spellcheck="false" placeholder="—">
+  </div>
+
+  <div id="hoja"><div id="tira"></div></div>
+  <div class="vid refr" id="dock"></div>
+</div>
+
+<div id="tirador"><i></i></div>
+
+<div id="cajon">
+  <!-- ── LA MANIJA ES LA ÚNICA FORMA GARANTIZADA DE CERRAR ──
+       Arrastrar sobre la lista no alcanza: `#cajLista` tiene `touch-action:pan-y`,
+       así que el navegador se queda con el gesto vertical y dispara
+       `pointercancel` antes de que el arrastre llegue al umbral. Esta franja
+       lleva `touch-action:none`, o sea que el gesto es nuestro siempre. -->
+  <div id="cajManija"><i></i></div>
+  <div class="vid" id="cajBusca">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"
+      stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.6"/><path d="M15.6 15.6L21 21"/></svg>
+    <input id="busca2" type="search" autocomplete="off" autocorrect="off"
+      autocapitalize="none" spellcheck="false" placeholder="—">
+  </div>
+  <div id="cajSug"><div id="cajSugT">—</div><div id="cajSugR"></div></div>
+  <div id="cajTit">—</div>
+  <div id="cajCuerpo">
+    <div id="cajLista"></div>
+    <!-- la barra del índice: pista fija y pomo que sigue el scroll -->
+    <div id="riel"><div id="rielPista"></div><div id="rielPomo"></div></div>
+  </div>
+  <div id="burbuja">A</div>
+</div>
+
+<!-- ── LA MASCOTA VIVE EN EL ESCRITORIO, NO ADENTRO DEL CAJÓN ──
+     Estaba dentro de `#cajon` y sólo aparecía **escribiendo en la búsqueda**:
+     o sea que había que abrir el cajón y teclear para verla. El reporte fue
+     literal —«no sé dónde se encuentra»— y tenía razón: un modelo 3D que hay
+     que descubrir no existe. Ahora es hermana del cajón y la coloca el CSS
+     según dónde esté uno: en el medio del escritorio, grande, desde el primer
+     cuadro; y chica al pie del cajón cuando el cajón está abierto. -->
+<div id="mascota">
+  <div id="mVent"><canvas id="mLien"></canvas></div>
+  <div id="mZ"><span>Z</span><span>Z</span><span>Z</span></div>
+</div>
+
+<div id="oscuro"></div>
+<div id="velo"></div>
+<div class="vid refr" id="menu">
+  <div id="menuTit">—</div>
+  <div id="menuAt"></div>
+  <div class="mop" id="mFijar"><span class="ic">☆</span><span>—</span></div>
+  <div class="mop" id="mInfo"><span class="ic">ⓘ</span><span>—</span></div>
+  <div class="mop" id="mOcultar"><span class="ic">◌</span><span>—</span></div>
+  <div class="mop peli" id="mBorrar"><span class="ic">✕</span><span>—</span></div>
+</div>
+
+<div class="vid refr" id="pers">
+  <div id="asCab">
+    <div id="persTit">—</div>
+    <div class="asBtn" id="persCerrar">✕</div>
+  </div>
+  <div id="persCuerpo"></div>
+</div>
+
+<div class="vid refr" id="carp">
+  <div id="carpCab">
+    <input id="carpNom" maxlength="22" />
+    <div class="asBtn" id="carpCerrar">✕</div>
+  </div>
+  <div id="carpRejilla"></div>
+  <div id="carpPie">—</div>
+</div>
+
+<!-- ── LA GALERÍA DE FONDOS ──
+     Va de borde a borde y con la lista corrida hacia abajo a propósito: el
+     fondo se aplica al tocar, así que la mitad de arriba de la pantalla tiene
+     que seguir mostrando el fondo de verdad con el reloj y el widget encima.
+     Con una hoja centrada, lo que se elige queda tapado por lo que lo elige. -->
+<div id="fondos">
+  <div id="fgCab" class="vid refr">
+    <div class="fgTabs">
+      <div class="fgTab on" data-t="fondos">—</div>
+      <div class="fgTab" data-t="widgets">—</div>
+    </div>
+    <div style="flex:1"></div>
+    <div class="asBtn" id="fgMia">＋</div>
+    <div class="asBtn" id="fgX">✕</div>
+  </div>
+  <!-- ── GENERAR UNO ──
+       Va ARRIBA de la rejilla y no en una pestaña aparte: lo generado se guarda
+       en el mismo sitio que «la tuya», así que aparece como una ficha más de
+       esta misma lista y se ve aplicado detrás de la hoja al instante. -->
+  <div id="fgGen">
+    <input id="fgGenT" type="text" />
+    <button id="fgGenB"></button>
+    <button id="fgGenX"></button>
+  </div>
+  <div id="fgIdeas"></div>
+  <div id="fgRejilla"></div>
+  <div id="fgWid"></div>
+  <input type="file" id="fgArch" accept="image/*" />
+</div>
+
+<!-- ── LA PANTALLA DE INICIO ES SU PROPIA APP ──
+     Personalizar es cómo se ve el launcher; esto es qué papel juega en el
+     teléfono. Meterlo ahí adentro lo dejaría como un renglón más entre el
+     color de acento y el idioma, y es lo único de todo el launcher que cambia
+     algo del sistema. -->
+<div class="vid refr" id="ini">
+  <div id="asCab">
+    <div id="iniTit">—</div>
+    <div class="asBtn" id="iniCerrar">✕</div>
+  </div>
+  <div id="iniCuerpo"></div>
+</div>
+
+<div class="vid refr" id="asis">
+  <div id="asCab">
+    <div id="asTit">—</div>
+    <div class="asBtn" id="asConf">⚙</div>
+    <div class="asBtn" id="asCerrar">✕</div>
+  </div>
+  <div id="asLista"></div>
+  <div id="asLlaveCaja">
+    <div id="asLlaveTit">—</div>
+    <div id="asProvs" class="pFila"></div>
+    <div id="asLlaveFila">
+      <input id="asLlave" type="password" autocomplete="off" spellcheck="false" placeholder="—">
+      <button id="asGuardar">—</button>
+      <button id="asBorrar">—</button>
+    </div>
+  </div>
+  <div id="asAyuda">—</div>
+  <div id="asPie">
+    <input id="asTxt" type="text" autocomplete="off" spellcheck="false" placeholder="—">
+    <button id="asMandar">➤</button>
+  </div>
+</div>
+
+<div class="vid" id="aviso">—</div>
+
+<div id="carga"><div id="cargaT">AERO</div><div id="cargaB"><i></i></div></div>
+
+<script type="module">

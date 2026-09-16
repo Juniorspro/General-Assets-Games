@@ -1,0 +1,48 @@
+name: Publicar el sitio
+
+on:
+  push:
+    branches: [ main, claude/billeteras-sin-registro-3z7uvz ]
+    paths: [ 'programas/**', 'juegos-pc/**.html', 'index.html', '.github/workflows/pages.yml' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Se publica SÓLO lo que se abre en un navegador. El resto del repositorio
+      # son fuentes y materiales: seiscientos megas que no tienen por qué viajar.
+      - name: Armar el sitio
+        run: |
+          mkdir -p _site
+          cp index.html _site/ 2>/dev/null || true
+          cp -r programas _site/programas
+          mkdir -p _site/juegos-pc
+          cp juegos-pc/*.html _site/juegos-pc/ 2>/dev/null || true
+          touch _site/.nojekyll
+          du -sh _site
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true      # prende Pages por API si estaba apagado
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

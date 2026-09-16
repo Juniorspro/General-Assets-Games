@@ -1,0 +1,216 @@
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Z · ARRANQUE, RELOJ Y SONDAS
+   ══════════════════════════════════════════════════════════════════════════ */
+let ULT = 0, DIBMS = 0;
+function bucle(ts) {
+  requestAnimationFrame(bucle);
+  const dt = Math.min(0.05, ULT ? (ts - ULT) / 1000 : 0); ULT = ts;
+  if (JU.fase === 'juega') paso(dt);
+  const t0 = performance.now();
+  dibuja(dt);
+  DIBMS = DIBMS * 0.9 + (performance.now() - t0) * 0.1;
+}
+
+function arranca() {
+  const hab = cargaProg();
+  medir(); engancha(); pintaIdioma();
+  setTimeout(() => { const c = $('carga'); c.classList.add('off'); setTimeout(() => c.style.display = 'none', 420); }, 340);
+  if (hab) arrancaJuego(); else verPanel('pIdioma');
+  requestAnimationFrame(bucle);
+}
+arranca();
+
+/* ══════════════════════ SONDAS ══════════════════════
+   Una afirmacion sin numero no vale. Todo lo que mide entra POR EL MISMO
+   CAMINO QUE EL DEDO (`toqueEn` con pixeles), no escribiendo el estado: una
+   sonda que se saltea la entrada no esta midiendo el juego.                */
+function _fin() { for (const p of JU.T.piezas) p.sal = 0; if (JU.sal > 0) { JU.sal = 0; gana(); } }
+window.__F = {
+  est() {
+    const T = JU.T;
+    return {
+      fase: JU.fase, panel: PANEL, m: JU.m, n: JU.n, tut: JU.tut, lang: LANG,
+      piezas: T ? T.piezas.length : 0, vivas: T ? vivas(T).length : 0,
+      legales: T ? legales(T).length : 0, vidas: JU.vidas, toques: JU.toques,
+      fallos: JU.fallos, tutPaso: TUT.paso, pista: PI_K,
+      nx: T ? T.nx : 0, ny: T ? T.ny : 0, cw: JU.cw,
+      caja: T ? [JU.bx, JU.by, JU.bw, JU.bh] : null, ms: +DIBMS.toFixed(3),
+      hechos: cuentaHechos(), ult: PROG.ult,
+    };
+  },
+  nivel(m, n) { cierraPanel(); nuevoNivel(m, n, false); return this.est(); },
+  tut() { cierraPanel(); nuevoNivel(0, 0, true); return this.est(); },
+  menu() { alMenu(); return this.est(); },
+  lang(l) { ponIdioma(l); return { lang: LANG, sub: $('mSub').textContent, pista: $('pista').textContent }; },
+  panel(id) { verPanel(id); return { panel: PANEL }; },
+  clic(id) { const e = $(id); if (!e) return 'no hay ' + id; e.click(); return this.est(); },
+  legales() { return legales(JU.T).map(p => p.i); },
+  /* toca una pieza por el pixel de su cabeza, o sea como la tocaria un dedo */
+  toca(i) {
+    const p = JU.T.piezas[i]; if (!p || p.fuera) return { err: 'no esta' };
+    const c = p.cel[p.cel.length - 1];
+    const antes = { vivas: vivas(JU.T).length, vidas: JU.vidas };
+    toqueEn(pcx(c[0]), pcy(c[1]));
+    return { antes, ahora: { vivas: vivas(JU.T).length, vidas: JU.vidas, tutPaso: TUT.paso, fase: JU.fase } };
+  },
+  tocaPx(x, y) { toqueEn(x, y); return this.est(); },
+  /* juega el nivel puesto, tocando de verdad. `azar` es el control: sin el,
+     que el honesto termine no prueba que haya una decision adentro.        */
+  juega(modo, topeVidas) {
+    /* ADELANTA LA SIMULACION. Sin `paso`, la bandera de «sin vidas» no se
+       descuenta nunca y el bot mide un juego que no existe — el tablero deja
+       de escuchar y el bucle gira en el vacio hasta el tope.               */
+    let g = 0, r = azar(1234567), perdidas = 0, prev = 0, tope = topeVidas === undefined ? 3 : topeVidas;
+    while (JU.fase === 'juega' && vivas(JU.T).length && g++ < 4000) {
+      /* una derrota es una TRANSICION de 0 a >0: leer el valor suelto no la ve,
+         porque el propio `paso` ya lo bajo antes de que nadie lo mire.      */
+      if (JU.rehace > 0 && prev <= 0) perdidas++;
+      prev = JU.rehace;
+      paso(0.016);
+      if (JU.rehace > 0) { if (perdidas > tope) break; continue; }
+      const L = legales(JU.T), V = vivas(JU.T);
+      const p = modo === 'azar' ? V[(r() * V.length) | 0] : L[0];
+      if (!p) break;
+      const c = p.cel[p.cel.length - 1];
+      toqueEn(pcx(c[0]), pcy(c[1]));
+      _fin();
+    }
+    _fin();
+    /* `gano` ES DE ESTA CORRIDA Y NO DEL DISCO. `hecho()` lee el progreso
+       guardado, asi que despues de una tanda del bot honesto el del azar
+       informaba 20 de 20 con OCHENTA derrotas: estaba leyendo las victorias
+       de la corrida anterior. Ganar es terminar el tablero SIN que el nivel
+       se te reinicie, o sea sin quedarte sin corazones ni una vez.        */
+    const quedan = JU.T ? vivas(JU.T).length : 0;
+    return { fase: JU.fase, vivas: quedan, toques: JU.toques, fallos: JU.fallos, vidas: JU.vidas, perdidas, vueltas: g, gano: perdidas === 0 && quedan === 0, hecho: hecho(JU.m, JU.n) };
+  },
+  /* el tutorial jugado paso por paso, por el mismo camino */
+  juegaTut() {
+    const K = JU.T.tut, hist = [];
+    const pasos = [K.A, K.B, K.C];
+    for (const i of pasos) { hist.push({ paso: TUT.paso, toca: i }); this.toca(i); _fin(); }
+    let g = 0;
+    while (JU.fase === 'juega' && vivas(JU.T).length && g++ < 40) {
+      const L = legales(JU.T); if (!L.length) break;
+      this.toca(L[0].i); _fin();
+    }
+    return { hist, fase: JU.fase, tutPaso: TUT.paso, vidas: JU.vidas, fTit: $('fTit').textContent };
+  },
+  audita() { return auditaTodo(); },
+  /* fuerza fallos hasta quedarse sin vidas y comprueba lo unico que importa:
+     que el tablero DEJE DE ESCUCHAR entre el ultimo corazon y el reinicio.  */
+  pierde() {
+    const T = JU.T, tap = p => { const c = p.cel[p.cel.length - 1]; toqueEn(pcx(c[0]), pcy(c[1])); };
+    const mal = () => vivas(JU.T).find(p => !puedeSalir(JU.T, p));
+    let k = 0;
+    while (JU.vidas > 0 && k++ < 20) { const p = mal(); if (!p) return { err: 'no hay ninguna bloqueada' }; tap(p); }
+    const antes = vivas(JU.T).length;
+    const buena = legales(JU.T)[0];
+    if (buena) tap(buena);                       /* con las vidas en cero, esto NO puede sacar nada */
+    const sordo = vivas(JU.T).length === antes;
+    let g = 0; while (JU.rehace > 0 && g++ < 200) paso(0.016);
+    return { vidas: JU.vidas, sordo, fallosGastados: k, piezasTrasReinicio: vivas(JU.T).length, total: JU.T.piezas.length, toques: JU.toques, fase: JU.fase, hecho: hecho(JU.m, JU.n) };
+  },
+  /* el tutorial se audita con la MISMA regla que los 120 generados */
+  audTut() {
+    const T = tabTutorial(), r = resuelve(clonaTab(T), 200000);
+    const est = tabTutorial().piezas.map(p => ({
+      i: p.i, dir: DNOM[dirDe(p)], puede: puedeSalir(tabTutorial(), p),
+    }));
+    const T2 = tabTutorial();
+    return {
+      piezas: T.piezas.length, resuelto: r.ok, orden: r.orden, nodos: r.nodos,
+      legalesAlEmpezar: legales(T2).map(p => p.i),
+      bloqueos: T2.piezas.map(p => quienBloquea(T2, p)), est,
+    };
+  },
+  cajas() {
+    const ids = ['vidas', 'nivRot', 'bPausa', 'restan', 'toques', 'pista'];
+    const R = [], vis = [];
+    for (const id of ids) {
+      const e = $(id); if (!e) continue;
+      const s = getComputedStyle(e); if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity < 0.05) continue;
+      const c = e.getBoundingClientRect(); if (c.width < 1 || c.height < 1) continue;
+      R.push({ id, x: c.left, y: c.top, w: c.width, h: c.height }); vis.push(id);
+    }
+    const ch = [], m = $('marco').getBoundingClientRect(), fuera = [];
+    for (let i = 0; i < R.length; i++) {
+      const a = R[i];
+      if (a.x < -1 || a.y < -1 || a.x + a.w > m.width + 1 || a.y + a.h > m.height + 1) fuera.push(a.id);
+      for (let j = i + 1; j < R.length; j++) {
+        const b = R[j];
+        if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) ch.push(a.id + '×' + b.id);
+      }
+    }
+    return { vis, choques: ch, fuera, marco: [Math.round(m.width), Math.round(m.height)] };
+  },
+  paneles() {
+    const out = {};
+    for (const id of ['pIdioma', 'pMenu', 'pNiv', 'pAj', 'pPausa', 'pFin']) {
+      const e = $(id), pre = e.classList.contains('on');
+      e.classList.add('on');
+      const hs = [...e.querySelectorAll('button,h1,h2,.sub,.pie,.aj')].filter(x => x.offsetWidth > 0);
+      let alto = 0, cortado = 0;
+      const m = $('marco').getBoundingClientRect();
+      for (const x of hs) { const c = x.getBoundingClientRect(); alto = Math.max(alto, c.bottom - m.top); if (c.bottom > m.height + 1 || c.top < -1) cortado++; }
+      out[id] = { n: hs.length, alto: Math.round(alto), cortado };
+      if (!pre) e.classList.remove('on');
+    }
+    return out;
+  },
+  audio(ms) {
+    if (!AU.on) return { on: false };
+    const n = AU.an.frequencyBinCount, d = new Float32Array(AU.an.fftSize);
+    return new Promise(res => {
+      setTimeout(() => {
+        AU.an.getFloatTimeDomainData(d);
+        let pico = 0, s = 0;
+        for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > pico) pico = v; s += d[i] * d[i]; }
+        res({ on: true, pico: +pico.toFixed(4), rms: +Math.sqrt(s / d.length).toFixed(4), acorde: AU.acorde });
+      }, ms || 300);
+    });
+  },
+  son(k) { auArranca(); auDesp(); son(k); return { on: AU.on }; },
+  /* MIDE UN EFECTO BARRIENDOLO ENTERO. La ventana del analizador son 42,7 ms
+     y un efecto dura entre 200 y 700: una sola lectura cae donde caiga y lo
+     que devuelve es la cama. Se muestrea cada cuadro y se toma el pico.   */
+  sonMide(k, ms) {
+    auArranca(); auDesp();
+    if (!AU.on) return Promise.resolve({ on: false });
+    const d = new Float32Array(AU.an.fftSize), T = ms || 800;
+    const lee = () => {
+      AU.an.getFloatTimeDomainData(d);
+      let p = 0, s = 0;
+      for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > p) p = v; s += d[i] * d[i]; }
+      return { p, r: Math.sqrt(s / d.length) };
+    };
+    return new Promise(res => {
+      /* el fondo se mide ANTES y con la misma regla, si no la comparacion
+         estaria contra un numero sacado de otra ventana                   */
+      let fp = 0, fr = 0, n0 = 0;
+      const t0 = setInterval(() => {
+        const x = lee(); if (x.p > fp) fp = x.p; if (x.r > fr) fr = x.r;
+        if (++n0 >= 12) {
+          clearInterval(t0);
+          son(k);
+          let pp = 0, rr = 0, n = 0;
+          const t1 = setInterval(() => {
+            const y = lee(); if (y.p > pp) pp = y.p; if (y.r > rr) rr = y.r;
+            if (++n >= Math.ceil(T / 16)) {
+              clearInterval(t1);
+              res({ on: true, k, fondoPico: +fp.toFixed(4), fondoRms: +fr.toFixed(4),
+                    pico: +pp.toFixed(4), rms: +rr.toFixed(4), veces: +(rr / (fr || 1e-9)).toFixed(2) });
+            }
+          }, 16);
+        }
+      }, 16);
+    });
+  },
+  costo(n) {
+    const N = n || 90, t0 = performance.now();
+    for (let i = 0; i < N; i++) dibuja(0.016);
+    return { ms: +((performance.now() - t0) / N).toFixed(3), n: N };
+  },
+};
+</script></body></html>
