@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>NAIPE</title>
+<style>
+:root{
+  --mw:412px; --mh:892px;
+  --tinta:#f4f1e8; --tinta2:#93a3a0; --fondo:#161d20; --fieltro:#2d5a45;
+  --oro:#ffd166; --rojo:#fe5f55; --azul:#3fa9f5; --verde:#6ece8a;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#090d0f;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  touch-action:none;user-select:none;-webkit-user-select:none}
+#marco{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:var(--mw);height:var(--mh);overflow:hidden;background:var(--fondo)}
+canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+
+#aviso{position:absolute;left:0;right:0;top:30%;text-align:center;pointer-events:none;z-index:6;
+  font:900 22px/1.2 system-ui;color:var(--oro);letter-spacing:.06em;opacity:0;
+  text-shadow:0 2px 12px #000,0 0 3px #000;transition:opacity .18s}
+#aviso.on{opacity:1}
+#pista{position:absolute;left:14px;right:14px;bottom:18px;text-align:center;pointer-events:none;
+  z-index:5;font:700 12px/1.4 system-ui;color:var(--tinta2);letter-spacing:.04em;opacity:0;
+  text-shadow:0 1px 6px #000;transition:opacity .2s}
+#pista.on{opacity:1}
+
+/* ---------- pantallas ---------- */
+.pan{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;padding:26px 22px;text-align:center;
+  background:rgba(9,13,15,.94)}
+.pan.on{display:flex}
+/* EL MENU DEJA VER LA DEMO: el velo se cierra donde va el texto y se abre
+   arriba y abajo, que es donde la mesa tiene algo para mostrar. */
+#pMenu{background:linear-gradient(180deg,
+  rgba(9,13,15,.24) 0%, rgba(9,13,15,.30) 26%,
+  rgba(9,13,15,.94) 33%, rgba(9,13,15,.94) 69%,
+  rgba(9,13,15,.30) 75%, rgba(9,13,15,.24) 100%)}
+#pMenu #pie{text-shadow:0 1px 5px #000,0 0 3px #000}
+h1{font:900 44px/1 system-ui;letter-spacing:.22em;color:var(--tinta);
+  text-shadow:0 3px 0 #000,0 0 26px rgba(255,209,102,.34)}
+/* el cartel generado PISA al texto cuando decodifica; sin el, el menu es
+   exactamente el de antes. El alto sale de la proporcion horneada (300x84). */
+body.pl-logo #pMenu h1, body.pl-logo #pIdioma h1{color:transparent;text-shadow:none;overflow:hidden;
+  width:min(300px,66vw);height:calc(min(300px,66vw)*.28);margin-inline:auto;
+  background:var(--pl-logo) center/contain no-repeat}
+h2{font:900 24px/1.1 system-ui;letter-spacing:.09em;color:var(--tinta)}
+.sub{font:700 12px/1.5 system-ui;color:var(--tinta2);letter-spacing:.07em;max-width:306px}
+.b{padding:13px 28px;border-radius:12px;border:2px solid rgba(255,255,255,.16);
+  background:rgba(255,255,255,.06);color:var(--tinta);
+  font:900 14px/1 system-ui;letter-spacing:.12em;min-width:190px}
+.b.p{background:linear-gradient(180deg,#ffdc88,#e8a52c);color:#2a1d02;border-color:#ffeab5}
+.b.ch{min-width:0;padding:9px 15px;font-size:11px;letter-spacing:.09em}
+body.pl-b .b{background-image:var(--pl-b);background-size:100% 100%;
+  background-repeat:no-repeat;background-color:transparent;border-color:transparent}
+body.pl-bo .b.p{background-image:var(--pl-bo)}
+.fila{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.dat{font:700 12px/1.7 system-ui;color:var(--tinta2);letter-spacing:.05em}
+.dat b{color:var(--tinta)}
+#pie{position:absolute;bottom:16px;left:0;right:0;text-align:center;
+  font:700 9px/1.5 system-ui;color:#4b5a57;letter-spacing:.1em;padding:0 20px}
+#idL .b{min-width:118px}
+#fiT.mal{color:var(--rojo)}
+#fiT.bien{color:var(--oro)}
+</style>
+</head>
+<body>
+<div id="marco">
+  <canvas id="c"></canvas>
+  <div id="aviso"></div>
+  <div id="pista"></div>
+
+  <div class="pan on" id="pIdioma">
+    <h1>NAIPE</h1>
+    <div class="sub" id="idT">Elegí tu idioma</div>
+    <div class="fila" id="idL"></div>
+  </div>
+
+  <div class="pan" id="pMenu">
+    <h1>NAIPE</h1>
+    <div class="sub" id="mSub"></div>
+    <button class="b p" id="mJugar"></button>
+    <div class="fila">
+      <button class="b ch" id="mTuto"></button>
+      <button class="b ch" id="mIdioma"></button>
+    </div>
+    <div class="dat" id="mRec"></div>
+    <div id="pie"></div>
+  </div>
+
+  <div class="pan" id="pPausa">
+    <h2 id="paT"></h2>
+    <button class="b p" id="paSigue"></button>
+    <button class="b" id="paMenu"></button>
+  </div>
+
+  <div class="pan" id="pFin">
+    <h2 id="fiT"></h2>
+    <div class="sub" id="fiS"></div>
+    <div class="dat" id="fiD"></div>
+    <button class="b p" id="fiOtra"></button>
+    <button class="b" id="fiMenu"></button>
+  </div>
+</div>
+
+<script type="module">

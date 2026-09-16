@@ -1,0 +1,217 @@
+
+/* ============================================================
+   EL RELOJ Y EL DEDO
+
+   Paso fijo con interpolacion: un telefono a 30 y una notebook a
+   144 tienen que jugar el mismo juego. Aca casi nada se integra
+   —es un juego de cartas— pero los relojes que SI corren (la
+   animacion de puntuar, el aviso, el tutorial, la demo del menu)
+   tienen que durar lo mismo en los dos, y eso no sale solo.
+   ============================================================ */
+const PASO = 1 / 60, PASO_TOPE = 0.25, PASOS_MAX = 8;
+let ACUM = 0, T_ANT = performance.now() / 1000;
+
+function ajusta(){
+  const esc = Math.min(innerWidth / AN, innerHeight / AL);
+  $('#marco').style.transform = 'translate(-50%,-50%) scale(' + esc + ')';
+  const d = Math.min(devicePixelRatio || 1, 2.5);
+  CV.width = Math.round(AN * d);
+  CV.height = Math.round(AL * d);
+  CX.setTransform(d, 0, 0, d, 0, 0);
+}
+addEventListener('resize', ajusta);
+
+/* ---------- el dedo ----------
+   UNA sola entrada. El marco esta escalado, asi que las
+   coordenadas salen de la caja que el navegador informa y no de
+   una cuenta con el factor: con la cuenta a mano, el dia que
+   cambie el encuadre el dedo y el dibujo dejan de coincidir. */
+function aCuadro(cx, cy){
+  const r = CV.getBoundingClientRect();
+  return [(cx - r.left) * AN / r.width, (cy - r.top) * AL / r.height];
+}
+CV.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  audioDespierta();
+  if (JU.modo === 'menu' || JU.modo === 'pausa' || JU.modo === 'fin') return;
+  const [x, y] = aCuadro(e.clientX, e.clientY);
+  toca(x, y);
+});
+addEventListener('keydown', e => {
+  if (e.key === 'Escape' && (JU.modo === 'juega' || JU.modo === 'tienda')) pausaAbre();
+});
+
+/* ---------- la demo del menu ----------
+   Un panel opaco encima de una mesa quieta tira a la basura lo
+   unico que este menu tiene para mostrar. Corre el juego de
+   verdad, jugado por el mismo bot que lo audita — asi no hay una
+   segunda animacion que mantener — y con DEMO puesto, que es lo
+   que impide que la demo toque el record ni el guardado. */
+let DEMO_T = 0;
+const DEMO_RITMO = 1.15;
+function demoArranca(){
+  DEMO = true;
+  partidaNueva(Math.floor(Math.random() * 1e6));
+  cieganNueva();
+  DEMO_T = 0;
+}
+function demoPaso(dt){
+  if (JU.modo !== 'menu' && JU.modo !== 'pausa') return;
+  DEMO_T += dt;
+  if (DEMO_T < DEMO_RITMO) return;
+  DEMO_T = 0;
+  if (JU.modo === 'pausa') return;
+  if (JU.anim) return;
+  if (JU.mano.length === 0 || JU.ante > 8 || perdio()){ demoArranca(); return; }
+  const j = mejorJugada();
+  if (!j){ demoArranca(); return; }
+  /* la MISMA cuota que el auditor: contra el objetivo entero
+     ninguna primera mano llega nunca y la demo quemaria los tres
+     descartes de arrancada. Con dos cerebros distintos, el menu
+     muestra un juego que el auditor no esta midiendo. */
+  const cuota = (JU.objetivo - JU.puntaje) / Math.max(1, JU.manos);
+  if (JU.desc > 0 && j.total < cuota && JU.manos > 1){
+    const fuera = botDescarte();
+    if (fuera.length){ JU.sel = []; descarta(fuera); return; }
+  }
+  /* la demo ELIGE y despues tira, con un tiempo en el medio: sin
+     eso las cartas aparecen ya jugadas y no se ve que alguien las
+     esta eligiendo, que es lo unico que este menu tiene que decir */
+  if (JU.sel.length === 0){
+    JU.sel = j.cs.map(c => JU.mano.indexOf(c)).filter(i => i >= 0);
+    return;
+  }
+  const cs = JU.sel.map(i => JU.mano[i]);
+  const r = tira(cs);
+  if (r) animArranca(r, cs);
+  else JU.sel = [];
+}
+
+/* ---------- la vuelta ---------- */
+function vuelta(){
+  requestAnimationFrame(vuelta);
+  const t = performance.now() / 1000;
+  let dt = t - T_ANT; T_ANT = t;
+  if (dt > PASO_TOPE) dt = PASO_TOPE;
+  ACUM += dt;
+  let n = 0;
+  while (ACUM >= PASO && n++ < PASOS_MAX){
+    ACUM -= PASO;
+    JU.t += PASO;
+    aviPaso(PASO);
+    animPaso(PASO);
+    tutoPaso(PASO);
+    demoPaso(PASO);
+  }
+  /* el menu dibuja la mesa detras del velo, asi que la demo tiene
+     que pintarse con el mismo pintor del juego y no con uno propio */
+  const m = JU.modo;
+  if (m === 'menu' || m === 'pausa'){
+    const g = JU.modo;
+    JU.modo = (m === 'pausa') ? MODO_PREV : 'juega';
+    pinta();
+    JU.modo = g;
+  } else {
+    pinta();
+  }
+}
+
+/* ============================================================
+   LAS SONDAS
+   ============================================================ */
+function zonaCentro(id, dat){
+  for (const z of ZONAS){
+    if (z.id !== id) continue;
+    if (dat !== undefined && z.dat !== dat) continue;
+    return [z.x + z.w / 2, z.y + z.h / 2];
+  }
+  return null;
+}
+window.__naipe = {
+  est: () => ({
+    modo: JU.modo, ante: JU.ante, ronda: JU.ronda, ciega: CIEGAS[JU.ciegaIx].id,
+    jefe: JU.jefe, dinero: JU.dinero, manos: JU.manos, desc: JU.desc,
+    puntaje: JU.puntaje, objetivo: JU.objetivo, mano: JU.mano.length,
+    com: JU.com.slice(), cons: JU.cons.map(c => c.t + ':' + c.k),
+    sel: JU.sel.slice(), anim: !!JU.anim, tuto: TUTO.on ? TUTO.i : -1,
+    idioma: IDIOMA, rec: GUARDA.rec,
+  }),
+  /* EL CAMINO DEL DEDO. Se busca la zona donde el juego la dibujo
+     y se toca su centro: una sonda que llama a la accion directo
+     saltea justamente la parte que puede estar rota. */
+  zonas: () => ZONAS.map(z => z.id + (z.dat !== undefined ? ':' + z.dat : '')),
+  toc: (id, dat) => {
+    const c = zonaCentro(id, dat);
+    if (!c) return { err: 'sin ' + id, hay: ZONAS.map(z => z.id) };
+    toca(c[0], c[1]);
+    return { ok: true, en: c };
+  },
+  tocXY: (x, y) => { toca(x, y); return true; },
+  /* elegir cartas por indice, que es lo que hace el dedo */
+  elige: is => { is.forEach(i => { const c = zonaCentro('carta', i); if (c) toca(c[0], c[1]); });
+                 return JU.sel.slice(); },
+  /* adelantar el reloj sin dibujar: la animacion de puntuar dura
+     mas de un segundo y esperarla con sleep cuesta la corrida */
+  corre: seg => {
+    let n = Math.round(seg / PASO);
+    while (n-- > 0){ JU.t += PASO; aviPaso(PASO); animPaso(PASO); tutoPaso(PASO); demoPaso(PASO); }
+    return window.__naipe.est();
+  },
+  pinta: () => { pinta(); return true; },
+  modo: m => { JU.modo = m; pinta(); return JU.modo; },
+  panel: id => { verPanel(id); return id; },
+  tuto: () => ({ on: TUTO.on, i: TUTO.i, t: +TUTO.t.toFixed(2), fin: +TUTO.fin.toFixed(2),
+                 txt: TUTO.on ? TUTO_TXT()[TUTO.i] : '' }),
+  juega: (n, modo, tope) => audita(n || 8, modo || 'honesto', tope || 8),
+  manos: () => auditaManos(),
+  assets: () => ({ hay: Object.keys(IMG).length, fallan: (IMG.fallan || []).slice(),
+                   son: MUESTRAS ? Object.keys(MUESTRAS).length : 0 }),
+  son: k => { son(k); return k; },
+  lang: k => { ponIdioma(k); pinta(); return IDIOMA; },
+  /* cuanto cuesta un cuadro. Sin numero no hay afirmacion. */
+  costo: (n) => {
+    n = n || 60;
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++) pinta();
+    return { ms: +((performance.now() - t0) / n).toFixed(3), zonas: ZONAS.length };
+  },
+  /* solapamientos del DOM: los cuatro paneles y nada mas, porque
+     todo lo demas vive en el lienzo */
+  cajas: () => {
+    const p = document.querySelector('.pan.on');
+    if (!p) return { panel: null, choques: [], fuera: [] };
+    const hs = [...p.querySelectorAll('h1,h2,.sub,.dat,button,#pie')]
+      .filter(e => e.offsetWidth > 0)
+      .map(e => ({ id: e.id || e.className, t: e.offsetTop, h: e.offsetHeight,
+                   l: e.offsetLeft, w: e.offsetWidth }));
+    const ch = [], fu = [];
+    for (let i = 0; i < hs.length; i++){
+      const a = hs[i];
+      if (a.t < 0 || a.t + a.h > AL || a.l < 0 || a.l + a.w > AN) fu.push(a.id);
+      for (let j = i + 1; j < hs.length; j++){
+        const b = hs[j];
+        if (a.t < b.t + b.h && b.t < a.t + a.h && a.l < b.l + b.w && b.l < a.l + a.w)
+          ch.push(a.id + '×' + b.id);
+      }
+    }
+    return { panel: p.id, n: hs.length, choques: ch, fuera: fu };
+  },
+};
+
+/* ============================================================
+   ARRANQUE
+   ============================================================ */
+window.__errs = [];
+addEventListener('error', e => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', e => window.__errs.push('promesa: ' + e.reason));
+
+guardaLee();
+ajusta();
+imgCarga();
+sonDecodifica();
+panelesArma();
+demoArranca();
+vuelta();
+</script>
+</body>
+</html>

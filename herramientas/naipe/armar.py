@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Arma juegos-pc/Naipe.html a partir de herramientas/naipe/partes/.
+
+LAS PARTES SON LA FUENTE; EL HTML ES LA SALIDA. Un archivo de un mega
+con base64 adentro no se edita con parches de texto — ya costo un
+archivo en cero bytes en este repo.
+
+EL ORDEN ES EL DE PRIMER USO, NO EL ALFABETICO. Todo termina siendo UN
+modulo ES, y un let/const leido antes de su linea no devuelve
+undefined: TIRA, y se lleva el modulo entero. Ya paso nueve veces aca.
+Por eso los i_*.js van ANTES de quien los lee, aunque hoy sus lectores
+corran al final: no se puede depender de eso.
+"""
+import pathlib, sys
+
+AQUI   = pathlib.Path(__file__).resolve().parent
+PARTES = AQUI / 'partes'
+SALIDA = AQUI.parent.parent / 'juegos-pc' / 'Naipe.html'
+
+ORDEN = [
+    'a.html',      # marco, CSS, los cuatro paneles; abre el <script type="module">
+    'b.js',        # constantes, tablas, idiomas, guardado, estado
+    'c.js',        # el modelo puro: manos, puntaje, ciegas, tienda, auditoria
+    'i_son.js',    # OPCIONAL: las muestras generadas (SON_B64)
+    'd.js',        # audio procedural
+    'i_assets.js', # OPCIONAL: las imagenes generadas (ASSETS)
+    'e.js',        # el dibujo: zonas, primitivas, la carta
+    'f.js',        # las pantallas y el toque
+    'g.js',        # el tutorial
+    'h.js',        # los paneles del DOM
+    'z.html',      # reloj de paso fijo, entrada, demo, sondas; cierra todo
+]
+
+def main():
+    trozos = []
+    for n in ORDEN:
+        p = PARTES / n
+        if not p.exists():
+            # LOS i_*.js SON OPCIONALES POR CONSTRUCCION. El juego dibuja y suena
+            # sin ellos: el sprite generado pisa al dibujado por codigo cuando
+            # decodifica y la muestra pisa al oscilador cuando llega. Un base64
+            # roto cuesta una pieza, no una pantalla vacia.
+            if n.startswith('i_'):
+                print(f'  (sin {n}, se arma sin esos assets)')
+                continue
+            sys.exit(f'falta {p}')
+        trozos.append(p.read_text(encoding='utf-8'))
+    txt = ''.join(trozos)
+
+    n = txt.count('<script type="module">')
+    assert n == 1, f'tiene que haber UN solo <script type="module">, hay {n}'
+    assert txt.count('</script>') == 1, 'un solo </script>'
+    assert txt.rstrip().endswith('</html>'), 'el texto tiene que cerrar en </html>'
+
+    SALIDA.parent.mkdir(parents=True, exist_ok=True)
+    SALIDA.write_text(txt, encoding='utf-8')
+    kb = len(txt.encode('utf-8')) / 1024
+    print(f'{SALIDA}  {kb:.0f} KB  ({len(txt.splitlines())} lineas)')
+
+if __name__ == '__main__':
+    main()
