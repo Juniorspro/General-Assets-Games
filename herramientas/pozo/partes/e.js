@@ -48,8 +48,14 @@ let PISO_LI = null, PISO_CX = null, PISO_CLAVE = '';
    Y EL TAMANO EN MUNDO SALE DE `IMGM`, que lo escribe el horneado. Escrito aca
    al lado, el dia que una pieza cambie de caja el dibujo y el horneado dirian
    cosas distintas y nadie se enteraria. */
+/* cuanto tiene que estar de costado el jugador para dar vuelta el cuerpo. */
+const ESP_BANDA = 0.12;
 const IMG = {};
 let IMG_N = 0, IMG_TOT = 0;
+/* UN BASE64 QUE NO DECODIFICA NO FALLA NI AVISA: la pieza se sigue dibujando
+   por codigo y desde afuera se ve igual que si el asset nunca se hubiera
+   pedido. Por eso se anota cual, y no solo cuantos llegaron. */
+const IMG_MAL = [];
 /* que asset viste que parte del menu. Con el nombre de la clase y el de la
    variable derivados de UNA tabla, agregar una placa nueva es una linea y no
    tres sitios que se pueden desincronizar. */
@@ -65,6 +71,7 @@ function pielPon(k){
     IMG_TOT++;
     const im = new Image();
     im.onload = () => { IMG[k] = im; IMG_N++; if (UI_PIEL[k]) pielPon(k); };
+    im.onerror = () => { IMG_MAL.push(k); };
     im.src = IMGB[k];
   }
 })();
@@ -321,7 +328,28 @@ function dibEnem(e){
      torreta y la corona del jefe se siguen dibujando ENCIMA: el canon es lo unico
      que dice hacia donde apuntan y la corona gira, asi que ninguno de los dos
      puede venir horneado adentro de la foto — por eso se pidieron sin canon. */
-  if (dibSpr('en_' + e.cl, 0, 0, blanco ? '#ffffff' : null, true)){
+  /* EL CUERPO SE ESPEJA SEGUN DE QUE LADO ESTE EL JUGADOR, y sale de `e.mira`,
+     que ya apunta al jugador para TODOS — no hace falta una segunda lista de
+     quien mira y quien no. Medido con `__pozo.espejo()`, el centroide de tinta
+     de cada sprite en fraccion de su ancho: el UNICO asimetrico es la BOMBA
+     (.4625 contra .5375); el corredor, el tirador, la baba, el bruto, la torreta
+     y los dos jefes caen entre .49 y .51, o sea que espejarlos no mueve un pixel.
+     Justamente por eso la regla puede valer para los siete sin excepciones.
+     El canon y la corona van FUERA del espejo: se dibujan girados por `e.mira`
+     y bajo una transformacion espejada ese giro sale al reves.
+
+     Y VA CON BANDA MUERTA, que no es un lujo: con el jugador justo encima o
+     justo debajo, `cos(e.mira)` cruza cero y cambia de signo en cada cuadro —
+     el sprite se daria vuelta sesenta veces por segundo, y eso pasa cada vez
+     que un enemigo cruza la vertical del jugador, o sea todo el tiempo. Adentro
+     de la banda se conserva el lado que ya tenia. */
+  const cs = Math.cos(e.mira);
+  if (cs < -ESP_BANDA) e.esp = true; else if (cs > ESP_BANDA) e.esp = false;
+  const espeja = !!e.esp;
+  if (espeja){ CX.save(); CX.scale(-1, 1); }
+  const haySpriteCuerpo = dibSpr('en_' + e.cl, 0, 0, blanco ? '#ffffff' : null, true);
+  if (espeja) CX.restore();
+  if (haySpriteCuerpo){
     if (e.cl === 'tirador'){
       CX.save(); CX.rotate(e.mira); CX.fillStyle = '#2a3142';
       redondo(r*.5, -2.6, r*1.0, 5.2, 2); CX.fill(); CX.restore();

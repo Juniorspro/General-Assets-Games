@@ -605,6 +605,64 @@ window.__pozo = {
   /* cuantas muestras decodificaron de verdad y que pista esta puesta. Sin esto,
      "el audio anda" solo quiere decir que la llamada no tiro. */
   audio(){ return mueEst(); },
+  /* los sprites. `falta` es la lista de los que ni llegaron ni fallaron
+     todavia: llamar a esto antes de que decodifiquen devuelve una lista
+     larga y eso NO es un defecto, es que la sonda pregunto temprano. */
+  /* EL ESPEJO DEL CUERPO. Dibuja el sprite de una clase con la transformacion
+     de cada lado y devuelve el centroide horizontal de la tinta, en fraccion
+     de su propio ancho. Si el sprite es de PERFIL los dos numeros tienen que
+     ser simetricos respecto de .5; si es de FRENTE quedan los dos en .5 y
+     espejarlo no cambia un pixel — que es justo lo que hace que la regla se
+     pueda aplicar a los siete sin una segunda lista. */
+  espejo(cl){
+    const k = 'en_' + cl, im = IMG[k];
+    if (!im) return {error:'sin sprite', k};
+    const W = 128, H = 128, out = {};
+    for (const lado of ['der', 'izq']){
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const x = c.getContext('2d');
+      x.translate(W/2, H/2);
+      if (lado === 'izq') x.scale(-1, 1);
+      x.drawImage(im, -W/2, -H/2, W, H);
+      const d = x.getImageData(0, 0, W, H).data;
+      let sx = 0, sa = 0;
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++){
+        const a = d[(j*W+i)*4+3]; sx += a*i; sa += a;
+      }
+      out[lado] = sa ? +((sx/sa)/(W-1)).toFixed(4) : null;
+    }
+    out.perfil = out.der !== null && Math.abs(out.der - .5) > .01;
+    return out;
+  },
+  /* y el otro medio: que la CONDICION elija el lado correcto, y que la banda
+     muerta aguante un enemigo pasando por la vertical del jugador. `parpadeos`
+     cuenta cuantas veces cambia de lado a lo largo del cruce: sin banda son
+     tantos como cuadros con dx del otro signo, con banda tiene que ser 1. */
+  espejoCond(){
+    const e = {};
+    const pon = (dx, dy) => {
+      const cs = Math.cos(Math.atan2(dy, dx));
+      if (cs < -ESP_BANDA) e.esp = true; else if (cs > ESP_BANDA) e.esp = false;
+      return !!e.esp;
+    };
+    const lados = {jugADerecha:pon(1,0), jugAIzquierda:pon(-1,0),
+                   vuelveDerecha:pon(1,0)};
+    /* cruce de verdad: el enemigo pasa por debajo del jugador de izquierda a
+       derecha con el ruido del propio paso encima. */
+    e.esp = false; let par = 0, ant = false, sinB = 0, antS = false;
+    for (let i = 0; i <= 200; i++){
+      const dx = (i - 100) * 0.004 + Math.sin(i * 2.1) * 0.006, dy = -1;
+      const v = pon(dx, dy); if (i && v !== ant) par++; ant = v;
+      const w = Math.cos(Math.atan2(dy, dx)) < 0;
+      if (i && w !== antS) sinB++; antS = w;
+    }
+    return Object.assign(lados, {banda:ESP_BANDA, parpadeos:par, sinBanda:sinB});
+  },
+  assets(){
+    const hay = (typeof IMGB === 'object' && IMGB) ? Object.keys(IMGB) : [];
+    return {n:IMG_N, tot:IMG_TOT, mal:IMG_MAL.slice(),
+            falta:hay.filter(k => !IMG[k] && IMG_MAL.indexOf(k) < 0)};
+  },
   idioma(l){ ponIdioma(l); return IDIOMA; },
   pan(id){ verPan(id); return JU.modo; },
   auditar(n = 60){ return auditaPisos(n); },

@@ -389,6 +389,93 @@ munecas.
   desde afuera es la respuesta correcta por topología—. Vertical nativo. Vive partido en
   `herramientas/cerco/partes/` y se arma con `python3 herramientas/cerco/armar.py`.
 
+- **`Pozo.html` es "POZO"** (~1,06 MB, de los cuales casi todo son las 35 imágenes y los 19 sonidos
+  generados con Rezona; el pozo entero es procedural y no tiene un solo mapa dibujado a mano). El
+  vigesimoprimer juego. Un **roguelike de disparos** vertical nativo: **diez pisos** de 3 a 9 salas
+  sorteadas, **diez armas** —pistola, ráfaga, escopeta, rifle, astilla, orbe, trueno, cañón, aguja y
+  cruz—, **seis clases de enemigo** —baba, corredor, tirador, torreta, bomba y bruto— más **dos
+  jefes**, y **nueve mejoras** que salen de los cofres. **Lo que limita el fuego no es la cadencia
+  sino la ENERGÍA**: después de cada tiro espera 0,34 s antes de volver a subir, así que el ciclo
+  real de un arma es `max(cadencia, E_ESP + energía/recarga)` — y con ése el orden de las diez armas
+  se da vuelta. Vive partido en `herramientas/pozo/partes/` y se arma con
+  `python3 herramientas/pozo/armar.py`.
+
+### Centésima sexagésima octava vuelta (2026-09-16): **POZO** — el cuerpo se espeja, y la medición me corrigió el comentario
+
+#### LOS ENEMIGOS MIRABAN SIEMPRE PARA EL MISMO LADO
+
+El sprite generado se dibujaba tal cual, así que un enemigo que te persigue desde la derecha se
+dibujaba igual que uno que te persigue desde la izquierda. El espejo sale de **`e.mira`**, que ya
+apunta al jugador para los ocho —no hace falta una segunda lista de quién mira y quién no— y el
+cañón del tirador y de la torreta y la corona del jefe van **fuera** del espejo: se dibujan girados
+por `e.mira`, y bajo una transformación espejada ese giro sale al revés.
+
+#### Y LA MEDICIÓN DESMINTIÓ EL COMENTARIO QUE YO MISMO ACABABA DE ESCRIBIR
+
+Escribí que el sprite de perfil era **el corredor**. Entró `espejo(cl)`, que dibuja el sprite de cada
+clase con la transformación de cada lado y devuelve el **centroide de tinta** en fracción de su
+propio ancho. Medido:
+
+| | der | izq | ¿asimétrico? |
+|---|---|---|---|
+| **bomba** | **0,4625** | **0,5375** | **sí** |
+| corredor | 0,4907 | 0,5093 | no |
+| tirador | 0,5012 | 0,4988 | no |
+| baba | 0,4961 | 0,5039 | no |
+| bruto | 0,5064 | 0,4936 | no |
+| torreta | 0,5001 | 0,4999 | no |
+| jefe1 · jefe2 | 0,5000 | 0,5000 | no |
+
+O sea que **el único de perfil es la BOMBA** y el corredor es simétrico: espejarlo no mueve un píxel.
+Y eso no invalida la regla, la explica — **justamente porque seis de los ocho son simétricos, el
+espejo puede valer para los ocho sin una sola excepción escrita**. El comentario quedó describiendo
+lo que se midió y no lo que yo suponía.
+
+#### LA BANDA MUERTA NO ES UN LUJO: SIN ELLA PARPADEA
+
+`cos(e.mira) < 0` es un cuchillo. Con el jugador justo encima o justo debajo, `dx` oscila alrededor
+de cero con el ruido del propio paso y **el signo cambia en cada cuadro**: el cuerpo se daría vuelta
+sesenta veces por segundo. Y no es un caso raro — pasa **cada vez que un enemigo cruza la vertical
+del jugador**, o sea todo el tiempo. Con banda de 0,12 y memoria del lado anterior, medido sobre un
+cruce completo con el ruido del paso encima: **1 vuelta con banda contra 3 sin ella**.
+Es la misma histéresis que en RezUno impide que una pinza en el borde del umbral cuente como diez
+clicks.
+
+#### LA SONDA QUE FALTABA: `assets()`
+
+Treinta y cinco imágenes y diecinueve sonidos en base64, y no había forma de preguntar cuántas
+llegaron. **Un base64 que no decodifica no falla ni avisa**: la pieza se sigue dibujando por código y
+desde afuera se ve igual que si el asset nunca se hubiera pedido. Se agregó `im.onerror` con la lista
+de cuáles, y la sonda devuelve además `falta` —los que ni llegaron ni fallaron todavía— porque
+preguntar antes de que decodifiquen devuelve una lista larga y **eso no es un defecto, es que la
+sonda preguntó temprano**. Medido: **35 de 35 y 0 fallidas**, **19 de 19 sonidos y 0 fallidos**.
+
+#### Y UN PICO DE 1,0 QUE NO ERA DE LA MEZCLA
+
+La primera medición del disparo dio **pico 1,000**, o sea recortando. No era la mezcla: `anda()`
+comprime miles de pasos en **una vuelta sincrónica de JS**, y `AudioContext.currentTime` no avanza
+adentro de una — los cientos de disparos arrancan todos en el mismo instante y **se suman en fase**.
+Es literalmente la lección que DUNA ya había pagado. Con tiempo real de por medio y la música
+asentada, medido dos veces para que se vea que es repetible:
+
+| | rms | veces el fondo |
+|---|---|---|
+| fondo (cama + música) | 0,0077 · 0,0073 · 0,0081 | 1,00 |
+| **tira** | **0,0256 · 0,0257** | **3,4** |
+| **daño** | **0,0780** | **10,1** |
+
+Recibir un tiro es lo más fuerte de los tres, que es lo que corresponde a lo único que cuesta una
+vida, y ningún pico pasa de **0,35**.
+
+#### MEDIDO AL CERRAR
+
+**35 de 35 imágenes y 19 de 19 sonidos, 0 fallidos.** Auditoría **400 pisos, 0 malos**, 8.829
+enemigos, de 3 a 9 salas por piso. Auto-jugadores: el honesto llega al **piso 10** con 221 bajas y
+5,65 muertes por minuto, el que juega al azar se queda en el **piso 2** con 17 — o sea que la
+separación de la vuelta anterior sigue entera. Espejo: 8 de 8 clases medidas, **1 parpadeo contra 3**
+en el cruce. **Cero solapamientos** entre los diez elementos del HUD, con `fuera: []`. Costo **0,045
+ms por cuadro**. `window.__errs` **vacío en las cinco corridas**.
+
 ### Centésima sexagésima séptima vuelta (2026-09-15): **POZO** — el ciclo real de un arma es la energía, no la cadencia
 
 #### LA TABLA DE CADENCIAS MENTÍA, Y DE AHÍ COLGABA MEDIO JUEGO
