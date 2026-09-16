@@ -7,6 +7,10 @@ igual.
 **Regla de oro de este repo: todo lo que se afirma acá está medido.** Si algo
 dice "anda", es porque se corrió. Si no se pudo probar, lo dice.
 
+> **Este documento dice CÓMO SE TRABAJA acá.** El de al lado, `ESTADO.md`, dice
+> **QUÉ HAY CONSTRUIDO**: cada página, cada endpoint, cada tabla, cada decisión
+> de los dos sitios. Una sesión nueva debería leer los dos — este primero.
+
 ---
 
 ## 1. La máquina (la "PC virtual")
