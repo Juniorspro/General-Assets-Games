@@ -35,11 +35,25 @@ function zonaEn(px, py){
 
 /* --- las imagenes generadas, si llegaron --- */
 const IMG = {};
+/* TRES DE LOS DIEZ NO SE DIBUJAN EN EL LIENZO: van al CSS. El cartel
+   del menu y las dos chapas de boton son DOM, asi que se enchufan como
+   variable mas una clase en el body — y la clase la pone el `onload` de
+   la propia imagen y no el codigo que la pide: preguntar «llego?» es lo
+   unico que separa un menu con cartel de un rectangulo vacio. */
+const IMG_CSS = { logo: 'pl-logo', boton: 'pl-b', botonOro: 'pl-bo' };
+
 function imgCarga(){
   if (typeof ASSETS === 'undefined' || !HAY_DOM) return;
   Object.keys(ASSETS).forEach(k => {
     const im = new Image();
-    im.onload  = () => { IMG[k] = im; };
+    im.onload  = () => {
+      IMG[k] = im;
+      const cl = IMG_CSS[k];
+      if (cl){
+        document.documentElement.style.setProperty('--' + cl, 'url(' + ASSETS[k] + ')');
+        document.body.classList.add(cl);
+      }
+    };
     im.onerror = () => { IMG.fallan = (IMG.fallan || []).concat(k); };
     im.src = ASSETS[k];
   });
